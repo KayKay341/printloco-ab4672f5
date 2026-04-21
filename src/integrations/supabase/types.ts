@@ -14,7 +14,123 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      printers: {
+        Row: {
+          bio: string | null
+          brand: string
+          build_volume: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          materials: string[]
+          model: string
+          neighborhood: string | null
+          owner_id: string
+          price_per_gram: number
+          updated_at: string
+          zip_code: string | null
+        }
+        Insert: {
+          bio?: string | null
+          brand: string
+          build_volume?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          materials?: string[]
+          model: string
+          neighborhood?: string | null
+          owner_id: string
+          price_per_gram?: number
+          updated_at?: string
+          zip_code?: string | null
+        }
+        Update: {
+          bio?: string | null
+          brand?: string
+          build_volume?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          materials?: string[]
+          model?: string
+          neighborhood?: string | null
+          owner_id?: string
+          price_per_gram?: number
+          updated_at?: string
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          full_name: string | null
+          id: string
+          neighborhood: string | null
+          phone: string | null
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at: string
+          zip_code: string | null
+        }
+        Insert: {
+          created_at?: string
+          full_name?: string | null
+          id: string
+          neighborhood?: string | null
+          phone?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+          zip_code?: string | null
+        }
+        Update: {
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          neighborhood?: string | null
+          phone?: string | null
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+          zip_code?: string | null
+        }
+        Relationships: []
+      }
+      stl_files: {
+        Row: {
+          created_at: string
+          estimated_price: number | null
+          estimated_weight: number | null
+          file_name: string
+          file_path: string
+          file_size: number
+          id: string
+          material: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          estimated_price?: number | null
+          estimated_weight?: number | null
+          file_name: string
+          file_path: string
+          file_size: number
+          id?: string
+          material?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          estimated_price?: number | null
+          estimated_weight?: number | null
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          id?: string
+          material?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +139,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      user_role: "customer" | "maker"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +266,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      user_role: ["customer", "maker"],
+    },
   },
 } as const
