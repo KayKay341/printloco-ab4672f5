@@ -1,20 +1,19 @@
-import { Star } from "lucide-react";
+import { motion } from "framer-motion";
+import { Sparkles } from "lucide-react";
 
-const reviews = [
+// Pre-launch — no fake reviews. Use a vision/manifesto block instead.
+const beliefs = [
   {
-    quote: "I needed a custom bracket for my bike repair shop. Found a maker 4 blocks away, picked it up the next morning. Saved me $80 vs ordering online.",
-    name: "Diego R.",
-    role: "Customer · Williamsburg",
+    title: "Local-first by default",
+    body: "If a maker two blocks away has the printer you need, you should never have to wait two weeks for a box from across the country.",
   },
   {
-    quote: "My Bambu printer was a $1,200 toy. Now it pays my electricity bill, my Spotify, and buys me dinner twice a week. Wish I'd done this years ago.",
-    name: "Amelia K.",
-    role: "Maker · Astoria",
+    title: "Inventory is human-scale",
+    body: "Every printer, every color of filament, every Friday-afternoon free slot — visible, verified, and updated in real time.",
   },
   {
-    quote: "We printed 200 cable holders for our students' robotics kits. Zero cost, two days, picked up by the math teacher on her way home. Magic.",
-    name: "PS 261",
-    role: "Public school partner",
+    title: "Profits go back to the block",
+    body: "10% of every transaction funds free prints for the public schools, libraries, and nonprofits in the same zip code.",
   },
 ];
 
@@ -22,32 +21,29 @@ const Testimonials = () => (
   <section className="container py-24">
     <div className="mx-auto max-w-2xl text-center">
       <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-        Real prints, real neighbors
+        Our manifesto
       </div>
       <h2 className="mt-3 font-display text-4xl font-semibold tracking-tight sm:text-5xl text-balance">
-        18,000 prints. <span className="italic">Zero shipping labels.</span>
+        Manufacturing should feel like <span className="italic">your neighborhood.</span>
       </h2>
     </div>
 
     <div className="mt-14 grid gap-6 md:grid-cols-3">
-      {reviews.map((r, i) => (
-        <figure
-          key={i}
+      {beliefs.map((b, i) => (
+        <motion.figure
+          key={b.title}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-80px" }}
+          transition={{ duration: 0.5, delay: i * 0.08 }}
           className="flex flex-col rounded-3xl border border-border bg-card p-7 shadow-soft transition-all hover:shadow-card"
         >
-          <div className="flex gap-0.5 text-accent">
-            {Array.from({ length: 5 }).map((_, j) => (
-              <Star key={j} className="h-4 w-4 fill-current" />
-            ))}
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-accent/15 text-accent">
+            <Sparkles className="h-5 w-5" />
           </div>
-          <blockquote className="mt-5 flex-1 font-display text-lg leading-snug">
-            “{r.quote}”
-          </blockquote>
-          <figcaption className="mt-6 border-t border-border pt-4">
-            <div className="font-semibold">{r.name}</div>
-            <div className="text-sm text-muted-foreground">{r.role}</div>
-          </figcaption>
-        </figure>
+          <h3 className="mt-5 font-display text-xl font-semibold">{b.title}</h3>
+          <p className="mt-3 flex-1 text-sm leading-relaxed text-muted-foreground">{b.body}</p>
+        </motion.figure>
       ))}
     </div>
   </section>
