@@ -377,6 +377,9 @@ const Upload = () => {
                             <div className="mt-2 inline-flex h-6 items-center rounded-full bg-primary/10 px-2 text-xs font-semibold text-primary">
                               {m.score}% match
                             </div>
+                            <Button size="sm" variant="hero" className="mt-3" onClick={() => handleBook(m)}>
+                              <CreditCard className="h-3.5 w-3.5" /> Book
+                            </Button>
                           </div>
                         </div>
                       </article>
@@ -387,6 +390,7 @@ const Upload = () => {
             )}
           </section>
         </div>
+        <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} payload={checkoutPayload} />
       </main>
       <Footer />
     </div>
