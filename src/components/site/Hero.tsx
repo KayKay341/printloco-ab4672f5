@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { MapPin, Search, Upload, Star } from "lucide-react";
+import { Link } from "react-router-dom";
 import heroImg from "@/assets/hero-printer.jpg";
 
 const Hero = () => (
@@ -53,8 +54,8 @@ const Hero = () => (
                 />
               </div>
             </label>
-            <Button variant="hero" size="lg" className="rounded-2xl">
-              <Upload className="h-4 w-4" /> Upload STL
+            <Button variant="hero" size="lg" className="rounded-2xl" asChild>
+              <Link to="/upload"><Upload className="h-4 w-4" /> Upload STL</Link>
             </Button>
           </div>
         </div>
