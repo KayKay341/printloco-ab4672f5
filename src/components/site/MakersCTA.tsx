@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
+import { Link } from "react-router-dom";
 import prints from "@/assets/prints-grid.jpg";
 
 const perks = [
@@ -45,9 +46,11 @@ const MakersCTA = () => (
         </ul>
 
         <div className="mt-10 flex flex-wrap gap-3">
-          <Button variant="hero" size="lg">Become a Maker</Button>
-          <Button variant="outline" size="lg" className="border-primary-foreground/25 text-primary-foreground hover:bg-primary-foreground/10 hover:border-primary-foreground/50">
-            Earnings calculator
+          <Button variant="hero" size="lg" asChild>
+            <Link to="/auth?mode=signup&role=maker">Become a Maker</Link>
+          </Button>
+          <Button variant="outline" size="lg" asChild className="border-primary-foreground/25 text-primary-foreground hover:bg-primary-foreground/10 hover:border-primary-foreground/50">
+            <Link to="/printers">Browse printers</Link>
           </Button>
         </div>
       </div>

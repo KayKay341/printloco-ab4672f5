@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const FinalCTA = () => (
   <section className="container pb-24">
@@ -20,11 +21,11 @@ const FinalCTA = () => (
           </p>
         </div>
         <div className="flex flex-wrap gap-3 lg:justify-end">
-          <Button size="xl" className="bg-surface-deep text-primary-foreground hover:bg-foreground">
-            Upload a file <ArrowRight />
+          <Button size="xl" asChild className="bg-surface-deep text-primary-foreground hover:bg-foreground">
+            <Link to="/upload">Upload a file <ArrowRight /></Link>
           </Button>
-          <Button size="xl" variant="outline" className="border-foreground/30 text-foreground hover:bg-foreground/10">
-            I have a printer
+          <Button size="xl" variant="outline" asChild className="border-foreground/30 text-foreground hover:bg-foreground/10">
+            <Link to="/auth?mode=signup&role=maker">I have a printer</Link>
           </Button>
         </div>
       </div>
