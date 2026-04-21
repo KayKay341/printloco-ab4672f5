@@ -110,20 +110,20 @@ const Upload = () => {
   if (loading) return <div className="container py-24">Loading…</div>;
   if (!user) return <Navigate to={`/auth?mode=signin`} replace />;
 
-  const handleSaveQuote = async () => {
-    if (!file || !slice) {
-      toast.error("Upload an STL first.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const path = `${user.id}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase.storage
-        .from("stl-files")
-        .upload(path, file, { contentType: "model/stl", upsert: false });
-      if (upErr) throw upErr;
+  // Saves STL once and reuses the same row across multiple booking attempts.
+  const ensureStlSaved = async (): Promise<string | null> => {
+    if (!file || !slice || !user) return null;
+    if (savedStlId) return savedStlId;
 
-      const { error: insErr } = await supabase.from("stl_files").insert({
+    const path = `${user.id}/${Date.now()}-${file.name}`;
+    const { error: upErr } = await supabase.storage
+      .from("stl-files")
+      .upload(path, file, { contentType: "model/stl", upsert: false });
+    if (upErr) throw upErr;
+
+    const { data, error: insErr } = await supabase
+      .from("stl_files")
+      .insert({
         user_id: user.id,
         file_name: file.name,
         file_path: path,
@@ -131,9 +131,22 @@ const Upload = () => {
         material,
         estimated_weight: Math.round(slice.weightG * 10) / 10,
         estimated_price: Number(baseQuote.toFixed(2)),
-      });
-      if (insErr) throw insErr;
+      })
+      .select("id")
+      .single();
+    if (insErr) throw insErr;
+    setSavedStlId(data.id);
+    return data.id;
+  };
 
+  const handleSaveQuote = async () => {
+    if (!file || !slice) {
+      toast.error("Upload an STL first.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await ensureStlSaved();
       toast.success("Quote saved!");
       navigate("/dashboard");
     } catch (err: any) {
@@ -142,6 +155,33 @@ const Upload = () => {
       setSubmitting(false);
     }
   };
+
+  const handleBook = async (m: PrinterRow & ScoredPrinter) => {
+    if (!file || !slice || !user) {
+      toast.error("Upload an STL first.");
+      return;
+    }
+    try {
+      const stlId = await ensureStlSaved();
+      const amountCents = Math.max(100, Math.round(m.totalPrice * 100));
+      setCheckoutPayload({
+        printerId: m.id,
+        stlFileId: stlId,
+        makerId: m.owner_id,
+        material,
+        quantity: 1,
+        amountCents,
+        colorName: colorName ?? undefined,
+        notes: `Infill ${infill}% · ${slice.weightG.toFixed(1)}g`,
+        customerId: user.id,
+        customerEmail: user.email ?? undefined,
+      });
+      setCheckoutOpen(true);
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not start checkout");
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-background">
