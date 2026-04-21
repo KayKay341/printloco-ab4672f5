@@ -1,21 +1,36 @@
 import Logo from "./Logo";
+import { Link } from "react-router-dom";
 
-const cols = [
+const cols: { title: string; links: { label: string; href: string }[] }[] = [
   {
     title: "Print",
-    links: ["Find a maker", "Upload STL", "Pricing calculator", "Materials guide"],
+    links: [
+      { label: "Find a maker", href: "/printers" },
+      { label: "Upload STL", href: "/upload" },
+      { label: "Join the waitlist", href: "/waitlist" },
+    ],
   },
   {
     title: "Make",
-    links: ["Become a maker", "Earnings calculator", "Maker handbook", "Pro tools"],
+    links: [
+      { label: "Become a maker", href: "/auth?mode=signup&role=maker" },
+      { label: "List a printer", href: "/printers/new" },
+      { label: "Maker waitlist", href: "/waitlist" },
+    ],
   },
   {
     title: "Community",
-    links: ["Nonprofit program", "School partnerships", "Maker spotlight", "Print challenges"],
+    links: [
+      { label: "Nonprofit program", href: "/waitlist" },
+      { label: "School partnerships", href: "/waitlist" },
+    ],
   },
   {
     title: "Company",
-    links: ["About", "Press", "Careers", "Contact"],
+    links: [
+      { label: "Invest in PrintLocal", href: "/invest" },
+      { label: "Contact", href: "mailto:hello@printlocal.app" },
+    ],
   },
 ];
 
