@@ -14,82 +14,315 @@ export type Database = {
   }
   public: {
     Tables: {
+      conversations: {
+        Row: {
+          created_at: string
+          customer_id: string
+          id: string
+          last_message_at: string
+          maker_id: string
+          printer_id: string | null
+          stl_file_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          id?: string
+          last_message_at?: string
+          maker_id: string
+          printer_id?: string | null
+          stl_file_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          id?: string
+          last_message_at?: string
+          maker_id?: string
+          printer_id?: string | null
+          stl_file_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_printer_id_fkey"
+            columns: ["printer_id"]
+            isOneToOne: false
+            referencedRelation: "printers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_stl_file_id_fkey"
+            columns: ["stl_file_id"]
+            isOneToOne: false
+            referencedRelation: "stl_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          body: string
+          conversation_id: string
+          created_at: string
+          id: string
+          sender_id: string
+        }
+        Insert: {
+          body: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          amount_total: number
+          conversation_id: string | null
+          created_at: string
+          currency: string
+          customer_id: string
+          id: string
+          maker_id: string
+          material: string
+          notes: string | null
+          platform_fee: number
+          printer_id: string | null
+          quantity: number
+          status: string
+          stl_file_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_session_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_total: number
+          conversation_id?: string | null
+          created_at?: string
+          currency?: string
+          customer_id: string
+          id?: string
+          maker_id: string
+          material: string
+          notes?: string | null
+          platform_fee?: number
+          printer_id?: string | null
+          quantity?: number
+          status?: string
+          stl_file_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_total?: number
+          conversation_id?: string | null
+          created_at?: string
+          currency?: string
+          customer_id?: string
+          id?: string
+          maker_id?: string
+          material?: string
+          notes?: string | null
+          platform_fee?: number
+          printer_id?: string | null
+          quantity?: number
+          status?: string
+          stl_file_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_printer_id_fkey"
+            columns: ["printer_id"]
+            isOneToOne: false
+            referencedRelation: "printers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_stl_file_id_fkey"
+            columns: ["stl_file_id"]
+            isOneToOne: false
+            referencedRelation: "stl_files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      printer_presets: {
+        Row: {
+          brand: string
+          build_volume: string
+          created_at: string
+          id: string
+          image_url: string | null
+          materials: string[]
+          model: string
+          popularity: number
+          suggested_prices: Json
+        }
+        Insert: {
+          brand: string
+          build_volume: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          materials?: string[]
+          model: string
+          popularity?: number
+          suggested_prices?: Json
+        }
+        Update: {
+          brand?: string
+          build_volume?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          materials?: string[]
+          model?: string
+          popularity?: number
+          suggested_prices?: Json
+        }
+        Relationships: []
+      }
       printers: {
         Row: {
+          address: string | null
           bio: string | null
           brand: string
           build_volume: string | null
+          city: string | null
           created_at: string
           id: string
+          image_url: string | null
           is_active: boolean
+          is_address_verified: boolean
+          latitude: number | null
+          longitude: number | null
+          material_prices: Json
           materials: string[]
           model: string
           neighborhood: string | null
           owner_id: string
+          preset_id: string | null
           price_per_gram: number
           updated_at: string
           zip_code: string | null
         }
         Insert: {
+          address?: string | null
           bio?: string | null
           brand: string
           build_volume?: string | null
+          city?: string | null
           created_at?: string
           id?: string
+          image_url?: string | null
           is_active?: boolean
+          is_address_verified?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          material_prices?: Json
           materials?: string[]
           model: string
           neighborhood?: string | null
           owner_id: string
+          preset_id?: string | null
           price_per_gram?: number
           updated_at?: string
           zip_code?: string | null
         }
         Update: {
+          address?: string | null
           bio?: string | null
           brand?: string
           build_volume?: string | null
+          city?: string | null
           created_at?: string
           id?: string
+          image_url?: string | null
           is_active?: boolean
+          is_address_verified?: boolean
+          latitude?: number | null
+          longitude?: number | null
+          material_prices?: Json
           materials?: string[]
           model?: string
           neighborhood?: string | null
           owner_id?: string
+          preset_id?: string | null
           price_per_gram?: number
           updated_at?: string
           zip_code?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "printers_preset_id_fkey"
+            columns: ["preset_id"]
+            isOneToOne: false
+            referencedRelation: "printer_presets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
+          avatar_url: string | null
           created_at: string
           full_name: string | null
           id: string
           neighborhood: string | null
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
+          stripe_account_id: string | null
           updated_at: string
           zip_code: string | null
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
           full_name?: string | null
           id: string
           neighborhood?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
+          stripe_account_id?: string | null
           updated_at?: string
           zip_code?: string | null
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
           neighborhood?: string | null
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
+          stripe_account_id?: string | null
           updated_at?: string
           zip_code?: string | null
         }
