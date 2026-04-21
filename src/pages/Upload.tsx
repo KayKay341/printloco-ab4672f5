@@ -7,7 +7,7 @@ import Footer from "@/components/site/Footer";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Upload as UploadIcon, FileBox, MapPin, Sparkles, Loader2 } from "lucide-react";
+import { Upload as UploadIcon, FileBox, MapPin, Sparkles, Loader2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import {
   MATERIAL_BASE_PRICE,
@@ -17,6 +17,7 @@ import {
 import StlPreview from "@/components/StlPreview";
 import ColorPicker from "@/components/ColorPicker";
 import PrinterMap from "@/components/PrinterMap";
+import CheckoutDialog from "@/components/CheckoutDialog";
 import { scorePrinter, type PrinterForScore, type ScoredPrinter } from "@/lib/printerScore";
 
 const MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
@@ -27,6 +28,7 @@ type PrinterRow = PrinterForScore & {
   neighborhood: string | null;
   city: string | null;
   bio: string | null;
+  owner_id: string;
   profiles: { full_name: string | null } | null;
 };
 
@@ -42,6 +44,10 @@ const Upload = () => {
   const [colorHex, setColorHex] = useState<string>("#9333EA");
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutPayload, setCheckoutPayload] = useState<any>(null);
+  const [savedStlId, setSavedStlId] = useState<string | null>(null);
+
 
   // Fetch printers + their filament colors once
   useEffect(() => {
