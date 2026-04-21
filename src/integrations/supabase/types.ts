@@ -97,6 +97,36 @@ export type Database = {
           },
         ]
       }
+      investor_leads: {
+        Row: {
+          check_size: string | null
+          created_at: string
+          email: string
+          id: string
+          message: string | null
+          name: string
+          organization: string | null
+        }
+        Insert: {
+          check_size?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          message?: string | null
+          name: string
+          organization?: string | null
+        }
+        Update: {
+          check_size?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          message?: string | null
+          name?: string
+          organization?: string | null
+        }
+        Relationships: []
+      }
       messages: {
         Row: {
           body: string
@@ -140,6 +170,7 @@ export type Database = {
           maker_id: string
           material: string
           notes: string | null
+          pickup_code: string | null
           platform_fee: number
           printer_id: string | null
           quantity: number
@@ -159,6 +190,7 @@ export type Database = {
           maker_id: string
           material: string
           notes?: string | null
+          pickup_code?: string | null
           platform_fee?: number
           printer_id?: string | null
           quantity?: number
@@ -178,6 +210,7 @@ export type Database = {
           maker_id?: string
           material?: string
           notes?: string | null
+          pickup_code?: string | null
           platform_fee?: number
           printer_id?: string | null
           quantity?: number
@@ -399,6 +432,39 @@ export type Database = {
           id?: string
           material?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      waitlist_signups: {
+        Row: {
+          city: string | null
+          created_at: string
+          email: string
+          id: string
+          notes: string | null
+          role: string
+          source: string | null
+          zip_code: string | null
+        }
+        Insert: {
+          city?: string | null
+          created_at?: string
+          email: string
+          id?: string
+          notes?: string | null
+          role?: string
+          source?: string | null
+          zip_code?: string | null
+        }
+        Update: {
+          city?: string | null
+          created_at?: string
+          email?: string
+          id?: string
+          notes?: string | null
+          role?: string
+          source?: string | null
+          zip_code?: string | null
         }
         Relationships: []
       }
