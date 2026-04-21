@@ -59,6 +59,44 @@ export type Database = {
           },
         ]
       }
+      filament_colors: {
+        Row: {
+          color_name: string
+          created_at: string
+          hex_code: string
+          id: string
+          in_stock: boolean
+          material: string
+          printer_id: string
+        }
+        Insert: {
+          color_name: string
+          created_at?: string
+          hex_code?: string
+          id?: string
+          in_stock?: boolean
+          material: string
+          printer_id: string
+        }
+        Update: {
+          color_name?: string
+          created_at?: string
+          hex_code?: string
+          id?: string
+          in_stock?: boolean
+          material?: string
+          printer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "filament_colors_printer_id_fkey"
+            columns: ["printer_id"]
+            isOneToOne: false
+            referencedRelation: "printers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           body: string
