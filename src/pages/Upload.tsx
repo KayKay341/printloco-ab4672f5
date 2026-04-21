@@ -53,7 +53,7 @@ const Upload = () => {
   useEffect(() => {
     supabase
       .from("printers")
-      .select("id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, profiles(full_name), filament_colors(material, color_name, hex_code, in_stock)")
+      .select("id, owner_id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, profiles(full_name), filament_colors(material, color_name, hex_code, in_stock)")
       .eq("is_active", true)
       .then(({ data, error }) => {
         if (error) toast.error(error.message);
