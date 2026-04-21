@@ -7,7 +7,7 @@ import Footer from "@/components/site/Footer";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Upload as UploadIcon, FileBox, MapPin, Sparkles, Loader2 } from "lucide-react";
+import { Upload as UploadIcon, FileBox, MapPin, Sparkles, Loader2, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import {
   MATERIAL_BASE_PRICE,
@@ -17,6 +17,7 @@ import {
 import StlPreview from "@/components/StlPreview";
 import ColorPicker from "@/components/ColorPicker";
 import PrinterMap from "@/components/PrinterMap";
+import CheckoutDialog from "@/components/CheckoutDialog";
 import { scorePrinter, type PrinterForScore, type ScoredPrinter } from "@/lib/printerScore";
 
 const MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
@@ -27,6 +28,7 @@ type PrinterRow = PrinterForScore & {
   neighborhood: string | null;
   city: string | null;
   bio: string | null;
+  owner_id: string;
   profiles: { full_name: string | null } | null;
 };
 
@@ -42,12 +44,16 @@ const Upload = () => {
   const [colorHex, setColorHex] = useState<string>("#9333EA");
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutPayload, setCheckoutPayload] = useState<any>(null);
+  const [savedStlId, setSavedStlId] = useState<string | null>(null);
+
 
   // Fetch printers + their filament colors once
   useEffect(() => {
     supabase
       .from("printers")
-      .select("id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, profiles(full_name), filament_colors(material, color_name, hex_code, in_stock)")
+      .select("id, owner_id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, profiles(full_name), filament_colors(material, color_name, hex_code, in_stock)")
       .eq("is_active", true)
       .then(({ data, error }) => {
         if (error) toast.error(error.message);
@@ -104,20 +110,20 @@ const Upload = () => {
   if (loading) return <div className="container py-24">Loading…</div>;
   if (!user) return <Navigate to={`/auth?mode=signin`} replace />;
 
-  const handleSaveQuote = async () => {
-    if (!file || !slice) {
-      toast.error("Upload an STL first.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const path = `${user.id}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase.storage
-        .from("stl-files")
-        .upload(path, file, { contentType: "model/stl", upsert: false });
-      if (upErr) throw upErr;
+  // Saves STL once and reuses the same row across multiple booking attempts.
+  const ensureStlSaved = async (): Promise<string | null> => {
+    if (!file || !slice || !user) return null;
+    if (savedStlId) return savedStlId;
 
-      const { error: insErr } = await supabase.from("stl_files").insert({
+    const path = `${user.id}/${Date.now()}-${file.name}`;
+    const { error: upErr } = await supabase.storage
+      .from("stl-files")
+      .upload(path, file, { contentType: "model/stl", upsert: false });
+    if (upErr) throw upErr;
+
+    const { data, error: insErr } = await supabase
+      .from("stl_files")
+      .insert({
         user_id: user.id,
         file_name: file.name,
         file_path: path,
@@ -125,9 +131,22 @@ const Upload = () => {
         material,
         estimated_weight: Math.round(slice.weightG * 10) / 10,
         estimated_price: Number(baseQuote.toFixed(2)),
-      });
-      if (insErr) throw insErr;
+      })
+      .select("id")
+      .single();
+    if (insErr) throw insErr;
+    setSavedStlId(data.id);
+    return data.id;
+  };
 
+  const handleSaveQuote = async () => {
+    if (!file || !slice) {
+      toast.error("Upload an STL first.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await ensureStlSaved();
       toast.success("Quote saved!");
       navigate("/dashboard");
     } catch (err: any) {
@@ -136,6 +155,33 @@ const Upload = () => {
       setSubmitting(false);
     }
   };
+
+  const handleBook = async (m: PrinterRow & ScoredPrinter) => {
+    if (!file || !slice || !user) {
+      toast.error("Upload an STL first.");
+      return;
+    }
+    try {
+      const stlId = await ensureStlSaved();
+      const amountCents = Math.max(100, Math.round(m.totalPrice * 100));
+      setCheckoutPayload({
+        printerId: m.id,
+        stlFileId: stlId,
+        makerId: m.owner_id,
+        material,
+        quantity: 1,
+        amountCents,
+        colorName: colorName ?? undefined,
+        notes: `Infill ${infill}% · ${slice.weightG.toFixed(1)}g`,
+        customerId: user.id,
+        customerEmail: user.email ?? undefined,
+      });
+      setCheckoutOpen(true);
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not start checkout");
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -331,6 +377,9 @@ const Upload = () => {
                             <div className="mt-2 inline-flex h-6 items-center rounded-full bg-primary/10 px-2 text-xs font-semibold text-primary">
                               {m.score}% match
                             </div>
+                            <Button size="sm" variant="hero" className="mt-3" onClick={() => handleBook(m)}>
+                              <CreditCard className="h-3.5 w-3.5" /> Book
+                            </Button>
                           </div>
                         </div>
                       </article>
@@ -341,6 +390,7 @@ const Upload = () => {
             )}
           </section>
         </div>
+        <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} payload={checkoutPayload} />
       </main>
       <Footer />
     </div>

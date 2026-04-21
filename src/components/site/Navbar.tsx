@@ -7,7 +7,8 @@ import { LogOut } from "lucide-react";
 const links = [
   { label: "Find a Printer", to: "/printers" },
   { label: "Upload STL", to: "/upload" },
-  { label: "Become a Maker", to: "/auth?mode=signup&role=maker" },
+  { label: "Waitlist", to: "/waitlist" },
+  { label: "Invest", to: "/invest" },
 ];
 
 const Navbar = () => {

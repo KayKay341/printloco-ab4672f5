@@ -2,8 +2,8 @@ const items = [
   "PLA · ABS · TPU · PETG · Resin · Nylon · Carbon Fiber",
   "Same-day pickup",
   "10-mile radius",
-  "Verified makers",
-  "Quality guaranteed",
+  "Address-verified makers",
+  "Browser-side slicing",
   "Pro bono for nonprofits",
 ];
 

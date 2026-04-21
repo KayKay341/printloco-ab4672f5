@@ -2,7 +2,7 @@ import Navbar from "@/components/site/Navbar";
 import Hero from "@/components/site/Hero";
 import Marquee from "@/components/site/Marquee";
 import HowItWorks from "@/components/site/HowItWorks";
-import FeaturedMakers from "@/components/site/FeaturedMakers";
+import CitiesLaunching from "@/components/site/CitiesLaunching";
 import Stats from "@/components/site/Stats";
 import MakersCTA from "@/components/site/MakersCTA";
 import Community from "@/components/site/Community";
@@ -17,7 +17,7 @@ const Index = () => (
       <Hero />
       <Marquee />
       <HowItWorks />
-      <FeaturedMakers />
+      <CitiesLaunching />
       <Stats />
       <MakersCTA />
       <Community />
