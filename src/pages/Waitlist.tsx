@@ -153,7 +153,23 @@ const Waitlist = () => {
       REFERRAL_STORAGE_KEY,
       JSON.stringify({ code, email: email.trim() }),
     );
-    toast.success("You're in! We'll email when your neighborhood goes live.");
+    // Fire-and-forget confirmation email — don't block UX if it fails
+    supabase.functions
+      .invoke("send-transactional-email", {
+        body: {
+          templateName: "waitlist-confirmation",
+          recipientEmail: email.trim(),
+          idempotencyKey: `waitlist-confirm-${code}`,
+          templateData: {
+            name: email.trim().split("@")[0],
+            city: city.trim() || undefined,
+            role,
+            referralCode: code,
+          },
+        },
+      })
+      .catch((err) => console.warn("confirmation email enqueue failed", err));
+    toast.success("You're in! Check your inbox for a confirmation.");
   };
 
   const resetSignup = () => {
