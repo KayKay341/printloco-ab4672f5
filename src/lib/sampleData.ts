@@ -90,6 +90,18 @@ export type SamplePrinter = {
   accepts_3mf: boolean;
   accepts_bulk: boolean;
   min_bulk_quantity: number;
+  // Quality + verification (3D Hubs failure-mode safeguards)
+  verification_status: "verified" | "pending" | "unverified";
+  quality_score: number;
+  tier: "hobbyist" | "maker" | "professional";
+  avg_rating: number;
+  rating_count: number;
+  total_orders: number;
+  successful_orders: number;
+  printer_photo_url: string | null;
+  sample_print_urls: string[];
+  serial_visible: boolean;
+  layer_height_min_mm: number;
   profiles: { full_name: string | null } | null;
   filament_colors: FilamentColor[];
 };
