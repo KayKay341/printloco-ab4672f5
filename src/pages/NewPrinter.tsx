@@ -320,9 +320,56 @@ const NewPrinter = () => {
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="bv">Build volume (optional)</Label>
-            <Input id="bv" value={buildVolume} onChange={(e) => setBuildVolume(e.target.value)} placeholder="256 × 256 × 256 mm" />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="bv">Build volume</Label>
+              <Input id="bv" value={buildVolume} onChange={(e) => setBuildVolume(e.target.value)} placeholder="256 × 256 × 256 mm" />
+              <p className="mt-1 text-xs text-muted-foreground">Min recommended: 150 × 150 × 150 mm</p>
+            </div>
+            <div>
+              <Label htmlFor="lh">Min layer height (mm)</Label>
+              <Input
+                id="lh"
+                type="number"
+                step="0.01"
+                min="0.04"
+                max="0.4"
+                value={layerHeightMin}
+                onChange={(e) => setLayerHeightMin(e.target.value)}
+                placeholder="0.12"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">≤ 0.20 mm required for verified tier.</p>
+            </div>
+          </div>
+
+          {/* VERIFICATION (3D Hubs cause #4 fix) */}
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <Label className="text-base">Verification</Label>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Required to go live. We back every print with a 7-day reprint guarantee — verification protects buyers AND your reputation.
+            </p>
+            <div className="mt-4">
+              <VerificationUploader
+                userId={user.id}
+                printerPhotoUrl={printerPhotoUrl}
+                onPrinterPhoto={setPrinterPhotoUrl}
+                samplePrintUrls={samplePrintUrls}
+                onSamplePrints={setSamplePrintUrls}
+              />
+            </div>
+            <label className="mt-4 flex items-center gap-2 text-sm">
+              <Switch checked={serialVisible} onCheckedChange={setSerialVisible} />
+              Serial number is visible in the printer photo
+            </label>
+            {(printerPhotoUrl && samplePrintUrls.length >= 3) && (
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-background/60 p-3 text-sm">
+                <span className="text-muted-foreground">Projected tier:</span>
+                <TierBadge tier={tierFromScore(60 + samplePrintUrls.length * 5 + (serialVisible ? 5 : 0))} />
+              </div>
+            )}
           </div>
 
           {/* MATERIALS + PRICES */}
