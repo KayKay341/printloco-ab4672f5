@@ -12,9 +12,13 @@ import { Switch } from "@/components/ui/switch";
 import { COMMON_COLORS } from "@/components/ColorPicker";
 import PrinterMap from "@/components/PrinterMap";
 import { toast } from "sonner";
-import { CheckCircle2, Layers, Package } from "lucide-react";
+import { CheckCircle2, Layers, Package, ShieldCheck } from "lucide-react";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import { MATERIAL_BASE_PRICE } from "@/lib/stlSlicer";
+import VerificationUploader from "@/components/VerificationUploader";
+import EarningsEstimate from "@/components/EarningsEstimate";
+import TierBadge from "@/components/TierBadge";
+import { tierFromScore } from "@/lib/tier";
 
 const ALL_MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
 
