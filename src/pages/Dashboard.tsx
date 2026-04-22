@@ -96,6 +96,12 @@ const Dashboard = () => {
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
             Hi{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""} 👋
           </h1>
+          {usingSample && (
+            <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs text-accent">
+              <Sparkles className="h-3 w-3" />
+              Sample data — your real {profile?.role === "maker" ? "printers" : "uploads"} appear here once you add them.
+            </div>
+          )}
         </div>
 
         {profile?.role === "maker" ? (
