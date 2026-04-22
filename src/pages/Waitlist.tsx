@@ -113,8 +113,20 @@ const Waitlist = () => {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       toast.error("Please enter your email");
+      return;
+    }
+    // Match the server-side regex used by the RLS policy so users get a clear
+    // message instead of a cryptic "row-level security" error.
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    if (!emailRegex.test(cleanEmail) || cleanEmail.length < 3 || cleanEmail.length > 320) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    if (!["customer", "maker", "nonprofit"].includes(role)) {
+      toast.error("Please choose how you're joining");
       return;
     }
     setSubmitting(true);
