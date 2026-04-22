@@ -2,6 +2,11 @@ import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getStripe, getStripeEnvironment } from "@/lib/stripe";
 import { supabase } from "@/integrations/supabase/client";
+import { useDemoMode } from "@/hooks/useDemoMode";
+import { useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Sparkles } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface CheckoutPayload {
   printerId: string;
