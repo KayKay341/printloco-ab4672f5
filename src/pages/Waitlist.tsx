@@ -324,11 +324,16 @@ const Waitlist = () => {
                       {/* Who used it */}
                       {referrals.length > 0 && (
                         <div className="mt-5">
-                          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                            Recent signups using your code
+                          <div className="flex items-center justify-between">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                              Recent signups using your code
+                            </div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {Math.min(visibleRefs, referrals.length)} of {referrals.length}
+                            </div>
                           </div>
                           <ul className="mt-2 divide-y divide-border rounded-xl border border-border bg-background">
-                            {referrals.slice(0, 8).map((r, i) => (
+                            {referrals.slice(0, visibleRefs).map((r, i) => (
                               <li key={i} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
                                 <span className="truncate font-mono">{r.masked_email}</span>
                                 <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
@@ -338,6 +343,26 @@ const Waitlist = () => {
                               </li>
                             ))}
                           </ul>
+                          {visibleRefs < referrals.length && (
+                            <Button
+                              type="button"
+                              variant="soft"
+                              size="sm"
+                              className="mt-3 w-full"
+                              onClick={() => setVisibleRefs((n) => n + 8)}
+                            >
+                              Load more ({referrals.length - visibleRefs} left)
+                            </Button>
+                          )}
+                          {visibleRefs > 8 && visibleRefs >= referrals.length && (
+                            <button
+                              type="button"
+                              onClick={() => setVisibleRefs(8)}
+                              className="mt-3 block w-full text-center text-[11px] text-muted-foreground hover:text-foreground"
+                            >
+                              Collapse
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>

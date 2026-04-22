@@ -31,6 +31,7 @@ type PrinterListing = {
 };
 
 const Printers = () => {
+  const { isDemo } = useDemoMode();
   const [all, setAll] = useState<PrinterListing[]>([]);
   const [q, setQ] = useState("");
   const [material, setMaterial] = useState<string>("");
@@ -46,10 +47,17 @@ const Printers = () => {
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (error) toast.error(error.message);
-        else setAll((data as unknown as PrinterListing[]) ?? []);
+        const real = (data as unknown as PrinterListing[]) ?? [];
+        // In demo mode, top up the list with sample makers across LA + Santa
+        // Monica so the discovery page feels populated before real makers join.
+        if (isDemo) {
+          setAll([...real, ...getSamplePrinters(24)]);
+        } else {
+          setAll(real);
+        }
         setLoading(false);
       });
-  }, []);
+  }, [isDemo]);
 
   const filtered = useMemo(() => all.filter((p) => {
     const matchesQ = !q ||

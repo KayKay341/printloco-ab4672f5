@@ -30,8 +30,10 @@ type StlRow = {
 
 const Dashboard = () => {
   const { user, profile, loading } = useAuth();
+  const { isDemo } = useDemoMode();
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [files, setFiles] = useState<StlRow[]>([]);
+  const [usingSample, setUsingSample] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -43,7 +45,22 @@ const Dashboard = () => {
         .order("created_at", { ascending: false })
         .then(({ data, error }) => {
           if (error) toast.error(error.message);
-          else setPrinters((data as PrinterRow[]) ?? []);
+          const real = (data as PrinterRow[]) ?? [];
+          if (real.length === 0 && isDemo) {
+            const samples = getSamplePrinters(24).slice(0, 3).map((s) => ({
+              id: s.id,
+              brand: s.brand,
+              model: s.model,
+              materials: s.materials,
+              price_per_gram: s.price_per_gram,
+              neighborhood: s.neighborhood,
+            }));
+            setPrinters(samples);
+            setUsingSample(true);
+          } else {
+            setPrinters(real);
+            setUsingSample(false);
+          }
         });
     } else {
       supabase
@@ -53,10 +70,17 @@ const Dashboard = () => {
         .order("created_at", { ascending: false })
         .then(({ data, error }) => {
           if (error) toast.error(error.message);
-          else setFiles((data as StlRow[]) ?? []);
+          const real = (data as StlRow[]) ?? [];
+          if (real.length === 0 && isDemo) {
+            setFiles(getSampleStlFiles());
+            setUsingSample(true);
+          } else {
+            setFiles(real);
+            setUsingSample(false);
+          }
         });
     }
-  }, [user, profile?.role]);
+  }, [user, profile?.role, isDemo]);
 
   if (loading) return <div className="container py-24">Loading…</div>;
   if (!user) return <Navigate to="/auth?mode=signin" replace />;
