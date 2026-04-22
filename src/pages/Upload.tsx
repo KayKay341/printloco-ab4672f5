@@ -91,7 +91,7 @@ const Upload = () => {
   useEffect(() => {
     supabase
       .from("printers")
-      .select("id, owner_id, brand, model, materials, price_per_gram, material_prices, neighborhood, city, bio, latitude, longitude, has_ams, ams_slot_count, accepts_3mf, accepts_bulk, min_bulk_quantity, profiles(full_name), filament_colors(material, color_name, hex_code, in_stock, surcharge_per_gram)")
+      .select("id, owner_id, brand, model, materials, price_per_gram, material_prices, neighborhood, city, bio, latitude, longitude, has_ams, ams_slot_count, accepts_3mf, accepts_bulk, min_bulk_quantity, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock, surcharge_per_gram)")
       .eq("is_active", true)
       .then(({ data, error }) => {
         if (error) toast.error(error.message);

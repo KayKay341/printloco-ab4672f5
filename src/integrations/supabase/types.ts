@@ -673,6 +673,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "printers_owner_profile_fkey"
+            columns: ["owner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "printers_preset_id_fkey"
             columns: ["preset_id"]
             isOneToOne: false
