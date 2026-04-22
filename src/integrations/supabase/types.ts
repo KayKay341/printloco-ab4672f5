@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      bulk_quote_requests: {
+        Row: {
+          budget_cents: number | null
+          color_name: string | null
+          created_at: string
+          customer_id: string
+          deadline: string | null
+          details: string
+          id: string
+          maker_id: string
+          maker_quote_cents: number | null
+          maker_response: string | null
+          material: string
+          printer_id: string
+          quantity: number
+          reference_file_url: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          budget_cents?: number | null
+          color_name?: string | null
+          created_at?: string
+          customer_id: string
+          deadline?: string | null
+          details: string
+          id?: string
+          maker_id: string
+          maker_quote_cents?: number | null
+          maker_response?: string | null
+          material: string
+          printer_id: string
+          quantity: number
+          reference_file_url?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          budget_cents?: number | null
+          color_name?: string | null
+          created_at?: string
+          customer_id?: string
+          deadline?: string | null
+          details?: string
+          id?: string
+          maker_id?: string
+          maker_quote_cents?: number | null
+          maker_response?: string | null
+          material?: string
+          printer_id?: string
+          quantity?: number
+          reference_file_url?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       cities: {
         Row: {
           created_at: string
@@ -188,6 +245,7 @@ export type Database = {
           in_stock: boolean
           material: string
           printer_id: string
+          surcharge_per_gram: number
         }
         Insert: {
           color_name: string
@@ -197,6 +255,7 @@ export type Database = {
           in_stock?: boolean
           material: string
           printer_id: string
+          surcharge_per_gram?: number
         }
         Update: {
           color_name?: string
@@ -206,6 +265,7 @@ export type Database = {
           in_stock?: boolean
           material?: string
           printer_id?: string
+          surcharge_per_gram?: number
         }
         Relationships: [
           {
@@ -402,12 +462,16 @@ export type Database = {
       }
       printers: {
         Row: {
+          accepts_3mf: boolean
+          accepts_bulk: boolean
           address: string | null
+          ams_slot_count: number
           bio: string | null
           brand: string
           build_volume: string | null
           city: string | null
           created_at: string
+          has_ams: boolean
           id: string
           image_url: string | null
           is_active: boolean
@@ -416,6 +480,7 @@ export type Database = {
           longitude: number | null
           material_prices: Json
           materials: string[]
+          min_bulk_quantity: number
           model: string
           neighborhood: string | null
           owner_id: string
@@ -425,12 +490,16 @@ export type Database = {
           zip_code: string | null
         }
         Insert: {
+          accepts_3mf?: boolean
+          accepts_bulk?: boolean
           address?: string | null
+          ams_slot_count?: number
           bio?: string | null
           brand: string
           build_volume?: string | null
           city?: string | null
           created_at?: string
+          has_ams?: boolean
           id?: string
           image_url?: string | null
           is_active?: boolean
@@ -439,6 +508,7 @@ export type Database = {
           longitude?: number | null
           material_prices?: Json
           materials?: string[]
+          min_bulk_quantity?: number
           model: string
           neighborhood?: string | null
           owner_id: string
@@ -448,12 +518,16 @@ export type Database = {
           zip_code?: string | null
         }
         Update: {
+          accepts_3mf?: boolean
+          accepts_bulk?: boolean
           address?: string | null
+          ams_slot_count?: number
           bio?: string | null
           brand?: string
           build_volume?: string | null
           city?: string | null
           created_at?: string
+          has_ams?: boolean
           id?: string
           image_url?: string | null
           is_active?: boolean
@@ -462,6 +536,7 @@ export type Database = {
           longitude?: number | null
           material_prices?: Json
           materials?: string[]
+          min_bulk_quantity?: number
           model?: string
           neighborhood?: string | null
           owner_id?: string
