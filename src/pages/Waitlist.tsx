@@ -140,7 +140,7 @@ const Waitlist = () => {
     const { error } = await supabase
       .from("waitlist_signups")
       .insert({
-        email: email.trim(),
+        email: cleanEmail,
         role,
         zip_code: zip.trim() || null,
         city: city.trim() || null,
@@ -154,6 +154,8 @@ const Waitlist = () => {
       if (error.code === "23505") {
         toast.success("You're already on the list — we'll be in touch.");
         setDone(true);
+      } else if (error.message?.toLowerCase().includes("row-level security")) {
+        toast.error("Couldn't save your signup — please double-check your email and try again.");
       } else {
         toast.error(error.message);
       }
