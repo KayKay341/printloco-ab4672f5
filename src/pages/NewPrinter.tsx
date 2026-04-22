@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,13 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import ColorPicker, { COMMON_COLORS } from "@/components/ColorPicker";
+import { Switch } from "@/components/ui/switch";
+import { COMMON_COLORS } from "@/components/ColorPicker";
 import PrinterMap from "@/components/PrinterMap";
 import { toast } from "sonner";
-import { CheckCircle2, MapPin } from "lucide-react";
+import { CheckCircle2, Layers, Package } from "lucide-react";
 import { useDemoMode } from "@/hooks/useDemoMode";
+import { MATERIAL_BASE_PRICE } from "@/lib/stlSlicer";
 
-const ALL_MATERIALS = ["PLA", "ABS", "PETG", "TPU", "Nylon", "Resin"];
+const ALL_MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
 
 type Preset = {
   id: string;
@@ -24,6 +26,13 @@ type Preset = {
   materials: string[];
   popularity: number;
   suggested_prices: Record<string, number>;
+};
+
+type ColorRow = {
+  name: string;
+  hex: string;
+  material: string;
+  surcharge: string; // dollars/gram surcharge on top of base
 };
 
 const NewPrinter = () => {
@@ -38,14 +47,31 @@ const NewPrinter = () => {
   const [model, setModel] = useState("");
   const [buildVolume, setBuildVolume] = useState("");
   const [materials, setMaterials] = useState<string[]>(["PLA"]);
-  const [pricePerGram, setPricePerGram] = useState("0.20");
+  // Per-material base price ($/g). Falls back to defaults from MATERIAL_BASE_PRICE.
+  const [materialPrices, setMaterialPrices] = useState<Record<string, string>>({
+    PLA: String(MATERIAL_BASE_PRICE.PLA),
+  });
+
+  // AMS / multi-color
+  const [hasAms, setHasAms] = useState(false);
+  const [amsSlotCount, setAmsSlotCount] = useState(4);
+  const [accepts3mf, setAccepts3mf] = useState(false);
+
+  // Bulk
+  const [acceptsBulk, setAcceptsBulk] = useState(true);
+  const [minBulkQty, setMinBulkQty] = useState(10);
 
   const [address, setAddress] = useState("");
   const [neighborhood, setNeighborhood] = useState(profile?.neighborhood ?? "");
   const [zipCode, setZipCode] = useState(profile?.zip_code ?? "");
   const [bio, setBio] = useState("");
 
-  const [colors, setColors] = useState<string[]>(["Black", "White"]);
+  // Filament inventory: each row = one (material, color) SKU with surcharge.
+  const [inventory, setInventory] = useState<ColorRow[]>([
+    { name: "Black", hex: "#111111", material: "PLA", surcharge: "0.00" },
+    { name: "White", hex: "#F5F5F5", material: "PLA", surcharge: "0.00" },
+  ]);
+
   const [verified, setVerified] = useState<{ lat: number; lng: number; address: string } | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -62,11 +88,36 @@ const NewPrinter = () => {
   if (!user) return <Navigate to="/auth?mode=signin" replace />;
 
   const toggleMat = (m: string) => {
-    setMaterials((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
+    setMaterials((prev) => {
+      const next = prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m];
+      // Keep materialPrices in sync — seed defaults for new ones, drop removed.
+      setMaterialPrices((prices) => {
+        const updated: Record<string, string> = {};
+        next.forEach((mat) => {
+          updated[mat] = prices[mat] ?? String(MATERIAL_BASE_PRICE[mat] ?? 0.2);
+        });
+        return updated;
+      });
+      // Drop inventory rows whose material is no longer offered.
+      setInventory((inv) => inv.filter((c) => next.includes(c.material)));
+      return next;
+    });
   };
 
-  const toggleColor = (name: string) => {
-    setColors((prev) => (prev.includes(name) ? prev.filter((x) => x !== name) : [...prev, name]));
+  const addColorRow = () => {
+    const firstMat = materials[0] ?? "PLA";
+    setInventory((inv) => [
+      ...inv,
+      { name: "Black", hex: "#111111", material: firstMat, surcharge: "0.00" },
+    ]);
+  };
+
+  const updateColorRow = (i: number, patch: Partial<ColorRow>) => {
+    setInventory((inv) => inv.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
+  };
+
+  const removeColorRow = (i: number) => {
+    setInventory((inv) => inv.filter((_, idx) => idx !== i));
   };
 
   const applyPreset = (p: Preset) => {
@@ -75,9 +126,17 @@ const NewPrinter = () => {
     setModel(p.model);
     setBuildVolume(p.build_volume);
     setMaterials(p.materials);
-    const firstMat = p.materials[0];
-    const sug = p.suggested_prices?.[firstMat];
-    if (sug) setPricePerGram(String(sug));
+    const seeded: Record<string, string> = {};
+    p.materials.forEach((mat) => {
+      seeded[mat] = String(p.suggested_prices?.[mat] ?? MATERIAL_BASE_PRICE[mat] ?? 0.2);
+    });
+    setMaterialPrices(seeded);
+    // Bambu Lab presets ship with AMS by default
+    if (p.brand.toLowerCase().includes("bambu")) {
+      setHasAms(true);
+      setAccepts3mf(true);
+      setAmsSlotCount(4);
+    }
   };
 
   const handleVerifyAddress = async (printerId: string) => {
@@ -104,6 +163,11 @@ const NewPrinter = () => {
     }
   };
 
+  const cheapestPrice = useMemo(() => {
+    const vals = Object.values(materialPrices).map((v) => Number(v)).filter((n) => Number.isFinite(n) && n > 0);
+    return vals.length ? Math.min(...vals) : 0.2;
+  }, [materialPrices]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (materials.length === 0) {
@@ -129,6 +193,13 @@ const NewPrinter = () => {
         await refreshProfile();
       }
 
+      // Build material_prices jsonb
+      const materialPricesJson: Record<string, number> = {};
+      materials.forEach((mat) => {
+        const v = Number(materialPrices[mat]);
+        if (Number.isFinite(v) && v > 0) materialPricesJson[mat] = v;
+      });
+
       const { data: inserted, error } = await supabase
         .from("printers")
         .insert({
@@ -137,11 +208,18 @@ const NewPrinter = () => {
           model,
           build_volume: buildVolume || null,
           materials,
-          price_per_gram: Number(pricePerGram),
+          // Cheapest material as the "headline" price_per_gram for legacy code.
+          price_per_gram: cheapestPrice,
+          material_prices: materialPricesJson,
           neighborhood: neighborhood || null,
           zip_code: zipCode || null,
           bio: bio || null,
           preset_id: presetId,
+          has_ams: hasAms,
+          ams_slot_count: hasAms ? amsSlotCount : 1,
+          accepts_3mf: hasAms ? accepts3mf : false,
+          accepts_bulk: acceptsBulk,
+          min_bulk_quantity: minBulkQty,
         })
         .select()
         .single();
@@ -150,14 +228,15 @@ const NewPrinter = () => {
       // Verify + geocode
       await handleVerifyAddress(inserted.id);
 
-      // Insert filament colors
-      if (colors.length > 0) {
-        const rows = materials.flatMap((mat) =>
-          colors.map((cName) => {
-            const c = COMMON_COLORS.find((x) => x.name === cName)!;
-            return { printer_id: inserted.id, material: mat, color_name: c.name, hex_code: c.hex };
-          })
-        );
+      // Insert filament inventory rows
+      if (inventory.length > 0) {
+        const rows = inventory.map((c) => ({
+          printer_id: inserted.id,
+          material: c.material,
+          color_name: c.name,
+          hex_code: c.hex,
+          surcharge_per_gram: Number(c.surcharge) || 0,
+        }));
         await supabase.from("filament_colors").insert(rows);
       }
 
@@ -177,7 +256,7 @@ const NewPrinter = () => {
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">For Makers</div>
         <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">List your printer</h1>
         <p className="mt-2 text-muted-foreground">
-          Pick from popular presets, declare your filaments, and verify your address on the map.
+          Pick a preset, set per-material pricing, declare every color in stock, and verify your address.
         </p>
 
         {presets.length > 0 && (
@@ -205,7 +284,7 @@ const NewPrinter = () => {
           </section>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6 rounded-3xl border border-border bg-card p-8 shadow-soft">
+        <form onSubmit={handleSubmit} className="mt-8 space-y-8 rounded-3xl border border-border bg-card p-8 shadow-soft">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="brand">Brand</Label>
@@ -222,8 +301,9 @@ const NewPrinter = () => {
             <Input id="bv" value={buildVolume} onChange={(e) => setBuildVolume(e.target.value)} placeholder="256 × 256 × 256 mm" />
           </div>
 
+          {/* MATERIALS + PRICES */}
           <div>
-            <Label>Materials</Label>
+            <Label>Materials you print in</Label>
             <div className="mt-2 flex flex-wrap gap-2">
               {ALL_MATERIALS.map((m) => (
                 <button
@@ -240,38 +320,188 @@ const NewPrinter = () => {
                 </button>
               ))}
             </div>
+
+            {materials.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-border bg-background/50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Base price per gram
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {materials.map((mat) => (
+                    <div key={mat} className="flex items-center gap-2">
+                      <div className="w-16 text-sm font-semibold">{mat}</div>
+                      <div className="relative flex-1">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="pl-6"
+                          value={materialPrices[mat] ?? ""}
+                          onChange={(e) => setMaterialPrices((p) => ({ ...p, [mat]: e.target.value }))}
+                          required
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground">/g</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          <div>
-            <Label>Filament colors in stock</Label>
-            <div className="mt-2 grid grid-cols-6 gap-2 sm:grid-cols-12">
-              {COMMON_COLORS.map((c) => {
-                const selected = colors.includes(c.name);
-                return (
-                  <button
-                    key={c.name}
-                    type="button"
-                    onClick={() => toggleColor(c.name)}
-                    title={c.name}
-                    className={`relative aspect-square rounded-xl border-2 transition-all ${
-                      selected ? "border-foreground scale-110 shadow-card" : "border-border opacity-60 hover:opacity-100"
-                    }`}
-                    style={{ backgroundColor: c.hex }}
-                  />
-                );
-              })}
+          {/* AMS */}
+          <div className="rounded-2xl border border-border bg-background/50 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Layers className="h-4 w-4 text-primary" />
+                  <Label className="text-base">AMS / multi-color printer</Label>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Turn on if your printer has an automatic material system (Bambu AMS, Prusa MMU, etc.).
+                </p>
+              </div>
+              <Switch checked={hasAms} onCheckedChange={setHasAms} />
             </div>
-            <div className="mt-2 text-xs text-muted-foreground">{colors.length} color{colors.length !== 1 && "s"} selected</div>
+
+            {hasAms && (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label htmlFor="slots">Slot count</Label>
+                  <select
+                    id="slots"
+                    value={amsSlotCount}
+                    onChange={(e) => setAmsSlotCount(Number(e.target.value))}
+                    className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+                  >
+                    {[2, 4, 8, 12, 16].map((n) => (
+                      <option key={n} value={n}>{n} slots</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <label className="flex items-center gap-2 text-sm">
+                    <Switch checked={accepts3mf} onCheckedChange={setAccepts3mf} />
+                    Accept Bambu .3mf multi-color jobs
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* BULK */}
+          <div className="rounded-2xl border border-border bg-background/50 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Package className="h-4 w-4 text-primary" />
+                  <Label className="text-base">Open to bulk / contract jobs</Label>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Buyers can request a custom quote for large quantities or recurring orders.
+                </p>
+              </div>
+              <Switch checked={acceptsBulk} onCheckedChange={setAcceptsBulk} />
+            </div>
+
+            {acceptsBulk && (
+              <div className="mt-4 max-w-xs">
+                <Label htmlFor="minbulk">Minimum bulk quantity</Label>
+                <Input
+                  id="minbulk"
+                  type="number"
+                  min="2"
+                  value={minBulkQty}
+                  onChange={(e) => setMinBulkQty(Math.max(2, Number(e.target.value) || 2))}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* FILAMENT INVENTORY */}
+          <div>
+            <div className="flex items-center justify-between">
+              <Label>Filaments in stock</Label>
+              <Button type="button" variant="ghost" size="sm" onClick={addColorRow} disabled={materials.length === 0}>
+                + Add filament
+              </Button>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Each row is one color SKU. Add a surcharge for premium filaments (silk, glow, marble).
+            </p>
+
+            <div className="mt-3 space-y-2">
+              {inventory.length === 0 && (
+                <div className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                  No filaments yet. Add at least one so buyers can pick a color.
+                </div>
+              )}
+              {inventory.map((row, i) => (
+                <div key={i} className="grid grid-cols-[auto_1fr_1fr_1fr_auto] items-center gap-2 rounded-xl border border-border bg-background p-2">
+                  <input
+                    type="color"
+                    value={row.hex}
+                    onChange={(e) => updateColorRow(i, { hex: e.target.value })}
+                    className="h-9 w-9 cursor-pointer rounded-lg border border-border bg-transparent"
+                    aria-label="Color"
+                  />
+                  <select
+                    value={row.name}
+                    onChange={(e) => {
+                      const preset = COMMON_COLORS.find((c) => c.name === e.target.value);
+                      updateColorRow(i, { name: e.target.value, hex: preset?.hex ?? row.hex });
+                    }}
+                    className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+                  >
+                    {COMMON_COLORS.map((c) => (
+                      <option key={c.name} value={c.name}>{c.name}</option>
+                    ))}
+                    <option value={row.name}>Custom: {row.name}</option>
+                  </select>
+                  <select
+                    value={row.material}
+                    onChange={(e) => updateColorRow(i, { material: e.target.value })}
+                    className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm"
+                  >
+                    {materials.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">+$</span>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={row.surcharge}
+                      onChange={(e) => updateColorRow(i, { surcharge: e.target.value })}
+                      className="h-9 pl-7 text-sm"
+                      placeholder="0.00"
+                      title="Per-gram surcharge"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeColorRow(i)}
+                    className="rounded-lg px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+                    aria-label="Remove"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <Label htmlFor="ppg">Price per gram ($)</Label>
-              <Input id="ppg" type="number" step="0.01" min="0" value={pricePerGram} onChange={(e) => setPricePerGram(e.target.value)} required />
-            </div>
-            <div>
               <Label htmlFor="nb">Neighborhood (public)</Label>
               <Input id="nb" value={neighborhood} onChange={(e) => setNeighborhood(e.target.value)} placeholder="Prospect Heights" />
+            </div>
+            <div>
+              <Label htmlFor="zip">ZIP code</Label>
+              <Input id="zip" value={zipCode} onChange={(e) => setZipCode(e.target.value)} placeholder="11238" />
             </div>
           </div>
 
