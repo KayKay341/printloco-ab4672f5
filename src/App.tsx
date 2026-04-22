@@ -17,6 +17,7 @@ import Waitlist from "./pages/Waitlist.tsx";
 import Invest from "./pages/Invest.tsx";
 import CheckoutReturn from "./pages/CheckoutReturn.tsx";
 import Admin from "./pages/Admin.tsx";
+import Unsubscribe from "./pages/Unsubscribe.tsx";
 
 const queryClient = new QueryClient();
 
