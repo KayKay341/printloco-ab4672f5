@@ -339,6 +339,54 @@ export type Database = {
           },
         ]
       }
+      order_disputes: {
+        Row: {
+          created_at: string
+          customer_id: string
+          description: string
+          evidence_urls: string[]
+          id: string
+          maker_id: string
+          order_id: string
+          reason: string
+          reprint_deadline: string | null
+          resolution_notes: string | null
+          resolved_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          description: string
+          evidence_urls?: string[]
+          id?: string
+          maker_id: string
+          order_id: string
+          reason: string
+          reprint_deadline?: string | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          description?: string
+          evidence_urls?: string[]
+          id?: string
+          maker_id?: string
+          order_id?: string
+          reason?: string
+          reprint_deadline?: string | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       orders: {
         Row: {
           amount_total: number
@@ -424,6 +472,39 @@ export type Database = {
           },
         ]
       }
+      print_ratings: {
+        Row: {
+          comment: string | null
+          created_at: string
+          customer_id: string
+          id: string
+          maker_id: string
+          order_id: string
+          printer_id: string
+          stars: number
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          customer_id: string
+          id?: string
+          maker_id: string
+          order_id: string
+          printer_id: string
+          stars: number
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          customer_id?: string
+          id?: string
+          maker_id?: string
+          order_id?: string
+          printer_id?: string
+          stars?: number
+        }
+        Relationships: []
+      }
       printer_presets: {
         Row: {
           brand: string
@@ -466,19 +547,24 @@ export type Database = {
           accepts_bulk: boolean
           address: string | null
           ams_slot_count: number
+          avg_rating: number
           bio: string | null
           brand: string
           build_volume: string | null
           city: string | null
           created_at: string
           has_ams: boolean
+          hidden_for_inactivity: boolean
           id: string
           image_url: string | null
           is_active: boolean
           is_address_verified: boolean
+          last_order_at: string | null
           latitude: number | null
+          layer_height_min_mm: number
           longitude: number | null
           material_prices: Json
+          material_spec_sheets: Json
           materials: string[]
           min_bulk_quantity: number
           model: string
@@ -486,7 +572,17 @@ export type Database = {
           owner_id: string
           preset_id: string | null
           price_per_gram: number
+          printer_photo_url: string | null
+          published: boolean
+          quality_score: number
+          rating_count: number
+          sample_print_urls: string[]
+          serial_visible: boolean
+          successful_orders: number
+          tier: string
+          total_orders: number
           updated_at: string
+          verification_status: string
           zip_code: string | null
         }
         Insert: {
@@ -494,19 +590,24 @@ export type Database = {
           accepts_bulk?: boolean
           address?: string | null
           ams_slot_count?: number
+          avg_rating?: number
           bio?: string | null
           brand: string
           build_volume?: string | null
           city?: string | null
           created_at?: string
           has_ams?: boolean
+          hidden_for_inactivity?: boolean
           id?: string
           image_url?: string | null
           is_active?: boolean
           is_address_verified?: boolean
+          last_order_at?: string | null
           latitude?: number | null
+          layer_height_min_mm?: number
           longitude?: number | null
           material_prices?: Json
+          material_spec_sheets?: Json
           materials?: string[]
           min_bulk_quantity?: number
           model: string
@@ -514,7 +615,17 @@ export type Database = {
           owner_id: string
           preset_id?: string | null
           price_per_gram?: number
+          printer_photo_url?: string | null
+          published?: boolean
+          quality_score?: number
+          rating_count?: number
+          sample_print_urls?: string[]
+          serial_visible?: boolean
+          successful_orders?: number
+          tier?: string
+          total_orders?: number
           updated_at?: string
+          verification_status?: string
           zip_code?: string | null
         }
         Update: {
@@ -522,19 +633,24 @@ export type Database = {
           accepts_bulk?: boolean
           address?: string | null
           ams_slot_count?: number
+          avg_rating?: number
           bio?: string | null
           brand?: string
           build_volume?: string | null
           city?: string | null
           created_at?: string
           has_ams?: boolean
+          hidden_for_inactivity?: boolean
           id?: string
           image_url?: string | null
           is_active?: boolean
           is_address_verified?: boolean
+          last_order_at?: string | null
           latitude?: number | null
+          layer_height_min_mm?: number
           longitude?: number | null
           material_prices?: Json
+          material_spec_sheets?: Json
           materials?: string[]
           min_bulk_quantity?: number
           model?: string
@@ -542,7 +658,17 @@ export type Database = {
           owner_id?: string
           preset_id?: string | null
           price_per_gram?: number
+          printer_photo_url?: string | null
+          published?: boolean
+          quality_score?: number
+          rating_count?: number
+          sample_print_urls?: string[]
+          serial_visible?: boolean
+          successful_orders?: number
+          tier?: string
+          total_orders?: number
           updated_at?: string
+          verification_status?: string
           zip_code?: string | null
         }
         Relationships: [
@@ -720,6 +846,10 @@ export type Database = {
     }
     Functions: {
       claim_first_admin: { Args: never; Returns: boolean }
+      compute_quality_score: {
+        Args: { _printer: Database["public"]["Tables"]["printers"]["Row"] }
+        Returns: number
+      }
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
