@@ -113,8 +113,20 @@ const Waitlist = () => {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
+    const cleanEmail = email.trim();
+    if (!cleanEmail) {
       toast.error("Please enter your email");
+      return;
+    }
+    // Match the server-side regex used by the RLS policy so users get a clear
+    // message instead of a cryptic "row-level security" error.
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    if (!emailRegex.test(cleanEmail) || cleanEmail.length < 3 || cleanEmail.length > 320) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    if (!["customer", "maker", "nonprofit"].includes(role)) {
+      toast.error("Please choose how you're joining");
       return;
     }
     setSubmitting(true);
@@ -128,7 +140,7 @@ const Waitlist = () => {
     const { error } = await supabase
       .from("waitlist_signups")
       .insert({
-        email: email.trim(),
+        email: cleanEmail,
         role,
         zip_code: zip.trim() || null,
         city: city.trim() || null,
@@ -142,6 +154,8 @@ const Waitlist = () => {
       if (error.code === "23505") {
         toast.success("You're already on the list — we'll be in touch.");
         setDone(true);
+      } else if (error.message?.toLowerCase().includes("row-level security")) {
+        toast.error("Couldn't save your signup — please double-check your email and try again.");
       } else {
         toast.error(error.message);
       }
@@ -151,17 +165,17 @@ const Waitlist = () => {
     setDone(true);
     localStorage.setItem(
       REFERRAL_STORAGE_KEY,
-      JSON.stringify({ code, email: email.trim() }),
+      JSON.stringify({ code, email: cleanEmail }),
     );
     // Fire-and-forget confirmation email — don't block UX if it fails
     supabase.functions
       .invoke("send-transactional-email", {
         body: {
           templateName: "waitlist-confirmation",
-          recipientEmail: email.trim(),
+          recipientEmail: cleanEmail,
           idempotencyKey: `waitlist-confirm-${code}`,
           templateData: {
-            name: email.trim().split("@")[0],
+            name: cleanEmail.split("@")[0],
             city: city.trim() || undefined,
             role,
             referralCode: code,
