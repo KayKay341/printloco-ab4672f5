@@ -72,7 +72,9 @@ const Waitlist = () => {
       return;
     }
     setSubmitting(true);
-    const { data, error } = await supabase
+    // Generate referral code client-side so we don't need SELECT permission after insert
+    const code = Math.random().toString(36).slice(2, 10);
+    const { error } = await supabase
       .from("waitlist_signups")
       .insert({
         email: email.trim(),
@@ -82,9 +84,8 @@ const Waitlist = () => {
         notes: notes.trim() || null,
         source: "waitlist_page",
         referred_by: referredBy,
-      })
-      .select("referral_code")
-      .single();
+        referral_code: code,
+      });
     setSubmitting(false);
     if (error) {
       if (error.code === "23505") {
@@ -95,7 +96,7 @@ const Waitlist = () => {
       }
       return;
     }
-    setReferralCode(data?.referral_code ?? null);
+    setReferralCode(code);
     setDone(true);
     toast.success("You're in! We'll email when your neighborhood goes live.");
   };
