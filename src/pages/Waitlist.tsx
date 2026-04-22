@@ -19,13 +19,24 @@ import {
   CheckCircle2, MapPin, Sparkles, Users, Printer, Building2,
   ArrowRight, Upload as UploadIcon, Handshake, Package,
   Copy, Twitter, Mail as MailIcon, Heart, ShieldCheck, Leaf,
+  Trophy, RefreshCw,
 } from "lucide-react";
+import { POPULAR_PRINTER_OPTIONS } from "@/lib/popularPrinters";
 
 type City = {
   id: string; name: string; slug: string;
   status: "waitlist" | "launching" | "live";
   launch_date: string | null; signup_count: number;
 };
+
+type ReferralStat = {
+  total: number;
+  masked_email: string;
+  city: string | null;
+  joined_at: string;
+};
+
+const REFERRAL_STORAGE_KEY = "printlocal_referral";
 
 const ROLES = [
   { id: "customer", label: "I want prints", icon: Sparkles, hint: "Get parts from local makers" },
@@ -46,11 +57,30 @@ const Waitlist = () => {
   const [zip, setZip] = useState("");
   const [city, setCity] = useState("");
   const [notes, setNotes] = useState("");
+  const [printerModel, setPrinterModel] = useState<string>("");
+  const [printerOther, setPrinterOther] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referrals, setReferrals] = useState<ReferralStat[]>([]);
+  const [refreshingRefs, setRefreshingRefs] = useState(false);
   const [cities, setCities] = useState<City[]>([]);
   const referredBy = params.get("ref");
+
+  // Load saved referral code from prior signup on this device
+  useEffect(() => {
+    const saved = localStorage.getItem(REFERRAL_STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as { code: string; email: string };
+        setReferralCode(parsed.code);
+        setEmail(parsed.email);
+        setDone(true);
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
 
   useEffect(() => {
     supabase
@@ -59,6 +89,21 @@ const Waitlist = () => {
       .order("signup_count", { ascending: false })
       .then(({ data }) => setCities((data as City[]) ?? []));
   }, []);
+
+  const loadReferrals = async (code: string) => {
+    setRefreshingRefs(true);
+    const { data, error } = await supabase.rpc("get_referral_stats", { _code: code });
+    setRefreshingRefs(false);
+    if (error) {
+      console.error(error);
+      return;
+    }
+    setReferrals((data as ReferralStat[]) ?? []);
+  };
+
+  useEffect(() => {
+    if (referralCode) loadReferrals(referralCode);
+  }, [referralCode]);
 
   const referralUrl = useMemo(
     () => referralCode ? `${window.location.origin}/waitlist?ref=${referralCode}` : "",
@@ -74,6 +119,11 @@ const Waitlist = () => {
     setSubmitting(true);
     // Generate referral code client-side so we don't need SELECT permission after insert
     const code = Math.random().toString(36).slice(2, 10);
+    const composedNotes = role === "maker"
+      ? [printerModel === "Other" ? printerOther.trim() : printerModel, notes.trim()]
+          .filter(Boolean)
+          .join(" — ") || null
+      : notes.trim() || null;
     const { error } = await supabase
       .from("waitlist_signups")
       .insert({
@@ -81,7 +131,7 @@ const Waitlist = () => {
         role,
         zip_code: zip.trim() || null,
         city: city.trim() || null,
-        notes: notes.trim() || null,
+        notes: composedNotes,
         source: "waitlist_page",
         referred_by: referredBy,
         referral_code: code,
@@ -98,7 +148,19 @@ const Waitlist = () => {
     }
     setReferralCode(code);
     setDone(true);
+    localStorage.setItem(
+      REFERRAL_STORAGE_KEY,
+      JSON.stringify({ code, email: email.trim() }),
+    );
     toast.success("You're in! We'll email when your neighborhood goes live.");
+  };
+
+  const resetSignup = () => {
+    localStorage.removeItem(REFERRAL_STORAGE_KEY);
+    setReferralCode(null);
+    setReferrals([]);
+    setDone(false);
+    setEmail("");
   };
 
   const copyReferral = async () => {
