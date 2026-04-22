@@ -5,8 +5,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
-import { Plus, Upload, Printer, FileBox } from "lucide-react";
+import { Plus, Upload, Printer, FileBox, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useDemoMode } from "@/hooks/useDemoMode";
+import { getSamplePrinters, getSampleStlFiles } from "@/lib/sampleData";
 
 type PrinterRow = {
   id: string;

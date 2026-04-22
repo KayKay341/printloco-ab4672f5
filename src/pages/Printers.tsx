@@ -9,6 +9,8 @@ import { MapPin, Search, Star, Map as MapIcon, List } from "lucide-react";
 import { toast } from "sonner";
 import PrinterMap from "@/components/PrinterMap";
 import { COMMON_COLORS } from "@/components/ColorPicker";
+import { useDemoMode } from "@/hooks/useDemoMode";
+import { getSamplePrinters } from "@/lib/sampleData";
 
 type FilamentColor = { material: string; color_name: string; hex_code: string; in_stock: boolean };
 

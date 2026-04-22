@@ -64,6 +64,7 @@ const Waitlist = () => {
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [referrals, setReferrals] = useState<ReferralStat[]>([]);
   const [refreshingRefs, setRefreshingRefs] = useState(false);
+  const [visibleRefs, setVisibleRefs] = useState(8);
   const [cities, setCities] = useState<City[]>([]);
   const referredBy = params.get("ref");
 
