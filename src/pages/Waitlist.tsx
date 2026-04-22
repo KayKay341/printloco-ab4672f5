@@ -19,13 +19,24 @@ import {
   CheckCircle2, MapPin, Sparkles, Users, Printer, Building2,
   ArrowRight, Upload as UploadIcon, Handshake, Package,
   Copy, Twitter, Mail as MailIcon, Heart, ShieldCheck, Leaf,
+  Trophy, RefreshCw,
 } from "lucide-react";
+import { POPULAR_PRINTER_OPTIONS } from "@/lib/popularPrinters";
 
 type City = {
   id: string; name: string; slug: string;
   status: "waitlist" | "launching" | "live";
   launch_date: string | null; signup_count: number;
 };
+
+type ReferralStat = {
+  total: number;
+  masked_email: string;
+  city: string | null;
+  joined_at: string;
+};
+
+const REFERRAL_STORAGE_KEY = "printlocal_referral";
 
 const ROLES = [
   { id: "customer", label: "I want prints", icon: Sparkles, hint: "Get parts from local makers" },
@@ -46,11 +57,30 @@ const Waitlist = () => {
   const [zip, setZip] = useState("");
   const [city, setCity] = useState("");
   const [notes, setNotes] = useState("");
+  const [printerModel, setPrinterModel] = useState<string>("");
+  const [printerOther, setPrinterOther] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referrals, setReferrals] = useState<ReferralStat[]>([]);
+  const [refreshingRefs, setRefreshingRefs] = useState(false);
   const [cities, setCities] = useState<City[]>([]);
   const referredBy = params.get("ref");
+
+  // Load saved referral code from prior signup on this device
+  useEffect(() => {
+    const saved = localStorage.getItem(REFERRAL_STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as { code: string; email: string };
+        setReferralCode(parsed.code);
+        setEmail(parsed.email);
+        setDone(true);
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
 
   useEffect(() => {
     supabase
@@ -59,6 +89,21 @@ const Waitlist = () => {
       .order("signup_count", { ascending: false })
       .then(({ data }) => setCities((data as City[]) ?? []));
   }, []);
+
+  const loadReferrals = async (code: string) => {
+    setRefreshingRefs(true);
+    const { data, error } = await supabase.rpc("get_referral_stats", { _code: code });
+    setRefreshingRefs(false);
+    if (error) {
+      console.error(error);
+      return;
+    }
+    setReferrals((data as ReferralStat[]) ?? []);
+  };
+
+  useEffect(() => {
+    if (referralCode) loadReferrals(referralCode);
+  }, [referralCode]);
 
   const referralUrl = useMemo(
     () => referralCode ? `${window.location.origin}/waitlist?ref=${referralCode}` : "",
@@ -74,6 +119,11 @@ const Waitlist = () => {
     setSubmitting(true);
     // Generate referral code client-side so we don't need SELECT permission after insert
     const code = Math.random().toString(36).slice(2, 10);
+    const composedNotes = role === "maker"
+      ? [printerModel === "Other" ? printerOther.trim() : printerModel, notes.trim()]
+          .filter(Boolean)
+          .join(" — ") || null
+      : notes.trim() || null;
     const { error } = await supabase
       .from("waitlist_signups")
       .insert({
@@ -81,7 +131,7 @@ const Waitlist = () => {
         role,
         zip_code: zip.trim() || null,
         city: city.trim() || null,
-        notes: notes.trim() || null,
+        notes: composedNotes,
         source: "waitlist_page",
         referred_by: referredBy,
         referral_code: code,
@@ -98,7 +148,19 @@ const Waitlist = () => {
     }
     setReferralCode(code);
     setDone(true);
+    localStorage.setItem(
+      REFERRAL_STORAGE_KEY,
+      JSON.stringify({ code, email: email.trim() }),
+    );
     toast.success("You're in! We'll email when your neighborhood goes live.");
+  };
+
+  const resetSignup = () => {
+    localStorage.removeItem(REFERRAL_STORAGE_KEY);
+    setReferralCode(null);
+    setReferrals([]);
+    setDone(false);
+    setEmail("");
   };
 
   const copyReferral = async () => {
@@ -188,14 +250,46 @@ const Waitlist = () => {
 
                   {referralCode && (
                     <div className="mt-6 rounded-2xl border border-accent/30 bg-accent/5 p-5">
-                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-                        Skip the line
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+                          Your referral dashboard
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => loadReferrals(referralCode)}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="Refresh referrals"
+                        >
+                          <RefreshCw className={`h-3.5 w-3.5 ${refreshingRefs ? "animate-spin" : ""}`} />
+                        </button>
                       </div>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        We launch cities with the most signups first. Each friend who joins from your
-                        link bumps your city up the queue.
+
+                      {/* Code + counts */}
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div className="rounded-xl border border-border bg-background p-4">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Your code
+                          </div>
+                          <div className="mt-1 font-display text-2xl font-semibold tracking-tight">
+                            {referralCode}
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-border bg-background p-4">
+                          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            <Trophy className="h-3 w-3" /> Friends joined
+                          </div>
+                          <div className="mt-1 font-display text-2xl font-semibold tracking-tight text-accent">
+                            {referrals[0]?.total ?? 0}
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="mt-4 text-xs text-muted-foreground">
+                        We launch cities with the most signups first. Each friend who joins from your link
+                        bumps your city up the queue.
                       </p>
-                      <div className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
+
+                      <div className="mt-3 flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
                         <code className="flex-1 truncate text-xs">{referralUrl}</code>
                         <Button size="sm" variant="ghost" onClick={copyReferral}>
                           <Copy className="h-3.5 w-3.5" />
@@ -225,6 +319,26 @@ const Waitlist = () => {
                           </a>
                         </Button>
                       </div>
+
+                      {/* Who used it */}
+                      {referrals.length > 0 && (
+                        <div className="mt-5">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Recent signups using your code
+                          </div>
+                          <ul className="mt-2 divide-y divide-border rounded-xl border border-border bg-background">
+                            {referrals.slice(0, 8).map((r, i) => (
+                              <li key={i} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                                <span className="truncate font-mono">{r.masked_email}</span>
+                                <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
+                                  {r.city && <span className="hidden sm:inline">{r.city}</span>}
+                                  <span>{new Date(r.joined_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -236,6 +350,13 @@ const Waitlist = () => {
                       <Link to="/invest">See the pitch →</Link>
                     </Button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={resetSignup}
+                    className="mt-4 block w-full text-center text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Sign up a different email →
+                  </button>
                 </div>
               ) : (
                 <form
@@ -335,29 +456,60 @@ const Waitlist = () => {
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <Label htmlFor="notes">
-                      {role === "maker"
-                        ? "What printer(s) do you own?"
-                        : role === "nonprofit"
+                  {role === "maker" ? (
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <Label htmlFor="printer-model">
+                          What printer do you own?{" "}
+                          <span className="text-muted-foreground">(optional)</span>
+                        </Label>
+                        <Select value={printerModel} onValueChange={setPrinterModel}>
+                          <SelectTrigger id="printer-model" className="mt-2">
+                            <SelectValue placeholder="Pick your model" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-72">
+                            {POPULAR_PRINTER_OPTIONS.map((m) => (
+                              <SelectItem key={m} value={m}>{m}</SelectItem>
+                            ))}
+                            <SelectItem value="Other">Other / not listed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {printerModel === "Other" && (
+                        <Input
+                          placeholder="Brand and model (e.g. Sovol SV08)"
+                          value={printerOther}
+                          onChange={(e) => setPrinterOther(e.target.value)}
+                        />
+                      )}
+                      <Textarea
+                        placeholder="Anything else? Multiple printers, filaments you stock, hours/week available…"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="min-h-[70px]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="mt-4">
+                      <Label htmlFor="notes">
+                        {role === "nonprofit"
                           ? "Tell us about your organization"
                           : "What do you want to print?"}{" "}
-                      <span className="text-muted-foreground">(optional)</span>
-                    </Label>
-                    <Textarea
-                      id="notes"
-                      placeholder={
-                        role === "maker"
-                          ? "Bambu X1C, Prusa MK4, Form 3…"
-                          : role === "nonprofit"
+                        <span className="text-muted-foreground">(optional)</span>
+                      </Label>
+                      <Textarea
+                        id="notes"
+                        placeholder={
+                          role === "nonprofit"
                             ? "501(c)(3) hospital robotics club"
                             : "Drone parts, miniatures, replacement knobs…"
-                      }
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      className="mt-2 min-h-[80px]"
-                    />
-                  </div>
+                        }
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="mt-2 min-h-[80px]"
+                      />
+                    </div>
+                  )}
 
                   <Button
                     type="submit"

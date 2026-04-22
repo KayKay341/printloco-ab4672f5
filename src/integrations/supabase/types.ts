@@ -534,6 +534,15 @@ export type Database = {
     }
     Functions: {
       claim_first_admin: { Args: never; Returns: boolean }
+      get_referral_stats: {
+        Args: { _code: string }
+        Returns: {
+          city: string
+          joined_at: string
+          masked_email: string
+          total: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
