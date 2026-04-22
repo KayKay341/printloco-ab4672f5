@@ -80,6 +80,12 @@ const NewPrinter = () => {
   const [verifying, setVerifying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
+  // Verification (3D Hubs cause #4 fix — required to go live)
+  const [printerPhotoUrl, setPrinterPhotoUrl] = useState<string | null>(null);
+  const [samplePrintUrls, setSamplePrintUrls] = useState<string[]>([]);
+  const [serialVisible, setSerialVisible] = useState(true);
+  const [layerHeightMin, setLayerHeightMin] = useState("0.12");
+
   useEffect(() => {
     supabase
       .from("printer_presets")
@@ -182,6 +188,14 @@ const NewPrinter = () => {
       toast.error("Add your address — required for matching.");
       return;
     }
+    if (!printerPhotoUrl) {
+      toast.error("Upload a photo of your printer (with serial visible) to verify.");
+      return;
+    }
+    if (samplePrintUrls.length < 3) {
+      toast.error("Upload 3 sample prints so customers know what to expect.");
+      return;
+    }
     if (isDemo) {
       demoToast("publish a real printer listing");
       return;
@@ -224,6 +238,12 @@ const NewPrinter = () => {
           accepts_3mf: hasAms ? accepts3mf : false,
           accepts_bulk: acceptsBulk,
           min_bulk_quantity: minBulkQty,
+          printer_photo_url: printerPhotoUrl,
+          sample_print_urls: samplePrintUrls,
+          serial_visible: serialVisible,
+          layer_height_min_mm: Number(layerHeightMin) || 0.2,
+          verification_status: "pending",
+          published: true,
         })
         .select()
         .single();
