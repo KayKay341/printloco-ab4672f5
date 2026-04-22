@@ -6,21 +6,41 @@ import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
-import { Upload as UploadIcon, FileBox, MapPin, Sparkles, Loader2, CreditCard } from "lucide-react";
+import {
+  Upload as UploadIcon,
+  FileBox,
+  MapPin,
+  Sparkles,
+  Loader2,
+  CreditCard,
+  Layers,
+  Package,
+  Palette,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   MATERIAL_BASE_PRICE,
   sliceStlBuffer,
   type SliceResult,
 } from "@/lib/stlSlicer";
+import { parse3mf, recolorBySlot, type FilamentSlot, type Mfg3mfResult } from "@/lib/threeMfParser";
 import StlPreview from "@/components/StlPreview";
-import ColorPicker from "@/components/ColorPicker";
+import ColorPicker, { COMMON_COLORS } from "@/components/ColorPicker";
 import PrinterMap from "@/components/PrinterMap";
 import CheckoutDialog from "@/components/CheckoutDialog";
+import BulkQuoteDialog from "@/components/BulkQuoteDialog";
 import { scorePrinter, type PrinterForScore, type ScoredPrinter } from "@/lib/printerScore";
+import * as THREE from "three";
 
 const MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
+
+type FilamentColorRow = {
+  material: string;
+  color_name: string;
+  hex_code: string;
+  in_stock: boolean;
+  surcharge_per_gram?: number;
+};
 
 type PrinterRow = PrinterForScore & {
   brand: string;
@@ -29,17 +49,33 @@ type PrinterRow = PrinterForScore & {
   city: string | null;
   bio: string | null;
   owner_id: string;
+  has_ams: boolean;
+  ams_slot_count: number;
+  accepts_3mf: boolean;
+  accepts_bulk: boolean;
+  min_bulk_quantity: number;
+  material_prices: Record<string, number> | null;
   profiles: { full_name: string | null } | null;
+  filament_colors: FilamentColorRow[];
 };
+
+type FileKind = "stl" | "3mf";
 
 const Upload = () => {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const [file, setFile] = useState<File | null>(null);
-  const [slicing, setSlicing] = useState(false);
+  const [fileKind, setFileKind] = useState<FileKind>("stl");
+  const [parsing, setParsing] = useState(false);
+
+  // STL path
   const [slice, setSlice] = useState<SliceResult | null>(null);
+
+  // 3MF path
+  const [mfg, setMfg] = useState<Mfg3mfResult | null>(null);
+  const [originalSlots, setOriginalSlots] = useState<FilamentSlot[]>([]);
+
   const [material, setMaterial] = useState("PLA");
-  const [infill, setInfill] = useState(20);
   const [colorName, setColorName] = useState<string | null>(null);
   const [colorHex, setColorHex] = useState<string>("#9333EA");
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
@@ -48,12 +84,14 @@ const Upload = () => {
   const [checkoutPayload, setCheckoutPayload] = useState<any>(null);
   const [savedStlId, setSavedStlId] = useState<string | null>(null);
 
+  // Bulk
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkPrinter, setBulkPrinter] = useState<PrinterRow | null>(null);
 
-  // Fetch printers + their filament colors once
   useEffect(() => {
     supabase
       .from("printers")
-      .select("id, owner_id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, profiles(full_name), filament_colors(material, color_name, hex_code, in_stock)")
+      .select("id, owner_id, brand, model, materials, price_per_gram, material_prices, neighborhood, city, bio, latitude, longitude, has_ams, ams_slot_count, accepts_3mf, accepts_bulk, min_bulk_quantity, profiles(full_name), filament_colors(material, color_name, hex_code, in_stock, surcharge_per_gram)")
       .eq("is_active", true)
       .then(({ data, error }) => {
         if (error) toast.error(error.message);
@@ -61,37 +99,87 @@ const Upload = () => {
       });
   }, []);
 
-  // Run the slicer when file or material/infill changes
+  // Parse on file change
   useEffect(() => {
     if (!file) {
       setSlice(null);
+      setMfg(null);
       return;
     }
-    setSlicing(true);
+    setParsing(true);
+    const ext = file.name.toLowerCase().split(".").pop();
+    const kind: FileKind = ext === "3mf" ? "3mf" : "stl";
+    setFileKind(kind);
+
     file.arrayBuffer()
-      .then((buf) => {
-        const result = sliceStlBuffer(buf, { material, infillPct: infill });
-        setSlice(result);
+      .then(async (buf) => {
+        if (kind === "3mf") {
+          const result = await parse3mf(buf);
+          setMfg(result);
+          setOriginalSlots(result.filaments.map((f) => ({ ...f })));
+          setSlice(null);
+        } else {
+          const result = sliceStlBuffer(buf, { material, infillPct: 20 });
+          setSlice(result);
+          setMfg(null);
+        }
       })
       .catch((err) => {
-        toast.error("Could not parse STL: " + err.message);
+        toast.error(`Could not parse ${kind.toUpperCase()}: ` + err.message);
         setSlice(null);
+        setMfg(null);
       })
-      .finally(() => setSlicing(false));
-  }, [file, material, infill]);
+      .finally(() => setParsing(false));
+  }, [file]);
+
+  // Re-slice STL when material changes (no infill anymore — fixed at 20%).
+  useEffect(() => {
+    if (fileKind !== "stl" || !file) return;
+    file.arrayBuffer().then((buf) => {
+      try {
+        setSlice(sliceStlBuffer(buf, { material, infillPct: 20 }));
+      } catch {/* ignore */}
+    });
+  }, [material, fileKind]);
+
+  /** Active total weight regardless of file type. */
+  const totalWeightG = useMemo(() => {
+    if (mfg) return mfg.totalWeightG;
+    if (slice) return slice.weightG;
+    return 0;
+  }, [mfg, slice]);
 
   const baseQuote = useMemo(() => {
-    if (!slice) return 0;
-    return slice.weightG * (MATERIAL_BASE_PRICE[material] ?? 0.2);
-  }, [slice, material]);
+    if (mfg) {
+      // Sum each slot's weight × that slot material's base price.
+      return mfg.weightPerSlot.reduce((acc, w, i) => {
+        const t = mfg.filaments[i]?.type ?? "PLA";
+        return acc + w * (MATERIAL_BASE_PRICE[t] ?? 0.2);
+      }, 0);
+    }
+    if (slice) return slice.weightG * (MATERIAL_BASE_PRICE[material] ?? 0.2);
+    return 0;
+  }, [mfg, slice, material]);
 
+  const previewGeometry: THREE.BufferGeometry | null = mfg?.geometry ?? slice?.geometry ?? null;
+
+  // Build printer matches
   const matches: (PrinterRow & ScoredPrinter)[] = useMemo(() => {
-    if (!slice) return [];
+    if (totalWeightG <= 0) return [];
     return printers
-      .map((p) => ({ ...p, ...scorePrinter(p, { weightG: slice.weightG, material, colorName }) }))
+      .map((p) => {
+        const score = scorePrinter(p, { weightG: totalWeightG, material, colorName });
+        return { ...p, ...score };
+      })
+      // For 3MF jobs, only show printers that can do multi-color
+      .filter((p) => {
+        if (fileKind !== "3mf" || !mfg) return true;
+        const slotsNeeded = mfg.filaments.length;
+        return p.has_ams && p.accepts_3mf && p.ams_slot_count >= slotsNeeded;
+      })
       .sort((a, b) => b.score - a.score)
       .slice(0, 8);
-  }, [printers, slice, material, colorName]);
+  }, [printers, totalWeightG, material, colorName, fileKind, mfg]);
 
   const mapPins = useMemo(
     () =>
@@ -110,15 +198,24 @@ const Upload = () => {
   if (loading) return <div className="container py-24">Loading…</div>;
   if (!user) return <Navigate to={`/auth?mode=signin`} replace />;
 
-  // Saves STL once and reuses the same row across multiple booking attempts.
-  const ensureStlSaved = async (): Promise<string | null> => {
-    if (!file || !slice || !user) return null;
+  // Reassign one slot's color (multi-color preview customization)
+  const reassignSlot = (slotIdx: number, hex: string, name?: string) => {
+    if (!mfg) return;
+    const before = mfg.filaments.map((f) => ({ ...f }));
+    const after = mfg.filaments.map((f, i) => (i === slotIdx ? { ...f, hex } : f));
+    recolorBySlot(mfg.geometry, before, after);
+    setMfg({ ...mfg, filaments: after });
+  };
+
+  const ensureFileSaved = async (): Promise<string | null> => {
+    if (!file || !user) return null;
     if (savedStlId) return savedStlId;
 
     const path = `${user.id}/${Date.now()}-${file.name}`;
+    const contentType = fileKind === "3mf" ? "model/3mf" : "model/stl";
     const { error: upErr } = await supabase.storage
       .from("stl-files")
-      .upload(path, file, { contentType: "model/stl", upsert: false });
+      .upload(path, file, { contentType, upsert: false });
     if (upErr) throw upErr;
 
     const { data, error: insErr } = await supabase
@@ -129,7 +226,7 @@ const Upload = () => {
         file_path: path,
         file_size: file.size,
         material,
-        estimated_weight: Math.round(slice.weightG * 10) / 10,
+        estimated_weight: Math.round(totalWeightG * 10) / 10,
         estimated_price: Number(baseQuote.toFixed(2)),
       })
       .select("id")
@@ -140,13 +237,13 @@ const Upload = () => {
   };
 
   const handleSaveQuote = async () => {
-    if (!file || !slice) {
-      toast.error("Upload an STL first.");
+    if (!file || totalWeightG <= 0) {
+      toast.error("Upload a model first.");
       return;
     }
     setSubmitting(true);
     try {
-      await ensureStlSaved();
+      await ensureFileSaved();
       toast.success("Quote saved!");
       navigate("/dashboard");
     } catch (err: any) {
@@ -157,13 +254,20 @@ const Upload = () => {
   };
 
   const handleBook = async (m: PrinterRow & ScoredPrinter) => {
-    if (!file || !slice || !user) {
-      toast.error("Upload an STL first.");
+    if (!file || totalWeightG <= 0 || !user) {
+      toast.error("Upload a model first.");
       return;
     }
     try {
-      const stlId = await ensureStlSaved();
+      const stlId = await ensureFileSaved();
       const amountCents = Math.max(100, Math.round(m.totalPrice * 100));
+      const noteParts: string[] = [`${totalWeightG.toFixed(1)}g`];
+      if (mfg) {
+        noteParts.push(`${mfg.filaments.length} colors`);
+        mfg.filaments.forEach((f, i) => {
+          noteParts.push(`Slot ${i + 1}: ${f.type} ${f.hex}`);
+        });
+      }
       setCheckoutPayload({
         printerId: m.id,
         stlFileId: stlId,
@@ -172,7 +276,7 @@ const Upload = () => {
         quantity: 1,
         amountCents,
         colorName: colorName ?? undefined,
-        notes: `Infill ${infill}% · ${slice.weightG.toFixed(1)}g`,
+        notes: noteParts.join(" · "),
         customerId: user.id,
         customerEmail: user.email ?? undefined,
       });
@@ -182,6 +286,10 @@ const Upload = () => {
     }
   };
 
+  const openBulk = (m: PrinterRow) => {
+    setBulkPrinter(m);
+    setBulkOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -192,7 +300,7 @@ const Upload = () => {
           Upload, slice, match — <span className="italic text-primary">in seconds</span>
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Real geometry-based slicing in your browser. Pick a material and color, see live cost, and find verified makers nearby.
+          STL for single-color prints, or upload a Bambu <strong>.3mf</strong> to preview every painted color in 3D.
         </p>
 
         <div className="mt-10 grid gap-8 lg:grid-cols-[1.1fr_1fr]">
@@ -208,26 +316,32 @@ const Upload = () => {
                 {file ? <FileBox className="h-7 w-7" /> : <UploadIcon className="h-7 w-7" />}
               </div>
               <div className="font-display text-lg font-semibold">
-                {file ? file.name : "Click to choose an STL"}
+                {file ? file.name : "Click to upload an STL or .3mf"}
               </div>
               <div className="text-xs text-muted-foreground">
-                {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Max 50MB · .stl only"}
+                {file
+                  ? `${(file.size / 1024 / 1024).toFixed(2)} MB · ${fileKind.toUpperCase()}`
+                  : "Max 50MB · .stl or Bambu .3mf"}
               </div>
               <input
                 id="stl"
                 type="file"
-                accept=".stl,model/stl"
+                accept=".stl,.3mf,model/stl,model/3mf"
                 className="sr-only"
                 onChange={(e) => {
                   const f = e.target.files?.[0] ?? null;
-                  if (f && !f.name.toLowerCase().endsWith(".stl")) {
-                    toast.error("Please upload a .stl file");
-                    return;
+                  if (f) {
+                    const ext = f.name.toLowerCase().split(".").pop();
+                    if (ext !== "stl" && ext !== "3mf") {
+                      toast.error("Please upload a .stl or .3mf file");
+                      return;
+                    }
+                    if (f.size > 50 * 1024 * 1024) {
+                      toast.error("File is too large (50MB max)");
+                      return;
+                    }
                   }
-                  if (f && f.size > 50 * 1024 * 1024) {
-                    toast.error("File is too large (50MB max)");
-                    return;
-                  }
+                  setSavedStlId(null);
                   setFile(f);
                 }}
               />
@@ -237,86 +351,118 @@ const Upload = () => {
             {file && (
               <div className="rounded-2xl border border-border bg-gradient-hero p-2">
                 <div className="relative h-72 w-full overflow-hidden rounded-xl">
-                  {slicing && (
+                  {parsing && (
                     <div className="absolute inset-0 z-10 grid place-items-center bg-background/60 backdrop-blur-sm">
                       <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     </div>
                   )}
-                  <StlPreview geometry={slice?.geometry ?? null} color={colorHex} className="h-full w-full" />
+                  <StlPreview
+                    geometry={previewGeometry}
+                    color={colorHex}
+                    vertexColors={fileKind === "3mf"}
+                    className="h-full w-full"
+                  />
                 </div>
               </div>
             )}
 
-            <div>
-              <Label>Material</Label>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {MATERIALS.map((m) => (
-                  <button
-                    type="button"
-                    key={m}
-                    onClick={() => setMaterial(m)}
-                    className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-all ${
-                      material === m
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background hover:border-foreground/30"
-                    }`}
-                  >
-                    {m}
-                  </button>
-                ))}
+            {/* 3MF: multi-color slot list */}
+            {mfg && (
+              <div className="rounded-2xl border border-border bg-background/40 p-4">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <Layers className="h-3.5 w-3.5 text-primary" />
+                  Multi-color print · {mfg.filaments.length} slots
+                </div>
+                <div className="mt-3 space-y-2">
+                  {mfg.filaments.map((f, i) => (
+                    <div key={i} className="flex items-center justify-between gap-3 rounded-xl bg-card p-2">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className="h-8 w-8 rounded-lg border border-border"
+                          style={{ backgroundColor: f.hex }}
+                        />
+                        <div>
+                          <div className="text-sm font-semibold">Slot {i + 1} · {f.type}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {mfg.weightPerSlot[i]?.toFixed(1) ?? "0.0"}g
+                          </div>
+                        </div>
+                      </div>
+                      <input
+                        type="color"
+                        value={f.hex}
+                        onChange={(e) => reassignSlot(i, e.target.value)}
+                        className="h-9 w-12 cursor-pointer rounded-lg border border-border bg-transparent"
+                        aria-label={`Slot ${i + 1} color`}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 text-xs text-muted-foreground">
+                  Tap a swatch to recolor any slot. We'll show only AMS-equipped makers with enough slots.
+                </div>
               </div>
-            </div>
+            )}
 
-            <div>
-              <div className="flex items-center justify-between">
-                <Label>Infill</Label>
-                <span className="text-sm font-semibold text-primary">{infill}%</span>
-              </div>
-              <Slider
-                value={[infill]}
-                onValueChange={(v) => setInfill(v[0])}
-                min={5}
-                max={100}
-                step={5}
-                className="mt-3"
-              />
-              <div className="mt-1 text-xs text-muted-foreground">
-                Lower = lighter & cheaper. 20% works for most decorative parts.
-              </div>
-            </div>
+            {/* STL: material + single color */}
+            {!mfg && (
+              <>
+                <div>
+                  <Label>Material</Label>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {MATERIALS.map((m) => (
+                      <button
+                        type="button"
+                        key={m}
+                        onClick={() => setMaterial(m)}
+                        className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-all ${
+                          material === m
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background hover:border-foreground/30"
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-            <div>
-              <Label>Color</Label>
-              <div className="mt-2">
-                <ColorPicker
-                  value={colorName}
-                  onChange={(name, hex) => {
-                    setColorName(name);
-                    setColorHex(hex);
-                  }}
-                />
-              </div>
-              <div className="mt-2 text-xs text-muted-foreground">
-                {colorName ? `Matching makers who stock ${colorName} ${material}` : "Optional — pick to filter by stocked color"}
-              </div>
-            </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Palette className="h-4 w-4 text-primary" />
+                    <Label>Color</Label>
+                  </div>
+                  <div className="mt-2">
+                    <ColorPicker
+                      value={colorName}
+                      onChange={(name, hex) => {
+                        setColorName(name);
+                        setColorHex(hex);
+                      }}
+                    />
+                  </div>
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {colorName ? `Matching makers who stock ${colorName} ${material}` : "Optional — pick to filter by stocked color"}
+                  </div>
+                </div>
+              </>
+            )}
           </section>
 
           {/* RIGHT: live quote + matches */}
           <section className="space-y-6">
-            {slice ? (
+            {totalWeightG > 0 ? (
               <div className="rounded-3xl bg-gradient-hero p-6 shadow-card">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Live estimate</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Live estimate {mfg && "(multi-color)"}
+                </div>
                 <div className="mt-1 font-display text-5xl font-semibold">
                   ${baseQuote.toFixed(2)}
                 </div>
                 <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
-                  <Stat label="Weight" value={`${slice.weightG.toFixed(1)} g`} />
-                  <Stat label="Print time" value={fmtMins(slice.printMinutes)} />
-                  <Stat label="Volume" value={`${slice.volumeCm3.toFixed(1)} cm³`} />
-                </div>
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Bounding box: {slice.bbox.x.toFixed(0)} × {slice.bbox.y.toFixed(0)} × {slice.bbox.z.toFixed(0)} mm
+                  <Stat label="Weight" value={`${totalWeightG.toFixed(1)} g`} />
+                  <Stat label={mfg ? "Slots" : "Print time"} value={mfg ? `${mfg.filaments.length}` : fmtMins(slice?.printMinutes ?? 0)} />
+                  <Stat label="Triangles" value={`${(mfg?.triangles ?? slice?.triangles ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} />
                 </div>
 
                 <div className="mt-5 flex gap-2">
@@ -331,14 +477,14 @@ const Upload = () => {
             ) : (
               <div className="rounded-3xl border border-dashed border-border bg-card/50 p-10 text-center">
                 <Sparkles className="mx-auto h-8 w-8 text-primary" />
-                <div className="mt-3 font-display text-lg font-semibold">Drop an STL to see the quote</div>
+                <div className="mt-3 font-display text-lg font-semibold">Drop a model to see the quote</div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  We'll slice it locally — nothing leaves your browser until you save.
+                  We slice locally — nothing leaves your browser until you save.
                 </div>
               </div>
             )}
 
-            {slice && matches.length > 0 && (
+            {totalWeightG > 0 && matches.length > 0 && (
               <>
                 <div className="rounded-3xl border border-border bg-card p-2 shadow-soft">
                   <PrinterMap pins={mapPins} className="h-64 w-full overflow-hidden rounded-2xl" />
@@ -346,6 +492,11 @@ const Upload = () => {
 
                 <div>
                   <h2 className="font-display text-xl font-semibold">Top matches</h2>
+                  {fileKind === "3mf" && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Filtered to AMS-equipped makers with at least {mfg?.filaments.length} slots.
+                    </p>
+                  )}
                   <div className="mt-3 space-y-3">
                     {matches.map((m) => (
                       <article key={m.id} className="rounded-2xl border border-border bg-card p-4 shadow-soft transition-all hover:border-primary/50">
@@ -358,9 +509,15 @@ const Upload = () => {
                             </div>
                             <div className="mt-1 truncate font-display text-lg font-semibold">{m.brand} {m.model}</div>
                             <div className="text-xs text-muted-foreground">by {m.profiles?.full_name || "Anonymous Maker"}</div>
-                            <div className="mt-2 flex items-center gap-2 text-xs">
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+                              {m.has_ams && (
+                                <Badge tone="ok">
+                                  <Layers className="h-3 w-3" />
+                                  AMS · {m.ams_slot_count}
+                                </Badge>
+                              )}
                               <Badge tone={m.hasMaterial ? "ok" : "off"}>{m.hasMaterial ? "✓" : "✗"} {material}</Badge>
-                              {colorName && (
+                              {colorName && !mfg && (
                                 <Badge tone={m.hasColor ? "ok" : "off"}>
                                   <span
                                     className="inline-block h-2 w-2 rounded-full border border-border"
@@ -377,9 +534,16 @@ const Upload = () => {
                             <div className="mt-2 inline-flex h-6 items-center rounded-full bg-primary/10 px-2 text-xs font-semibold text-primary">
                               {m.score}% match
                             </div>
-                            <Button size="sm" variant="hero" className="mt-3" onClick={() => handleBook(m)}>
-                              <CreditCard className="h-3.5 w-3.5" /> Book
-                            </Button>
+                            <div className="mt-3 flex flex-col gap-1.5">
+                              <Button size="sm" variant="hero" onClick={() => handleBook(m)}>
+                                <CreditCard className="h-3.5 w-3.5" /> Book
+                              </Button>
+                              {m.accepts_bulk && (
+                                <Button size="sm" variant="ghost" onClick={() => openBulk(m)}>
+                                  <Package className="h-3.5 w-3.5" /> Bulk
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </article>
@@ -391,6 +555,7 @@ const Upload = () => {
           </section>
         </div>
         <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} payload={checkoutPayload} />
+        <BulkQuoteDialog open={bulkOpen} onOpenChange={setBulkOpen} printer={bulkPrinter} />
       </main>
       <Footer />
     </div>

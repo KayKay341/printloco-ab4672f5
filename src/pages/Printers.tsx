@@ -5,17 +5,19 @@ import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MapPin, Search, Star, Map as MapIcon, List } from "lucide-react";
+import { MapPin, Search, Star, Map as MapIcon, List, Layers, Package } from "lucide-react";
 import { toast } from "sonner";
 import PrinterMap from "@/components/PrinterMap";
 import { COMMON_COLORS } from "@/components/ColorPicker";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import { getSamplePrinters } from "@/lib/sampleData";
+import BulkQuoteDialog from "@/components/BulkQuoteDialog";
 
 type FilamentColor = { material: string; color_name: string; hex_code: string; in_stock: boolean };
 
 type PrinterListing = {
   id: string;
+  owner_id: string;
   brand: string;
   model: string;
   materials: string[];
@@ -26,6 +28,10 @@ type PrinterListing = {
   latitude: number | null;
   longitude: number | null;
   is_address_verified: boolean;
+  has_ams: boolean;
+  ams_slot_count: number;
+  accepts_bulk: boolean;
+  min_bulk_quantity: number;
   profiles: { full_name: string | null } | null;
   filament_colors: FilamentColor[];
 };
@@ -36,13 +42,17 @@ const Printers = () => {
   const [q, setQ] = useState("");
   const [material, setMaterial] = useState<string>("");
   const [color, setColor] = useState<string>("");
+  const [amsOnly, setAmsOnly] = useState(false);
+  const [bulkOnly, setBulkOnly] = useState(false);
   const [view, setView] = useState<"grid" | "map">("grid");
   const [loading, setLoading] = useState(true);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkPrinter, setBulkPrinter] = useState<PrinterListing | null>(null);
 
   useEffect(() => {
     supabase
       .from("printers")
-      .select("id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, is_address_verified, profiles(full_name), filament_colors(material, color_name, hex_code, in_stock)")
+      .select("id, owner_id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, is_address_verified, has_ams, ams_slot_count, accepts_bulk, min_bulk_quantity, profiles(full_name), filament_colors(material, color_name, hex_code, in_stock)")
       .eq("is_active", true)
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
@@ -51,7 +61,7 @@ const Printers = () => {
         // In demo mode, top up the list with sample makers across LA + Santa
         // Monica so the discovery page feels populated before real makers join.
         if (isDemo) {
-          setAll([...real, ...getSamplePrinters(24)]);
+          setAll([...real, ...(getSamplePrinters(24) as unknown as PrinterListing[])]);
         } else {
           setAll(real);
         }
@@ -66,8 +76,10 @@ const Printers = () => {
         .includes(q.toLowerCase());
     const matchesMat = !material || p.materials.includes(material);
     const matchesColor = !color || p.filament_colors.some((c) => c.color_name === color && c.in_stock && (!material || c.material === material));
-    return matchesQ && matchesMat && matchesColor;
-  }), [all, q, material, color]);
+    const matchesAms = !amsOnly || p.has_ams;
+    const matchesBulk = !bulkOnly || p.accepts_bulk;
+    return matchesQ && matchesMat && matchesColor && matchesAms && matchesBulk;
+  }), [all, q, material, color, amsOnly, bulkOnly]);
 
   const allMaterials = useMemo(() => Array.from(new Set(all.flatMap((p) => p.materials))), [all]);
 
@@ -125,6 +137,22 @@ const Printers = () => {
                 <option value="">Any color</option>
                 {COMMON_COLORS.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
               </select>
+              <button
+                type="button"
+                onClick={() => setAmsOnly((v) => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-sm font-medium transition-colors ${amsOnly ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}
+                title="Show only AMS / multi-color printers"
+              >
+                <Layers className="h-3.5 w-3.5" /> AMS
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulkOnly((v) => !v)}
+                className={`inline-flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-sm font-medium transition-colors ${bulkOnly ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background"}`}
+                title="Open to bulk / contract orders"
+              >
+                <Package className="h-3.5 w-3.5" /> Bulk
+              </button>
               <div className="flex gap-1 rounded-2xl border border-border bg-background p-1">
                 <button
                   type="button"
@@ -175,9 +203,16 @@ const Printers = () => {
                         <MapPin className="h-3.5 w-3.5 text-primary" />
                         {p.neighborhood || p.city || "Local"}
                       </div>
-                      {p.is_address_verified && (
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">Verified</span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {p.has_ams && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent">
+                            <Layers className="h-3 w-3" /> AMS · {p.ams_slot_count}
+                          </span>
+                        )}
+                        {p.is_address_verified && (
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">Verified</span>
+                        )}
+                      </div>
                     </div>
                     <h3 className="mt-2 font-display text-xl font-semibold">{p.brand} {p.model}</h3>
                     <div className="mt-1 text-sm text-muted-foreground">by {p.profiles?.full_name || "Anonymous Maker"}</div>
@@ -204,9 +239,19 @@ const Printers = () => {
                         <strong className="font-display text-lg text-foreground">${Number(p.price_per_gram).toFixed(2)}</strong>
                         <span className="text-muted-foreground"> / g</span>
                       </div>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <Star className="h-3.5 w-3.5 fill-accent text-accent" /> New
-                      </div>
+                      {p.accepts_bulk ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => { setBulkPrinter(p); setBulkOpen(true); }}
+                        >
+                          <Package className="h-3.5 w-3.5" /> Bulk quote
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                          <Star className="h-3.5 w-3.5 fill-accent text-accent" /> New
+                        </div>
+                      )}
                     </div>
                   </article>
                 );
@@ -214,6 +259,11 @@ const Printers = () => {
             </div>
           )}
         </section>
+        <BulkQuoteDialog
+          open={bulkOpen}
+          onOpenChange={setBulkOpen}
+          printer={bulkPrinter as any}
+        />
       </main>
       <Footer />
     </div>
