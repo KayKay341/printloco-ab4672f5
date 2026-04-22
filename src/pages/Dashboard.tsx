@@ -5,10 +5,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
-import { Plus, Upload, Printer, FileBox, Sparkles } from "lucide-react";
+import { Plus, Upload, Printer, FileBox, Sparkles, ShieldCheck, Star, AlertCircle, TrendingUp, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import { getSamplePrinters, getSampleStlFiles } from "@/lib/sampleData";
+import TierBadge from "@/components/TierBadge";
+import DisputeDialog from "@/components/DisputeDialog";
+import { tierFromScore, type Tier } from "@/lib/tier";
 
 type PrinterRow = {
   id: string;
@@ -17,6 +20,16 @@ type PrinterRow = {
   materials: string[];
   price_per_gram: number;
   neighborhood: string | null;
+  verification_status: string;
+  quality_score: number;
+  tier: Tier;
+  avg_rating: number;
+  rating_count: number;
+  total_orders: number;
+  successful_orders: number;
+  last_order_at: string | null;
+  published: boolean;
+  hidden_for_inactivity: boolean;
 };
 
 type StlRow = {
@@ -28,24 +41,37 @@ type StlRow = {
   created_at: string;
 };
 
+type OrderRow = {
+  id: string;
+  status: string;
+  amount_total: number;
+  material: string;
+  created_at: string;
+  maker_id: string;
+  printer_id: string | null;
+  printers: { brand: string; model: string } | null;
+};
+
 const Dashboard = () => {
   const { user, profile, loading } = useAuth();
   const { isDemo } = useDemoMode();
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [files, setFiles] = useState<StlRow[]>([]);
+  const [orders, setOrders] = useState<OrderRow[]>([]);
   const [usingSample, setUsingSample] = useState(false);
+  const [disputeOrder, setDisputeOrder] = useState<{ id: string; maker_id: string } | null>(null);
 
   useEffect(() => {
     if (!user) return;
     if (profile?.role === "maker") {
       supabase
         .from("printers")
-        .select("id, brand, model, materials, price_per_gram, neighborhood")
+        .select("id, brand, model, materials, price_per_gram, neighborhood, verification_status, quality_score, tier, avg_rating, rating_count, total_orders, successful_orders, last_order_at, published, hidden_for_inactivity")
         .eq("owner_id", user.id)
         .order("created_at", { ascending: false })
         .then(({ data, error }) => {
           if (error) toast.error(error.message);
-          const real = (data as PrinterRow[]) ?? [];
+          const real = (data as unknown as PrinterRow[]) ?? [];
           if (real.length === 0 && isDemo) {
             const samples = getSamplePrinters(24).slice(0, 3).map((s) => ({
               id: s.id,
@@ -54,6 +80,16 @@ const Dashboard = () => {
               materials: s.materials,
               price_per_gram: s.price_per_gram,
               neighborhood: s.neighborhood,
+              verification_status: s.verification_status,
+              quality_score: s.quality_score,
+              tier: s.tier as Tier,
+              avg_rating: s.avg_rating,
+              rating_count: s.rating_count,
+              total_orders: s.total_orders,
+              successful_orders: s.successful_orders,
+              last_order_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
+              published: true,
+              hidden_for_inactivity: false,
             }));
             setPrinters(samples);
             setUsingSample(true);
@@ -79,11 +115,27 @@ const Dashboard = () => {
             setUsingSample(false);
           }
         });
+
+      // Recent orders so customers can rate / dispute
+      supabase
+        .from("orders")
+        .select("id, status, amount_total, material, created_at, maker_id, printer_id, printers(brand, model)")
+        .eq("customer_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10)
+        .then(({ data }) => setOrders((data as unknown as OrderRow[]) ?? []));
     }
   }, [user, profile?.role, isDemo]);
 
   if (loading) return <div className="container py-24">Loading…</div>;
   if (!user) return <Navigate to="/auth?mode=signin" replace />;
+
+  // Maker rollups
+  const totalEarningsCents = printers.reduce((sum, p) => sum + Math.round(p.successful_orders * Number(p.price_per_gram) * 38 * 0.9 * 100), 0);
+  const successRate = printers.reduce((acc, p) => acc + p.total_orders, 0) > 0
+    ? Math.round((printers.reduce((acc, p) => acc + p.successful_orders, 0) / printers.reduce((acc, p) => acc + p.total_orders, 0)) * 100)
+    : null;
+  const avgRating = printers.filter((p) => p.rating_count > 0).reduce((sum, p, _, arr) => sum + p.avg_rating / arr.length, 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -106,6 +158,30 @@ const Dashboard = () => {
 
         {profile?.role === "maker" ? (
           <section>
+            {/* Quality + earnings rollup */}
+            {printers.length > 0 && (
+              <div className="mb-8 grid gap-3 sm:grid-cols-3">
+                <StatCard
+                  icon={<TrendingUp className="h-4 w-4" />}
+                  label="Earned this season"
+                  value={`$${(totalEarningsCents / 100).toFixed(0)}`}
+                  hint="After platform fee"
+                />
+                <StatCard
+                  icon={<Star className="h-4 w-4" />}
+                  label="Average rating"
+                  value={avgRating > 0 ? avgRating.toFixed(1) : "—"}
+                  hint={`${printers.reduce((s, p) => s + p.rating_count, 0)} ratings`}
+                />
+                <StatCard
+                  icon={<ShieldCheck className="h-4 w-4" />}
+                  label="On-time success"
+                  value={successRate != null ? `${successRate}%` : "—"}
+                  hint="Aim for 95%+"
+                />
+              </div>
+            )}
+
             <div className="mb-6 flex items-center justify-between">
               <h2 className="font-display text-2xl font-semibold">Your printers</h2>
               <Button variant="hero" asChild>
@@ -121,20 +197,68 @@ const Dashboard = () => {
               />
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {printers.map((p) => (
-                  <div key={p.id} className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{p.neighborhood || "—"}</div>
-                    <div className="mt-1 font-display text-xl font-semibold">{p.brand} {p.model}</div>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {p.materials.map((m) => (
-                        <span key={m} className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{m}</span>
-                      ))}
+                {printers.map((p) => {
+                  const tier: Tier = (p.tier as Tier) ?? tierFromScore(p.quality_score ?? 50);
+                  const inactive = p.hidden_for_inactivity || (p.last_order_at && Date.now() - new Date(p.last_order_at).getTime() > 1000 * 60 * 60 * 24 * 30);
+                  const needsVerification = p.verification_status !== "verified";
+                  return (
+                    <div key={p.id} className="rounded-2xl border border-border bg-card p-6 shadow-soft">
+                      <div className="flex items-start justify-between">
+                        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{p.neighborhood || "—"}</div>
+                        <TierBadge tier={tier} score={p.quality_score} showScore />
+                      </div>
+                      <div className="mt-1 font-display text-xl font-semibold">{p.brand} {p.model}</div>
+
+                      {/* Quality progress bar */}
+                      <div className="mt-3">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Quality score</span>
+                          <span className="font-semibold text-foreground">{p.quality_score}/100</span>
+                        </div>
+                        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full bg-primary transition-all" style={{ width: `${p.quality_score}%` }} />
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        {p.materials.map((m) => (
+                          <span key={m} className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{m}</span>
+                        ))}
+                      </div>
+
+                      <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        <div>
+                          <div className="font-semibold text-foreground">{p.total_orders}</div>
+                          <div>orders</div>
+                        </div>
+                        <div>
+                          <div className="font-semibold text-foreground">
+                            {p.rating_count > 0 ? `${Number(p.avg_rating).toFixed(1)} ★` : "—"}
+                          </div>
+                          <div>{p.rating_count} ratings</div>
+                        </div>
+                      </div>
+
+                      {/* Honest feedback to maker */}
+                      {(needsVerification || inactive || p.quality_score < 60) && (
+                        <div className="mt-4 rounded-xl border border-accent/30 bg-accent/5 p-3 text-xs">
+                          <div className="flex items-center gap-1.5 font-semibold text-accent">
+                            <AlertCircle className="h-3.5 w-3.5" /> How to rank higher
+                          </div>
+                          <ul className="mt-1 space-y-0.5 pl-1 text-muted-foreground">
+                            {needsVerification && <li>• Finish verification (printer photo + 3 sample prints)</li>}
+                            {p.quality_score < 60 && <li>• Add more sample prints and material spec sheets</li>}
+                            {inactive && <li>• Accept an order this month so we keep showing you</li>}
+                          </ul>
+                        </div>
+                      )}
+
+                      <div className="mt-4 text-sm text-muted-foreground">
+                        From <strong className="text-foreground">${Number(p.price_per_gram).toFixed(2)}</strong> / gram
+                      </div>
                     </div>
-                    <div className="mt-4 text-sm text-muted-foreground">
-                      <strong className="text-foreground">${Number(p.price_per_gram).toFixed(2)}</strong> / gram
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </section>
@@ -180,13 +304,75 @@ const Dashboard = () => {
                 </table>
               </div>
             )}
+
+            {/* Recent orders with reprint guarantee + dispute access */}
+            {orders.length > 0 && (
+              <div className="mt-10">
+                <div className="mb-4 flex items-center gap-2">
+                  <h2 className="font-display text-2xl font-semibold">Recent orders</h2>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                    <ShieldCheck className="h-3 w-3" /> 7-day reprint guarantee
+                  </span>
+                </div>
+                <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                      <tr>
+                        <th className="p-4">Printer</th>
+                        <th className="p-4">Material</th>
+                        <th className="p-4">Status</th>
+                        <th className="p-4">Total</th>
+                        <th className="p-4 text-right">Issue?</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orders.map((o) => (
+                        <tr key={o.id} className="border-t border-border">
+                          <td className="p-4 font-medium">
+                            {o.printers ? `${o.printers.brand} ${o.printers.model}` : "—"}
+                          </td>
+                          <td className="p-4">{o.material}</td>
+                          <td className="p-4 text-muted-foreground capitalize">{o.status}</td>
+                          <td className="p-4 font-semibold">${(o.amount_total / 100).toFixed(2)}</td>
+                          <td className="p-4 text-right">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setDisputeOrder({ id: o.id, maker_id: o.maker_id })}
+                            >
+                              <ShieldAlert className="h-3.5 w-3.5" /> Report
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </section>
         )}
       </main>
+      <DisputeDialog
+        open={disputeOrder != null}
+        onOpenChange={(v) => !v && setDisputeOrder(null)}
+        order={disputeOrder}
+      />
       <Footer />
     </div>
   );
 };
+
+const StatCard = ({ icon, label, value, hint }: { icon: React.ReactNode; label: string; value: string; hint: string }) => (
+  <div className="rounded-2xl border border-border bg-card p-5 shadow-soft">
+    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <span className="text-primary">{icon}</span>
+      {label}
+    </div>
+    <div className="mt-2 font-display text-3xl font-semibold">{value}</div>
+    <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
+  </div>
+);
 
 const EmptyState = ({ icon, title, desc, cta }: { icon: React.ReactNode; title: string; desc: string; cta: React.ReactNode }) => (
   <div className="rounded-3xl border border-dashed border-border bg-card/50 p-12 text-center">

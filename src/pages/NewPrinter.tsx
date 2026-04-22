@@ -12,9 +12,13 @@ import { Switch } from "@/components/ui/switch";
 import { COMMON_COLORS } from "@/components/ColorPicker";
 import PrinterMap from "@/components/PrinterMap";
 import { toast } from "sonner";
-import { CheckCircle2, Layers, Package } from "lucide-react";
+import { CheckCircle2, Layers, Package, ShieldCheck } from "lucide-react";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import { MATERIAL_BASE_PRICE } from "@/lib/stlSlicer";
+import VerificationUploader from "@/components/VerificationUploader";
+import EarningsEstimate from "@/components/EarningsEstimate";
+import TierBadge from "@/components/TierBadge";
+import { tierFromScore } from "@/lib/tier";
 
 const ALL_MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
 
@@ -75,6 +79,12 @@ const NewPrinter = () => {
   const [verified, setVerified] = useState<{ lat: number; lng: number; address: string } | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Verification (3D Hubs cause #4 fix — required to go live)
+  const [printerPhotoUrl, setPrinterPhotoUrl] = useState<string | null>(null);
+  const [samplePrintUrls, setSamplePrintUrls] = useState<string[]>([]);
+  const [serialVisible, setSerialVisible] = useState(true);
+  const [layerHeightMin, setLayerHeightMin] = useState("0.12");
 
   useEffect(() => {
     supabase
@@ -178,6 +188,14 @@ const NewPrinter = () => {
       toast.error("Add your address — required for matching.");
       return;
     }
+    if (!printerPhotoUrl) {
+      toast.error("Upload a photo of your printer (with serial visible) to verify.");
+      return;
+    }
+    if (samplePrintUrls.length < 3) {
+      toast.error("Upload 3 sample prints so customers know what to expect.");
+      return;
+    }
     if (isDemo) {
       demoToast("publish a real printer listing");
       return;
@@ -220,6 +238,12 @@ const NewPrinter = () => {
           accepts_3mf: hasAms ? accepts3mf : false,
           accepts_bulk: acceptsBulk,
           min_bulk_quantity: minBulkQty,
+          printer_photo_url: printerPhotoUrl,
+          sample_print_urls: samplePrintUrls,
+          serial_visible: serialVisible,
+          layer_height_min_mm: Number(layerHeightMin) || 0.2,
+          verification_status: "pending",
+          published: true,
         })
         .select()
         .single();
@@ -296,9 +320,56 @@ const NewPrinter = () => {
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="bv">Build volume (optional)</Label>
-            <Input id="bv" value={buildVolume} onChange={(e) => setBuildVolume(e.target.value)} placeholder="256 × 256 × 256 mm" />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="bv">Build volume</Label>
+              <Input id="bv" value={buildVolume} onChange={(e) => setBuildVolume(e.target.value)} placeholder="256 × 256 × 256 mm" />
+              <p className="mt-1 text-xs text-muted-foreground">Min recommended: 150 × 150 × 150 mm</p>
+            </div>
+            <div>
+              <Label htmlFor="lh">Min layer height (mm)</Label>
+              <Input
+                id="lh"
+                type="number"
+                step="0.01"
+                min="0.04"
+                max="0.4"
+                value={layerHeightMin}
+                onChange={(e) => setLayerHeightMin(e.target.value)}
+                placeholder="0.12"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">≤ 0.20 mm required for verified tier.</p>
+            </div>
+          </div>
+
+          {/* VERIFICATION (3D Hubs cause #4 fix) */}
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-5">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <Label className="text-base">Verification</Label>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Required to go live. We back every print with a 7-day reprint guarantee — verification protects buyers AND your reputation.
+            </p>
+            <div className="mt-4">
+              <VerificationUploader
+                userId={user.id}
+                printerPhotoUrl={printerPhotoUrl}
+                onPrinterPhoto={setPrinterPhotoUrl}
+                samplePrintUrls={samplePrintUrls}
+                onSamplePrints={setSamplePrintUrls}
+              />
+            </div>
+            <label className="mt-4 flex items-center gap-2 text-sm">
+              <Switch checked={serialVisible} onCheckedChange={setSerialVisible} />
+              Serial number is visible in the printer photo
+            </label>
+            {(printerPhotoUrl && samplePrintUrls.length >= 3) && (
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-background/60 p-3 text-sm">
+                <span className="text-muted-foreground">Projected tier:</span>
+                <TierBadge tier={tierFromScore(60 + samplePrintUrls.length * 5 + (serialVisible ? 5 : 0))} />
+              </div>
+            )}
           </div>
 
           {/* MATERIALS + PRICES */}
@@ -418,6 +489,16 @@ const NewPrinter = () => {
               </div>
             )}
           </div>
+
+          {/* EARNINGS ESTIMATE (3D Hubs cause #2 fix — set realistic expectations) */}
+          {materials.length > 0 && (
+            <EarningsEstimate
+              pricePerGram={cheapestPrice}
+              hasAms={hasAms}
+              acceptsBulk={acceptsBulk}
+              materialsCount={materials.length}
+            />
+          )}
 
           {/* FILAMENT INVENTORY */}
           <div>
