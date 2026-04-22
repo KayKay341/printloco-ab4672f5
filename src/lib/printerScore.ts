@@ -7,7 +7,15 @@ export type PrinterForScore = {
   materials: string[];
   latitude: number | null;
   longitude: number | null;
-  filament_colors?: { material: string; color_name: string; hex_code: string; in_stock: boolean }[];
+  /** Optional per-material base price ($/g) — overrides price_per_gram when present. */
+  material_prices?: Record<string, number> | null;
+  filament_colors?: {
+    material: string;
+    color_name: string;
+    hex_code: string;
+    in_stock: boolean;
+    surcharge_per_gram?: number;
+  }[];
 };
 
 export type ScoreInput = {
@@ -38,7 +46,9 @@ function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): nu
 }
 
 export function scorePrinter(p: PrinterForScore, input: ScoreInput): ScoredPrinter {
-  const totalPrice = Number(p.price_per_gram) * input.weightG;
+  // Per-material base price wins; fall back to legacy single price_per_gram.
+  const basePrice =
+    (p.material_prices && p.material_prices[input.material]) ?? Number(p.price_per_gram);
   const hasMaterial = p.materials.includes(input.material);
 
   const colorMatch = input.colorName
@@ -48,6 +58,8 @@ export function scorePrinter(p: PrinterForScore, input: ScoreInput): ScoredPrint
     : null;
   const hasColor = !!colorMatch;
   const matchedHex = colorMatch?.hex_code ?? null;
+  const colorSurcharge = colorMatch?.surcharge_per_gram ?? 0;
+  const totalPrice = (basePrice + Number(colorSurcharge)) * input.weightG;
 
   let distanceKm: number | null = null;
   if (input.customerLat != null && input.customerLng != null && p.latitude != null && p.longitude != null) {
