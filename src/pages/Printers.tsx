@@ -9,6 +9,8 @@ import { MapPin, Search, Star, Map as MapIcon, List } from "lucide-react";
 import { toast } from "sonner";
 import PrinterMap from "@/components/PrinterMap";
 import { COMMON_COLORS } from "@/components/ColorPicker";
+import { useDemoMode } from "@/hooks/useDemoMode";
+import { getSamplePrinters } from "@/lib/sampleData";
 
 type FilamentColor = { material: string; color_name: string; hex_code: string; in_stock: boolean };
 
@@ -29,6 +31,7 @@ type PrinterListing = {
 };
 
 const Printers = () => {
+  const { isDemo } = useDemoMode();
   const [all, setAll] = useState<PrinterListing[]>([]);
   const [q, setQ] = useState("");
   const [material, setMaterial] = useState<string>("");
@@ -44,10 +47,17 @@ const Printers = () => {
       .order("created_at", { ascending: false })
       .then(({ data, error }) => {
         if (error) toast.error(error.message);
-        else setAll((data as unknown as PrinterListing[]) ?? []);
+        const real = (data as unknown as PrinterListing[]) ?? [];
+        // In demo mode, top up the list with sample makers across LA + Santa
+        // Monica so the discovery page feels populated before real makers join.
+        if (isDemo) {
+          setAll([...real, ...getSamplePrinters(24)]);
+        } else {
+          setAll(real);
+        }
         setLoading(false);
       });
-  }, []);
+  }, [isDemo]);
 
   const filtered = useMemo(() => all.filter((p) => {
     const matchesQ = !q ||

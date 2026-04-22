@@ -5,8 +5,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
-import { Plus, Upload, Printer, FileBox } from "lucide-react";
+import { Plus, Upload, Printer, FileBox, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { useDemoMode } from "@/hooks/useDemoMode";
+import { getSamplePrinters, getSampleStlFiles } from "@/lib/sampleData";
 
 type PrinterRow = {
   id: string;
@@ -28,8 +30,10 @@ type StlRow = {
 
 const Dashboard = () => {
   const { user, profile, loading } = useAuth();
+  const { isDemo } = useDemoMode();
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [files, setFiles] = useState<StlRow[]>([]);
+  const [usingSample, setUsingSample] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -41,7 +45,22 @@ const Dashboard = () => {
         .order("created_at", { ascending: false })
         .then(({ data, error }) => {
           if (error) toast.error(error.message);
-          else setPrinters((data as PrinterRow[]) ?? []);
+          const real = (data as PrinterRow[]) ?? [];
+          if (real.length === 0 && isDemo) {
+            const samples = getSamplePrinters(24).slice(0, 3).map((s) => ({
+              id: s.id,
+              brand: s.brand,
+              model: s.model,
+              materials: s.materials,
+              price_per_gram: s.price_per_gram,
+              neighborhood: s.neighborhood,
+            }));
+            setPrinters(samples);
+            setUsingSample(true);
+          } else {
+            setPrinters(real);
+            setUsingSample(false);
+          }
         });
     } else {
       supabase
@@ -51,10 +70,17 @@ const Dashboard = () => {
         .order("created_at", { ascending: false })
         .then(({ data, error }) => {
           if (error) toast.error(error.message);
-          else setFiles((data as StlRow[]) ?? []);
+          const real = (data as StlRow[]) ?? [];
+          if (real.length === 0 && isDemo) {
+            setFiles(getSampleStlFiles());
+            setUsingSample(true);
+          } else {
+            setFiles(real);
+            setUsingSample(false);
+          }
         });
     }
-  }, [user, profile?.role]);
+  }, [user, profile?.role, isDemo]);
 
   if (loading) return <div className="container py-24">Loading…</div>;
   if (!user) return <Navigate to="/auth?mode=signin" replace />;
@@ -70,6 +96,12 @@ const Dashboard = () => {
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
             Hi{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""} 👋
           </h1>
+          {usingSample && (
+            <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs text-accent">
+              <Sparkles className="h-3 w-3" />
+              Sample data — your real {profile?.role === "maker" ? "printers" : "uploads"} appear here once you add them.
+            </div>
+          )}
         </div>
 
         {profile?.role === "maker" ? (
