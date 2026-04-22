@@ -250,14 +250,46 @@ const Waitlist = () => {
 
                   {referralCode && (
                     <div className="mt-6 rounded-2xl border border-accent/30 bg-accent/5 p-5">
-                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-                        Skip the line
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+                          Your referral dashboard
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => loadReferrals(referralCode)}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="Refresh referrals"
+                        >
+                          <RefreshCw className={`h-3.5 w-3.5 ${refreshingRefs ? "animate-spin" : ""}`} />
+                        </button>
                       </div>
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        We launch cities with the most signups first. Each friend who joins from your
-                        link bumps your city up the queue.
+
+                      {/* Code + counts */}
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div className="rounded-xl border border-border bg-background p-4">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Your code
+                          </div>
+                          <div className="mt-1 font-display text-2xl font-semibold tracking-tight">
+                            {referralCode}
+                          </div>
+                        </div>
+                        <div className="rounded-xl border border-border bg-background p-4">
+                          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            <Trophy className="h-3 w-3" /> Friends joined
+                          </div>
+                          <div className="mt-1 font-display text-2xl font-semibold tracking-tight text-accent">
+                            {referrals[0]?.total ?? 0}
+                          </div>
+                        </div>
+                      </div>
+
+                      <p className="mt-4 text-xs text-muted-foreground">
+                        We launch cities with the most signups first. Each friend who joins from your link
+                        bumps your city up the queue.
                       </p>
-                      <div className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
+
+                      <div className="mt-3 flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2">
                         <code className="flex-1 truncate text-xs">{referralUrl}</code>
                         <Button size="sm" variant="ghost" onClick={copyReferral}>
                           <Copy className="h-3.5 w-3.5" />
@@ -287,6 +319,26 @@ const Waitlist = () => {
                           </a>
                         </Button>
                       </div>
+
+                      {/* Who used it */}
+                      {referrals.length > 0 && (
+                        <div className="mt-5">
+                          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                            Recent signups using your code
+                          </div>
+                          <ul className="mt-2 divide-y divide-border rounded-xl border border-border bg-background">
+                            {referrals.slice(0, 8).map((r, i) => (
+                              <li key={i} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                                <span className="truncate font-mono">{r.masked_email}</span>
+                                <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
+                                  {r.city && <span className="hidden sm:inline">{r.city}</span>}
+                                  <span>{new Date(r.joined_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -298,6 +350,13 @@ const Waitlist = () => {
                       <Link to="/invest">See the pitch →</Link>
                     </Button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={resetSignup}
+                    className="mt-4 block w-full text-center text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    Sign up a different email →
+                  </button>
                 </div>
               ) : (
                 <form
@@ -397,29 +456,60 @@ const Waitlist = () => {
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <Label htmlFor="notes">
-                      {role === "maker"
-                        ? "What printer(s) do you own?"
-                        : role === "nonprofit"
+                  {role === "maker" ? (
+                    <div className="mt-4 space-y-3">
+                      <div>
+                        <Label htmlFor="printer-model">
+                          What printer do you own?{" "}
+                          <span className="text-muted-foreground">(optional)</span>
+                        </Label>
+                        <Select value={printerModel} onValueChange={setPrinterModel}>
+                          <SelectTrigger id="printer-model" className="mt-2">
+                            <SelectValue placeholder="Pick your model" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-72">
+                            {POPULAR_PRINTER_OPTIONS.map((m) => (
+                              <SelectItem key={m} value={m}>{m}</SelectItem>
+                            ))}
+                            <SelectItem value="Other">Other / not listed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {printerModel === "Other" && (
+                        <Input
+                          placeholder="Brand and model (e.g. Sovol SV08)"
+                          value={printerOther}
+                          onChange={(e) => setPrinterOther(e.target.value)}
+                        />
+                      )}
+                      <Textarea
+                        placeholder="Anything else? Multiple printers, filaments you stock, hours/week available…"
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="min-h-[70px]"
+                      />
+                    </div>
+                  ) : (
+                    <div className="mt-4">
+                      <Label htmlFor="notes">
+                        {role === "nonprofit"
                           ? "Tell us about your organization"
                           : "What do you want to print?"}{" "}
-                      <span className="text-muted-foreground">(optional)</span>
-                    </Label>
-                    <Textarea
-                      id="notes"
-                      placeholder={
-                        role === "maker"
-                          ? "Bambu X1C, Prusa MK4, Form 3…"
-                          : role === "nonprofit"
+                        <span className="text-muted-foreground">(optional)</span>
+                      </Label>
+                      <Textarea
+                        id="notes"
+                        placeholder={
+                          role === "nonprofit"
                             ? "501(c)(3) hospital robotics club"
                             : "Drone parts, miniatures, replacement knobs…"
-                      }
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      className="mt-2 min-h-[80px]"
-                    />
-                  </div>
+                        }
+                        value={notes}
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="mt-2 min-h-[80px]"
+                      />
+                    </div>
+                  )}
 
                   <Button
                     type="submit"
