@@ -1,8 +1,9 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Button } from "@/components/ui/button";
 import Logo from "./Logo";
-import { LogOut } from "lucide-react";
+import { LogOut, ShieldCheck } from "lucide-react";
 
 const links = [
   { label: "Find a Printer", to: "/printers" },
@@ -13,6 +14,7 @@ const links = [
 
 const Navbar = () => {
   const { user, profile, signOut } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
 
   return (
@@ -33,6 +35,11 @@ const Navbar = () => {
         <div className="flex items-center gap-2">
           {user ? (
             <>
+              {isAdmin && (
+                <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
+                  <Link to="/admin"><ShieldCheck className="h-4 w-4" /> Admin</Link>
+                </Button>
+              )}
               <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
                 <Link to="/dashboard">{profile?.full_name || "Dashboard"}</Link>
               </Button>

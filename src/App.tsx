@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/hooks/useAuth";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
+import { DemoModeBanner } from "@/components/DemoModeBanner";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Auth from "./pages/Auth.tsx";
@@ -15,6 +16,7 @@ import Upload from "./pages/Upload.tsx";
 import Waitlist from "./pages/Waitlist.tsx";
 import Invest from "./pages/Invest.tsx";
 import CheckoutReturn from "./pages/CheckoutReturn.tsx";
+import Admin from "./pages/Admin.tsx";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +28,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <PaymentTestModeBanner />
+          <DemoModeBanner />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
@@ -36,6 +39,7 @@ const App = () => (
             <Route path="/waitlist" element={<Waitlist />} />
             <Route path="/invest" element={<Invest />} />
             <Route path="/checkout/return" element={<CheckoutReturn />} />
+            <Route path="/admin" element={<Admin />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

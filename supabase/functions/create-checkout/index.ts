@@ -44,6 +44,25 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
+    // Server-side demo gate: only admins can run real checkout.
+    // Public/demo users get a friendly response — the client renders a "demo" message.
+    const { data: roleRow } = await supabase
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", customerId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!roleRow) {
+      return new Response(
+        JSON.stringify({
+          error: "demo_mode",
+          message:
+            "Real checkout is disabled while we're in private launch. Join the waitlist for your zip and we'll open it up.",
+        }),
+        { status: 403, headers: corsHeaders },
+      );
+    }
+
     const platformFee = Math.round(amountCents * PLATFORM_FEE_PCT);
 
     // Create pending order so we can correlate via metadata

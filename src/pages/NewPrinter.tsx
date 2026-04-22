@@ -12,6 +12,7 @@ import ColorPicker, { COMMON_COLORS } from "@/components/ColorPicker";
 import PrinterMap from "@/components/PrinterMap";
 import { toast } from "sonner";
 import { CheckCircle2, MapPin } from "lucide-react";
+import { useDemoMode } from "@/hooks/useDemoMode";
 
 const ALL_MATERIALS = ["PLA", "ABS", "PETG", "TPU", "Nylon", "Resin"];
 
@@ -27,6 +28,7 @@ type Preset = {
 
 const NewPrinter = () => {
   const { user, profile, loading, refreshProfile } = useAuth();
+  const { isDemo, demoToast } = useDemoMode();
   const navigate = useNavigate();
 
   const [presets, setPresets] = useState<Preset[]>([]);
@@ -110,6 +112,10 @@ const NewPrinter = () => {
     }
     if (!address) {
       toast.error("Add your address — required for matching.");
+      return;
+    }
+    if (isDemo) {
+      demoToast("publish a real printer listing");
       return;
     }
     setSubmitting(true);
