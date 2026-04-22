@@ -490,6 +490,16 @@ const NewPrinter = () => {
             )}
           </div>
 
+          {/* EARNINGS ESTIMATE (3D Hubs cause #2 fix — set realistic expectations) */}
+          {materials.length > 0 && (
+            <EarningsEstimate
+              pricePerGram={cheapestPrice}
+              hasAms={hasAms}
+              acceptsBulk={acceptsBulk}
+              materialsCount={materials.length}
+            />
+          )}
+
           {/* FILAMENT INVENTORY */}
           <div>
             <div className="flex items-center justify-between">
