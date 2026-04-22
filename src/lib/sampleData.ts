@@ -158,6 +158,20 @@ export const getSamplePrinters = (count = 24): SamplePrinter[] => {
         : m === "PETG" ? between(0.18, 0.32)
         : between(0.12, 0.28);
     });
+    // Quality score derived from sample maker characteristics — mirrors the DB
+    // formula well enough for the demo.
+    const ratingCount = Math.floor(rand() * 25);
+    const avgRating = ratingCount > 0 ? +between(3.8, 5.0) : 0;
+    const totalOrders = ratingCount + Math.floor(rand() * 8);
+    const successfulOrders = Math.floor(totalOrders * (0.85 + rand() * 0.15));
+    const isPro = isAms && rand() > 0.4 && avgRating >= 4.5;
+    const baseScore = 35 + matPool.length * 4 + (isAms ? 8 : 0) + Math.min(ratingCount, 15) + Math.floor(avgRating * 4);
+    const quality_score = Math.min(100, Math.max(20, baseScore + Math.floor(rand() * 12)));
+    const tier: "hobbyist" | "maker" | "professional" =
+      quality_score >= 85 ? "professional" : quality_score >= 60 ? "maker" : "hobbyist";
+    const verification_status: "verified" | "pending" | "unverified" =
+      tier === "hobbyist" && rand() < 0.4 ? "pending" : "verified";
+
     out.push({
       id: `demo-${i}-${printer.brand.replace(/\s+/g, "")}-${printer.model.replace(/\s+/g, "")}`,
       owner_id: `demo-owner-${i}`,
@@ -177,6 +191,17 @@ export const getSamplePrinters = (count = 24): SamplePrinter[] => {
       accepts_3mf: isAms,
       accepts_bulk: rand() > 0.2,
       min_bulk_quantity: pick([10, 20, 25, 50]) as number,
+      verification_status,
+      quality_score,
+      tier,
+      avg_rating: avgRating,
+      rating_count: ratingCount,
+      total_orders: totalOrders,
+      successful_orders: successfulOrders,
+      printer_photo_url: null,
+      sample_print_urls: [],
+      serial_visible: tier !== "hobbyist",
+      layer_height_min_mm: isPro ? 0.08 : isAms ? 0.12 : 0.2,
       profiles: { full_name: pick(NAMES) },
       filament_colors,
     });
