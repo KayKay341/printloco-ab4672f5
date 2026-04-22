@@ -1,0 +1,1 @@
+DELETE FROM public.cities WHERE slug IN ('austin','brooklyn','oakland','portland');
