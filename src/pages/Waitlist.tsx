@@ -165,17 +165,17 @@ const Waitlist = () => {
     setDone(true);
     localStorage.setItem(
       REFERRAL_STORAGE_KEY,
-      JSON.stringify({ code, email: email.trim() }),
+      JSON.stringify({ code, email: cleanEmail }),
     );
     // Fire-and-forget confirmation email — don't block UX if it fails
     supabase.functions
       .invoke("send-transactional-email", {
         body: {
           templateName: "waitlist-confirmation",
-          recipientEmail: email.trim(),
+          recipientEmail: cleanEmail,
           idempotencyKey: `waitlist-confirm-${code}`,
           templateData: {
-            name: email.trim().split("@")[0],
+            name: cleanEmail.split("@")[0],
             city: city.trim() || undefined,
             role,
             referralCode: code,
