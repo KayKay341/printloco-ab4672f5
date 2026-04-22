@@ -5,10 +5,12 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 interface Props {
   geometry: THREE.BufferGeometry | null;
   color?: string;
+  /** When true, render with the geometry's vertex colors (multi-color 3MF). */
+  vertexColors?: boolean;
   className?: string;
 }
 
-const StlPreview = ({ geometry, color = "#9333EA", className }: Props) => {
+const StlPreview = ({ geometry, color = "#9333EA", vertexColors = false, className }: Props) => {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,7 +45,8 @@ const StlPreview = ({ geometry, color = "#9333EA", className }: Props) => {
     const radius = geom.boundingSphere?.radius ?? 50;
 
     const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(color),
+      color: vertexColors ? new THREE.Color(0xffffff) : new THREE.Color(color),
+      vertexColors,
       metalness: 0.15,
       roughness: 0.55,
       flatShading: false,
@@ -87,7 +90,7 @@ const StlPreview = ({ geometry, color = "#9333EA", className }: Props) => {
         container.removeChild(renderer.domElement);
       }
     };
-  }, [geometry, color]);
+  }, [geometry, color, vertexColors]);
 
   return <div ref={containerRef} className={className} />;
 };
