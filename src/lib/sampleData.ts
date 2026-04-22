@@ -69,20 +69,27 @@ const BIOS = [
   "Print farm with 4 machines. Bulk orders welcome.",
 ];
 
-type FilamentColor = { material: string; color_name: string; hex_code: string; in_stock: boolean };
+type FilamentColor = { material: string; color_name: string; hex_code: string; in_stock: boolean; surcharge_per_gram?: number };
 
 export type SamplePrinter = {
   id: string;
+  owner_id: string;
   brand: string;
   model: string;
   materials: string[];
   price_per_gram: number;
+  material_prices: Record<string, number>;
   neighborhood: string | null;
   city: string | null;
   bio: string | null;
   latitude: number | null;
   longitude: number | null;
   is_address_verified: boolean;
+  has_ams: boolean;
+  ams_slot_count: number;
+  accepts_3mf: boolean;
+  accepts_bulk: boolean;
+  min_bulk_quantity: number;
   profiles: { full_name: string | null } | null;
   filament_colors: FilamentColor[];
 };
@@ -124,20 +131,40 @@ export const getSamplePrinters = (count = 24): SamplePrinter[] => {
         color_name: col.name,
         hex_code: col.hex,
         in_stock: rand() > 0.1,
+        // Specialty colors get a small surcharge to demo the new pricing model
+        surcharge_per_gram: /Glow|Gold|Silver|Wood/.test(col.name) ? +between(0.05, 0.15) : 0,
       });
     }
+    const isAms = /Bambu|Prusa MK4|Snapmaker/.test(printer.brand + " " + printer.model) && rand() > 0.3;
+    const slotCount = isAms ? (pick([4, 4, 4, 8, 16]) as number) : 1;
+    const materialPrices: Record<string, number> = {};
+    matPool.forEach((m) => {
+      materialPrices[m] = isResin
+        ? between(0.45, 0.85)
+        : m === "TPU" ? between(0.35, 0.55)
+        : m === "Nylon" ? between(0.5, 0.75)
+        : m === "PETG" ? between(0.18, 0.32)
+        : between(0.12, 0.28);
+    });
     out.push({
       id: `demo-${i}-${printer.brand.replace(/\s+/g, "")}-${printer.model.replace(/\s+/g, "")}`,
+      owner_id: `demo-owner-${i}`,
       brand: printer.brand,
       model: printer.model,
       materials: matPool,
-      price_per_gram: isResin ? between(0.45, 0.85) : between(0.12, 0.32),
+      price_per_gram: Math.min(...Object.values(materialPrices)),
+      material_prices: materialPrices,
       neighborhood: loc.neighborhood,
       city: loc.city,
       bio: pick(BIOS),
       latitude: lat,
       longitude: lng,
       is_address_verified: rand() > 0.15,
+      has_ams: isAms,
+      ams_slot_count: slotCount,
+      accepts_3mf: isAms,
+      accepts_bulk: rand() > 0.2,
+      min_bulk_quantity: pick([10, 20, 25, 50]) as number,
       profiles: { full_name: pick(NAMES) },
       filament_colors,
     });
