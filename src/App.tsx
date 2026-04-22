@@ -17,6 +17,7 @@ import Waitlist from "./pages/Waitlist.tsx";
 import Invest from "./pages/Invest.tsx";
 import CheckoutReturn from "./pages/CheckoutReturn.tsx";
 import Admin from "./pages/Admin.tsx";
+import Unsubscribe from "./pages/Unsubscribe.tsx";
 
 const queryClient = new QueryClient();
 
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/invest" element={<Invest />} />
             <Route path="/checkout/return" element={<CheckoutReturn />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/unsubscribe" element={<Unsubscribe />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
