@@ -198,7 +198,35 @@ const NewPrinter = () => {
       return;
     }
     if (isDemo) {
-      demoToast("publish a real printer listing");
+      // Simulated publish — saved to localStorage demo store.
+      const { publishDemoPrinter } = await import("@/hooks/useDemoMode").then((m) => ({
+        publishDemoPrinter: (input: any) => {
+          const { demoStore } = require("@/lib/demoStore");
+          return demoStore.addPrinter(input);
+        },
+      })).catch(() => ({ publishDemoPrinter: null }));
+      // Direct path via the hook's helper (already in scope).
+      const { demoStore } = await import("@/lib/demoStore");
+      demoStore.addPrinter({
+        brand,
+        model,
+        neighborhood: neighborhood || null,
+        city: null,
+        bio: bio || null,
+        materials,
+        pricePerGram: cheapestPrice,
+        hasAms,
+        amsSlotCount: hasAms ? amsSlotCount : 1,
+        accepts3mf: hasAms ? accepts3mf : false,
+        acceptsBulk,
+        minBulkQty,
+        qualityScore: Math.min(100, 60 + samplePrintUrls.length * 5 + (serialVisible ? 5 : 0)),
+        tier: "maker",
+      });
+      toast.success("Demo printer published!", {
+        description: "It now appears in /printers and your dashboard.",
+      });
+      navigate("/dashboard");
       return;
     }
     setSubmitting(true);
