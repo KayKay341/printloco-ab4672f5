@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.create-giftcard-checkout]
 verify_jwt = false
+
+[functions.fetch-model]
+verify_jwt = false

@@ -26,23 +26,25 @@ const REASONS = [
 
 export const DisputeDialog = ({ open, onOpenChange, order }: Props) => {
   const { user } = useAuth();
-  const { isDemo, demoToast } = useDemoMode();
+  const { isDemo, disputeDemoOrder } = useDemoMode();
   const [reason, setReason] = useState(REASONS[0]);
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !order) return;
+    if (!order) return;
     if (description.trim().length < 10) {
       toast.error("Add a sentence describing the issue.");
       return;
     }
     if (isDemo) {
-      demoToast("file a real dispute");
+      disputeDemoOrder(order.id, reason, description.trim());
       onOpenChange(false);
+      setDescription("");
       return;
     }
+    if (!user) return;
     setSubmitting(true);
     try {
       const { error } = await supabase.from("order_disputes").insert({

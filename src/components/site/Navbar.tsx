@@ -1,9 +1,10 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useDemoMode } from "@/hooks/useDemoMode";
 import { Button } from "@/components/ui/button";
 import Logo from "./Logo";
-import { LogOut, ShieldCheck } from "lucide-react";
+import { LogOut, ShieldCheck, Sparkles } from "lucide-react";
 
 const links = [
   { label: "Find a Printer", to: "/printers" },
@@ -16,12 +17,23 @@ const links = [
 const Navbar = () => {
   const { user, profile, signOut } = useAuth();
   const { isAdmin } = useIsAdmin();
+  const { isDemo } = useDemoMode();
   const navigate = useNavigate();
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
       <div className="container flex h-16 items-center justify-between">
-        <Link to="/" aria-label="PrintLoco home"><Logo /></Link>
+        <div className="flex items-center gap-2">
+          <Link to="/" aria-label="PrintLoco home"><Logo /></Link>
+          {isDemo && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-accent"
+              title="You're in demo mode — orders & payments are simulated."
+            >
+              <Sparkles className="h-2.5 w-2.5" /> Demo
+            </span>
+          )}
+        </div>
         <nav className="hidden items-center gap-8 md:flex">
           {links.map((l) => (
             <Link

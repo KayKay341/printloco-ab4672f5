@@ -55,7 +55,7 @@ type OrderRow = {
 
 const Dashboard = () => {
   const { user, profile, loading } = useAuth();
-  const { isDemo } = useDemoMode();
+  const { isDemo, demoOrders, demoPrinters, resetDemo } = useDemoMode();
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [files, setFiles] = useState<StlRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -352,6 +352,97 @@ const Dashboard = () => {
                 </div>
               </div>
             )}
+          </section>
+        )}
+
+        {/* Demo orders — live status that auto-advances */}
+        {isDemo && demoOrders.length > 0 && (
+          <section className="mt-12">
+            <div className="mb-4 flex items-center gap-2">
+              <h2 className="font-display text-2xl font-semibold">Demo orders</h2>
+              <span className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-semibold text-accent">
+                <Sparkles className="h-3 w-3" /> Live simulation
+              </span>
+              <Button size="sm" variant="ghost" className="ml-auto" onClick={resetDemo}>
+                Reset demo
+              </Button>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {demoOrders.map((o) => (
+                <article key={o.id} className="rounded-2xl border border-border bg-card p-5 shadow-soft">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                        {o.printerLabel}
+                      </div>
+                      <div className="mt-0.5 truncate font-display text-base font-semibold">
+                        {o.fileName ?? "Custom order"}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {o.material}{o.colorName ? ` · ${o.colorName}` : ""} · {o.weightG.toFixed(1)}g · qty {o.quantity}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-display text-lg font-semibold">${(o.amountCents / 100).toFixed(2)}</div>
+                      <div className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ${
+                        o.status === "ready" || o.status === "completed"
+                          ? "bg-primary/10 text-primary"
+                          : o.status === "disputed"
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-accent/10 text-accent"
+                      }`}>
+                        {o.status}
+                      </div>
+                    </div>
+                  </div>
+                  {o.fileKind === "3mf" && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="hero"
+                        onClick={() =>
+                          window.location.assign(
+                            `bambustudio://open?file=${encodeURIComponent(o.fileUrl ?? window.location.origin + "/sample-models/demo.3mf")}`
+                          )
+                        }
+                      >
+                        Open in Bambu Studio
+                      </Button>
+                      {o.fileUrl && (
+                        <Button size="sm" variant="ghost" asChild>
+                          <a href={o.fileUrl} download>Download .3mf</a>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                  <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+                    {o.timeline.slice(-3).reverse().map((t, i) => (
+                      <div key={i}>
+                        <span className="text-foreground">{t.label}</span>
+                        <span className="ml-2">{new Date(t.at).toLocaleTimeString()}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex gap-2">
+                    {(o.status === "ready" || o.status === "completed") && !o.rating && (
+                      <Button size="sm" variant="soft" onClick={() => {
+                        const stars = Number(prompt("Rate this print 1-5", "5") ?? "0");
+                        if (stars >= 1 && stars <= 5) {
+                          import("@/lib/demoStore").then(({ demoStore }) => demoStore.rateOrder(o.id, stars));
+                        }
+                      }}>
+                        Rate
+                      </Button>
+                    )}
+                    {o.status !== "disputed" && (
+                      <Button size="sm" variant="ghost" onClick={() => setDisputeOrder({ id: o.id, maker_id: "demo" })}>
+                        <ShieldAlert className="h-3.5 w-3.5" /> Report
+                      </Button>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
           </section>
         )}
       </main>

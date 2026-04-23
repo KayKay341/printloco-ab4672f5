@@ -3,10 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { getStripe, getStripeEnvironment } from "@/lib/stripe";
 import { supabase } from "@/integrations/supabase/client";
 import { useDemoMode } from "@/hooks/useDemoMode";
-import { useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
+import DemoCheckout from "@/components/DemoCheckout";
 
 interface CheckoutPayload {
   printerId: string;
@@ -19,6 +17,13 @@ interface CheckoutPayload {
   notes?: string | null;
   customerId: string;
   customerEmail?: string;
+  // Demo-only enrichment so the simulated order looks real:
+  printerLabel?: string;
+  makerName?: string;
+  fileName?: string | null;
+  fileKind?: "stl" | "3mf" | "url" | null;
+  fileUrl?: string | null;
+  weightG?: number;
 }
 
 interface Props {
@@ -28,7 +33,8 @@ interface Props {
 }
 
 export default function CheckoutDialog({ open, onOpenChange, payload }: Props) {
-  const { isDemo, loading } = useDemoMode();
+  const { isDemo, loading, createDemoOrder } = useDemoMode();
+  const navigate = useNavigate();
 
   const fetchClientSecret = async (): Promise<string> => {
     if (!payload) throw new Error("No checkout payload");
@@ -42,6 +48,25 @@ export default function CheckoutDialog({ open, onOpenChange, payload }: Props) {
     return data.clientSecret as string;
   };
 
+  const handleDemoSuccess = () => {
+    if (!payload) return;
+    const order = createDemoOrder({
+      printerId: payload.printerId,
+      printerLabel: payload.printerLabel ?? "Demo printer",
+      makerName: payload.makerName ?? "Demo maker",
+      fileName: payload.fileName ?? null,
+      fileKind: payload.fileKind ?? null,
+      fileUrl: payload.fileUrl ?? null,
+      material: payload.material,
+      colorName: payload.colorName ?? null,
+      quantity: payload.quantity ?? 1,
+      weightG: payload.weightG ?? 0,
+      amountCents: payload.amountCents,
+    });
+    onOpenChange(false);
+    navigate(`/checkout/return?demo=1&order=${encodeURIComponent(order.id)}`);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl p-0 overflow-hidden">
@@ -52,26 +77,19 @@ export default function CheckoutDialog({ open, onOpenChange, payload }: Props) {
         </DialogHeader>
         <div className="px-6 pb-6">
           {open && payload && isDemo && !loading && (
-            <div className="rounded-2xl border border-accent/30 bg-accent/5 p-6 text-center">
-              <div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-accent/15 text-accent">
-                <Sparkles className="h-6 w-6" />
-              </div>
-              <h3 className="mt-4 font-display text-xl font-semibold">
-                You'd be charging ${(payload.amountCents / 100).toFixed(2)} to a real maker
-              </h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                We don't process real payments in demo mode. The instant we open in your zip,
-                this button funds your neighbor's printer.
-              </p>
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-                <Button variant="hero" asChild>
-                  <Link to="/waitlist">Get notified when we launch →</Link>
-                </Button>
-                <Button variant="ghost" onClick={() => onOpenChange(false)}>
-                  Keep exploring
-                </Button>
-              </div>
-            </div>
+            <DemoCheckout
+              summary={{
+                printerLabel: payload.printerLabel ?? "Demo printer",
+                makerName: payload.makerName ?? "Demo maker",
+                material: payload.material,
+                colorName: payload.colorName ?? null,
+                weightG: payload.weightG ?? 0,
+                quantity: payload.quantity ?? 1,
+                amountCents: payload.amountCents,
+              }}
+              onSuccess={handleDemoSuccess}
+              onCancel={() => onOpenChange(false)}
+            />
           )}
           {open && payload && !isDemo && !loading && (
             <div id="checkout">
