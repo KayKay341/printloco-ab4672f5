@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 import { Plus, Upload, Printer, FileBox, Sparkles, ShieldCheck, Star, AlertCircle, TrendingUp, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
 import { useDemoMode } from "@/hooks/useDemoMode";
@@ -139,6 +140,7 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO title="Dashboard | PrintLoco" description="Manage your PrintLoco orders, prints, and listings." path="/dashboard" noindex />
       <Navbar />
       <main className="container py-12">
         <div className="mb-10">

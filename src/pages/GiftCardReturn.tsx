@@ -3,6 +3,7 @@ import { CheckCircle2, Gift, ArrowRight } from "lucide-react";
 
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 
 export default function GiftCardReturn() {
@@ -11,6 +12,7 @@ export default function GiftCardReturn() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO title="Gift Sent — PrintLoco" description="Your PrintLoco gift card purchase is confirmed." path="/gift-cards/return" noindex />
       <Navbar />
       <main className="container max-w-2xl py-20 text-center">
         <div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl bg-accent/10 text-accent">
