@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -219,6 +220,11 @@ const Waitlist = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Join the PrintLoco Waitlist — Local 3D Printing Coming Soon"
+        description="Be first when PrintLoco opens in your neighborhood. Drop your zip — we'll email you the moment a verified 3D printer maker within 10 miles is live."
+        path="/waitlist"
+      />
       <Navbar />
       <main>
         {/* HERO */}

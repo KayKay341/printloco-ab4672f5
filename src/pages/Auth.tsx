@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
 import Logo from "@/components/site/Logo";
+import SEO from "@/components/SEO";
 
 type Mode = "signup" | "signin" | "otp" | "forgot";
 
@@ -117,6 +118,12 @@ const Auth = () => {
 
   return (
     <div className="min-h-screen bg-gradient-hero">
+      <SEO
+        title="Sign in to PrintLoco"
+        description="Sign in or create your PrintLoco account to upload prints, list your 3D printer, and manage orders."
+        path="/auth"
+        noindex
+      />
       <div className="container flex min-h-screen items-center justify-center py-12">
         <div className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card">
           <div className="mb-8 flex justify-center"><Logo /></div>

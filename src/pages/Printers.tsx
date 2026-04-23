@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MapPin, Search, Star, Map as MapIcon, List, Layers, Package, ShieldCheck, Info } from "lucide-react";
@@ -138,6 +139,11 @@ const Printers = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Find a 3D Printer Near You — Local Makers on PrintLoco"
+        description="Browse verified 3D printer makers in your neighborhood. Filter by material, color, AMS multi-color, and bulk capacity. Same-day local prints."
+        path="/printers"
+      />
       <Navbar />
       <main>
         <section className="border-b border-border bg-gradient-hero">

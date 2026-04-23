@@ -1,6 +1,7 @@
 import { Link, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, MapPin } from "lucide-react";
 
@@ -10,6 +11,7 @@ const CheckoutReturn = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO title="Order Confirmed — PrintLoco" description="Your PrintLoco order is confirmed." path="/checkout/return" noindex />
       <Navbar />
       <main className="container max-w-2xl py-20 text-center">
         <div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl bg-primary/10 text-primary">

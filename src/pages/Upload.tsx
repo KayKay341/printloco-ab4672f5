@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -293,6 +294,11 @@ const Upload = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Upload STL or 3MF — Get an Instant 3D Print Quote | PrintLoco"
+        description="Upload your STL or .3mf file and get a real-time slice, weight estimate, and quote. Match with a verified local maker and book in seconds."
+        path="/upload"
+      />
       <Navbar />
       <main className="container max-w-6xl py-12">
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Get a quote</div>

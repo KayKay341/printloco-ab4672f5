@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -275,6 +276,11 @@ const NewPrinter = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="List Your 3D Printer on PrintLoco — Earn From Local Orders"
+        description="Turn your idle 3D printer into income. List on PrintLoco and get matched with neighbors who need same-day prints."
+        path="/printers/new"
+      />
       <Navbar />
       <main className="container max-w-3xl py-12">
         <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">For Makers</div>

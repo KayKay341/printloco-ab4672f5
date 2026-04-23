@@ -6,6 +6,7 @@ import { Gift, Mail, ArrowRight, Sparkles, Heart } from "lucide-react";
 
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -95,6 +96,26 @@ export default function GiftCards() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="PrintLoco Gift Cards — Give the Gift of Local 3D Printing"
+        description="Send a PrintLoco gift card by email. Custom amounts $5–$500, no expiration, redeemable across every verified local maker on PrintLoco."
+        path="/gift-cards"
+        jsonLd={{
+          "@context": "https://schema.org",
+          "@type": "Product",
+          name: "PrintLoco Gift Card",
+          description: "Digital gift card redeemable for 3D printing services from local makers on PrintLoco.",
+          brand: { "@type": "Brand", name: "PrintLoco" },
+          offers: {
+            "@type": "AggregateOffer",
+            priceCurrency: "USD",
+            lowPrice: "5",
+            highPrice: "500",
+            availability: "https://schema.org/InStock",
+            url: "https://printloco.shop/gift-cards",
+          },
+        }}
+      />
       <Navbar />
 
       <main className="container max-w-5xl py-14 md:py-20">
