@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,18 +20,10 @@ import {
   Users,
   DollarSign,
 } from "lucide-react";
-
-const ROUND_TARGET = 2_500_000;
-const ROUND_RAISED = 875_000;
+import { useAppMetrics } from "@/hooks/useAppMetrics";
 
 const CHECK_SIZES = ["$10K – $25K", "$25K – $100K", "$100K – $500K", "$500K+", "Strategic / advisor"];
 
-const TRACTION = [
-  { n: "3,200+", label: "Pre-launch waitlist" },
-  { n: "42", label: "Cities with demand" },
-  { n: "$0.18", label: "Avg cost per gram" },
-  { n: "10×", label: "Cheaper than Shapeways" },
-];
 
 const PROBLEM = [
   {
@@ -97,6 +89,7 @@ const FAQ = [
 ];
 
 const Invest = () => {
+  const { metrics } = useAppMetrics();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [org, setOrg] = useState("");
@@ -104,6 +97,18 @@ const Invest = () => {
   const [message, setMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [waitlistTotal, setWaitlistTotal] = useState<number | null>(null);
+  const [citiesTotal, setCitiesTotal] = useState<number | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from("waitlist_signups").select("id", { count: "exact", head: true }),
+      supabase.from("cities").select("id", { count: "exact", head: true }),
+    ]).then(([w, c]) => {
+      setWaitlistTotal(w.count ?? 0);
+      setCitiesTotal(c.count ?? 0);
+    });
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,7 +133,17 @@ const Invest = () => {
     toast.success("Thanks — we'll send the deck within 24h.");
   };
 
-  const pct = Math.round((ROUND_RAISED / ROUND_TARGET) * 100);
+  const ROUND_TARGET = Number(metrics.raise_target_cents?.value_number ?? 0) / 100;
+  const ROUND_RAISED = Number(metrics.raise_committed_cents?.value_number ?? 0) / 100;
+  const pct = ROUND_TARGET > 0 ? Math.round((ROUND_RAISED / ROUND_TARGET) * 100) : 0;
+
+  const TRACTION = [
+    { n: waitlistTotal == null ? "—" : waitlistTotal.toLocaleString(), label: "Pre-launch waitlist" },
+    { n: citiesTotal == null ? "—" : citiesTotal.toLocaleString(), label: "Cities with demand" },
+    { n: metrics.avg_cost_per_gram?.value_text ?? "—", label: "Avg cost per gram" },
+    { n: metrics.savings_multiple?.value_text ?? "—", label: "Cheaper than Shapeways" },
+  ];
+
 
   return (
     <div className="min-h-screen bg-background">

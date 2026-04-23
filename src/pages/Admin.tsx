@@ -15,8 +15,9 @@ import {
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { ShieldCheck, Mail, Users, Sparkles, Send, Crown, KeyRound } from "lucide-react";
+import { ShieldCheck, Mail, Users, Sparkles, Send, Save, Plus, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { refreshMetrics, type AppMetric } from "@/hooks/useAppMetrics";
 
 type City = {
   id: string;
@@ -54,29 +55,21 @@ const Admin = () => {
   const [cities, setCities] = useState<City[]>([]);
   const [signups, setSignups] = useState<Signup[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [grantEmail, setGrantEmail] = useState("");
-  const [claiming, setClaiming] = useState(false);
-  const [anyAdmin, setAnyAdmin] = useState<boolean | null>(null);
+  const [metrics, setMetrics] = useState<AppMetric[]>([]);
+  const [newCity, setNewCity] = useState({ name: "", slug: "", status: "waitlist" as City["status"] });
 
   const loadAll = async () => {
-    const [citiesRes, signupsRes, leadsRes] = await Promise.all([
+    const [citiesRes, signupsRes, leadsRes, metricsRes] = await Promise.all([
       supabase.from("cities").select("*").order("signup_count", { ascending: false }),
       supabase.from("waitlist_signups").select("*").order("created_at", { ascending: false }).limit(500),
       supabase.from("investor_leads").select("*").order("created_at", { ascending: false }).limit(200),
+      supabase.from("app_metrics").select("*").order("key"),
     ]);
     if (citiesRes.data) setCities(citiesRes.data as City[]);
     if (signupsRes.data) setSignups(signupsRes.data as Signup[]);
     if (leadsRes.data) setLeads(leadsRes.data as Lead[]);
+    if (metricsRes.data) setMetrics(metricsRes.data as AppMetric[]);
   };
-
-  useEffect(() => {
-    // Detect whether ANY admin exists, so we can show the bootstrap claim button
-    supabase
-      .from("user_roles")
-      .select("id", { count: "exact", head: true })
-      .eq("role", "admin")
-      .then(({ count }) => setAnyAdmin((count ?? 0) > 0));
-  }, []);
 
   useEffect(() => {
     if (isAdmin) loadAll();
@@ -86,60 +79,42 @@ const Admin = () => {
     return <div className="container py-24 text-muted-foreground">Loading…</div>;
   }
   if (!user) return <Navigate to="/auth?mode=signin" replace />;
-
-  // First-admin claim flow
-  if (!isAdmin && anyAdmin === false) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Navbar />
-        <main className="container max-w-xl py-24">
-          <Card className="p-10 text-center">
-            <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-accent/15 text-accent">
-              <Crown className="h-7 w-7" />
-            </div>
-            <h1 className="mt-5 font-display text-3xl font-semibold">Claim admin</h1>
-            <p className="mt-2 text-muted-foreground">
-              No admin has been set up yet. Click below to claim admin for{" "}
-              <strong className="text-foreground">{user.email}</strong>.
-            </p>
-            <Button
-              variant="hero"
-              size="lg"
-              className="mt-6"
-              disabled={claiming}
-              onClick={async () => {
-                setClaiming(true);
-                const { data, error } = await supabase.rpc("claim_first_admin");
-                setClaiming(false);
-                if (error) {
-                  toast.error(error.message);
-                  return;
-                }
-                if (data) {
-                  toast.success("You're now admin. Welcome.");
-                  window.location.reload();
-                } else {
-                  toast.error("Admin already claimed by another account.");
-                  setAnyAdmin(true);
-                }
-              }}
-            >
-              <KeyRound className="h-4 w-4" /> Claim admin
-            </Button>
-          </Card>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
-
   if (!isAdmin) return <Navigate to="/" replace />;
 
-  const updateCityStatus = async (id: string, status: City["status"]) => {
-    const { error } = await supabase.from("cities").update({ status }).eq("id", id);
+  const updateCity = async (id: string, patch: Partial<City>) => {
+    const { error } = await supabase.from("cities").update(patch).eq("id", id);
     if (error) return toast.error(error.message);
     toast.success("City updated");
     loadAll();
+  };
+
+  const addCity = async () => {
+    const name = newCity.name.trim();
+    const slug = (newCity.slug.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, "-")).replace(/^-|-$/g, "");
+    if (!name || !slug) return toast.error("Name and slug required");
+    const { error } = await supabase.from("cities").insert({ name, slug, status: newCity.status });
+    if (error) return toast.error(error.message);
+    setNewCity({ name: "", slug: "", status: "waitlist" });
+    toast.success("City added");
+    loadAll();
+  };
+
+  const deleteCity = async (id: string) => {
+    if (!confirm("Delete this city?")) return;
+    const { error } = await supabase.from("cities").delete().eq("id", id);
+    if (error) return toast.error(error.message);
+    toast.success("City deleted");
+    loadAll();
+  };
+
+  const saveMetric = async (m: AppMetric) => {
+    const { error } = await supabase
+      .from("app_metrics")
+      .update({ value_number: m.value_number, value_text: m.value_text })
+      .eq("key", m.key);
+    if (error) return toast.error(error.message);
+    await refreshMetrics();
+    toast.success(`Updated ${m.key}`);
   };
 
   const sendLaunchAnnouncement = async (city: City) => {
@@ -152,15 +127,6 @@ const Admin = () => {
         ? `Queued ${data.queued} announcement emails for ${city.name}`
         : `Launch announcement triggered for ${city.name}`,
     );
-  };
-
-  const grantAdmin = async () => {
-    const email = grantEmail.trim().toLowerCase();
-    if (!email) return;
-    const { error } = await supabase.functions.invoke("grant-admin-role", { body: { email } });
-    if (error) return toast.error(error.message);
-    toast.success(`Granted admin to ${email}`);
-    setGrantEmail("");
   };
 
   return (
@@ -185,39 +151,103 @@ const Admin = () => {
           <KpiCard icon={Mail} label="Investor leads" value={leads.length.toLocaleString()} />
         </div>
 
-        <Tabs defaultValue="cities" className="mt-10">
+        <Tabs defaultValue="metrics" className="mt-10">
           <TabsList>
+            <TabsTrigger value="metrics">Site numbers</TabsTrigger>
             <TabsTrigger value="cities">Cities</TabsTrigger>
             <TabsTrigger value="signups">Waitlist</TabsTrigger>
             <TabsTrigger value="leads">Investor leads</TabsTrigger>
-            <TabsTrigger value="admins">Admins</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="cities" className="mt-6">
+          <TabsContent value="metrics" className="mt-6">
+            <Card className="p-6">
+              <h3 className="font-display text-lg font-semibold">Editable headline numbers</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                These are the public-facing numbers shown on the homepage, waitlist, and invest pages.
+                Numeric fields override the displayed value; text fields override labels like "$0.18" or "10×".
+              </p>
+              <div className="mt-6 space-y-3">
+                {metrics.map((m, idx) => (
+                  <div key={m.key} className="grid items-end gap-3 rounded-2xl border border-border bg-background p-4 sm:grid-cols-[1fr_140px_140px_auto]">
+                    <div>
+                      <Label className="text-xs">{m.key}</Label>
+                      <div className="mt-1 text-xs text-muted-foreground">{m.label}</div>
+                    </div>
+                    <div>
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Number</Label>
+                      <Input
+                        type="number"
+                        value={m.value_number ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value === "" ? null : Number(e.target.value);
+                          setMetrics((arr) => arr.map((x, i) => i === idx ? { ...x, value_number: v } : x));
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Display text</Label>
+                      <Input
+                        value={m.value_text ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value === "" ? null : e.target.value;
+                          setMetrics((arr) => arr.map((x, i) => i === idx ? { ...x, value_text: v } : x));
+                        }}
+                      />
+                    </div>
+                    <Button size="sm" variant="hero" onClick={() => saveMetric(m)}>
+                      <Save className="h-3.5 w-3.5" /> Save
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="cities" className="mt-6 space-y-4">
+            <Card className="p-5">
+              <h3 className="font-display text-base font-semibold">Add city</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_160px_auto]">
+                <Input placeholder="Name (e.g. Brooklyn, NY)" value={newCity.name} onChange={(e) => setNewCity((c) => ({ ...c, name: e.target.value }))} />
+                <Input placeholder="slug (e.g. brooklyn)" value={newCity.slug} onChange={(e) => setNewCity((c) => ({ ...c, slug: e.target.value }))} />
+                <Select value={newCity.status} onValueChange={(v) => setNewCity((c) => ({ ...c, status: v as City["status"] }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="waitlist">Waitlist</SelectItem>
+                    <SelectItem value="launching">Launching</SelectItem>
+                    <SelectItem value="live">Live</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button onClick={addCity}><Plus className="h-3.5 w-3.5" /> Add</Button>
+              </div>
+            </Card>
             <Card className="overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40">
                   <tr className="text-left text-xs uppercase tracking-wider text-muted-foreground">
                     <th className="px-4 py-3">City</th>
                     <th className="px-4 py-3">Signups</th>
-                    <th className="px-4 py-3">Launch</th>
                     <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3 text-right">Action</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {cities.map((c) => (
                     <tr key={c.id} className="border-t border-border">
-                      <td className="px-4 py-3 font-medium">{c.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{c.signup_count}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {c.launch_date ? format(new Date(c.launch_date), "MMM yyyy") : "—"}
+                      <td className="px-4 py-3 font-medium">{c.name}<div className="text-xs text-muted-foreground">{c.slug}</div></td>
+                      <td className="px-4 py-3">
+                        <Input
+                          type="number"
+                          defaultValue={c.signup_count}
+                          className="h-8 w-24"
+                          onBlur={(e) => {
+                            const n = Number(e.target.value);
+                            if (!Number.isNaN(n) && n !== c.signup_count) updateCity(c.id, { signup_count: n });
+                          }}
+                        />
                       </td>
                       <td className="px-4 py-3">
-                        <Select value={c.status} onValueChange={(v) => updateCityStatus(c.id, v as City["status"])}>
-                          <SelectTrigger className="h-8 w-36">
-                            <SelectValue />
-                          </SelectTrigger>
+                        <Select value={c.status} onValueChange={(v) => updateCity(c.id, { status: v as City["status"] })}>
+                          <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="waitlist">Waitlist</SelectItem>
                             <SelectItem value="launching">Launching</SelectItem>
@@ -225,9 +255,12 @@ const Admin = () => {
                           </SelectContent>
                         </Select>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right space-x-2">
                         <Button size="sm" variant="soft" onClick={() => sendLaunchAnnouncement(c)}>
-                          <Send className="h-3.5 w-3.5" /> Announce launch
+                          <Send className="h-3.5 w-3.5" /> Announce
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => deleteCity(c.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </td>
                     </tr>
@@ -263,11 +296,7 @@ const Admin = () => {
                       </tr>
                     ))}
                     {signups.length === 0 && (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
-                          No signups yet.
-                        </td>
-                      </tr>
+                      <tr><td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">No signups yet.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -302,23 +331,6 @@ const Admin = () => {
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="admins" className="mt-6">
-            <Card className="p-6">
-              <h3 className="font-display text-lg font-semibold">Grant admin role</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Type the email of an existing user. They must have signed up first.
-              </p>
-              <div className="mt-4 flex gap-2">
-                <Input
-                  placeholder="someone@example.com"
-                  value={grantEmail}
-                  onChange={(e) => setGrantEmail(e.target.value)}
-                />
-                <Button variant="hero" onClick={grantAdmin}>Grant</Button>
               </div>
             </Card>
           </TabsContent>

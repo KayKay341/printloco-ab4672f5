@@ -22,6 +22,7 @@ import {
   Trophy, RefreshCw,
 } from "lucide-react";
 import { POPULAR_PRINTER_OPTIONS } from "@/lib/popularPrinters";
+import { useAppMetrics } from "@/hooks/useAppMetrics";
 
 type City = {
   id: string; name: string; slug: string;
@@ -66,6 +67,8 @@ const Waitlist = () => {
   const [refreshingRefs, setRefreshingRefs] = useState(false);
   const [visibleRefs, setVisibleRefs] = useState(8);
   const [cities, setCities] = useState<City[]>([]);
+  const [waitlistTotal, setWaitlistTotal] = useState<number | null>(null);
+  const { metrics } = useAppMetrics();
   const referredBy = params.get("ref");
 
   // Load saved referral code from prior signup on this device
@@ -89,6 +92,10 @@ const Waitlist = () => {
       .select("*")
       .order("signup_count", { ascending: false })
       .then(({ data }) => setCities((data as City[]) ?? []));
+    supabase
+      .from("waitlist_signups")
+      .select("id", { count: "exact", head: true })
+      .then(({ count }) => setWaitlistTotal(count ?? 0));
   }, []);
 
   const loadReferrals = async (code: string) => {
@@ -118,8 +125,6 @@ const Waitlist = () => {
       toast.error("Please enter your email");
       return;
     }
-    // Match the server-side regex used by the RLS policy so users get a clear
-    // message instead of a cryptic "row-level security" error.
     const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
     if (!emailRegex.test(cleanEmail) || cleanEmail.length < 3 || cleanEmail.length > 320) {
       toast.error("Please enter a valid email address");
@@ -130,16 +135,18 @@ const Waitlist = () => {
       return;
     }
     setSubmitting(true);
-    // Generate referral code client-side so we don't need SELECT permission after insert
-    const code = Math.random().toString(36).slice(2, 10);
     const composedNotes = role === "maker"
       ? [printerModel === "Other" ? printerOther.trim() : printerModel, notes.trim()]
           .filter(Boolean)
           .join(" — ") || null
       : notes.trim() || null;
-    const { error } = await supabase
-      .from("waitlist_signups")
-      .insert({
+
+    // Route through the join-waitlist edge function. The function uses the
+    // service role to insert, so per-account auth state can never block a
+    // legitimate signup — fixing the "row-level security" error reported on
+    // multiple accounts.
+    const { data, error } = await supabase.functions.invoke("join-waitlist", {
+      body: {
         email: cleanEmail,
         role,
         zip_code: zip.trim() || null,
@@ -147,43 +154,28 @@ const Waitlist = () => {
         notes: composedNotes,
         source: "waitlist_page",
         referred_by: referredBy,
-        referral_code: code,
-      });
+      },
+    });
     setSubmitting(false);
-    if (error) {
-      if (error.code === "23505") {
-        toast.success("You're already on the list — we'll be in touch.");
-        setDone(true);
-      } else if (error.message?.toLowerCase().includes("row-level security")) {
-        toast.error("Couldn't save your signup — please double-check your email and try again.");
-      } else {
-        toast.error(error.message);
-      }
+
+    if (error || !data?.ok) {
+      const message = (data as any)?.error || error?.message || "Couldn't save your signup — please try again.";
+      toast.error(message);
       return;
     }
+
+    const code = (data as any).referral_code as string;
     setReferralCode(code);
     setDone(true);
     localStorage.setItem(
       REFERRAL_STORAGE_KEY,
       JSON.stringify({ code, email: cleanEmail }),
     );
-    // Fire-and-forget confirmation email — don't block UX if it fails
-    supabase.functions
-      .invoke("send-transactional-email", {
-        body: {
-          templateName: "waitlist-confirmation",
-          recipientEmail: cleanEmail,
-          idempotencyKey: `waitlist-confirm-${code}`,
-          templateData: {
-            name: cleanEmail.split("@")[0],
-            city: city.trim() || undefined,
-            role,
-            referralCode: code,
-          },
-        },
-      })
-      .catch((err) => console.warn("confirmation email enqueue failed", err));
-    toast.success("You're in! Check your inbox for a confirmation.");
+    toast.success(
+      (data as any).alreadyJoined
+        ? "You're already on the list — here's your referral dashboard."
+        : "You're in! Check your inbox for a confirmation.",
+    );
   };
 
   const resetSignup = () => {
@@ -246,9 +238,9 @@ const Waitlist = () => {
               </motion.p>
 
               <div className="mt-10 grid grid-cols-3 gap-4 max-w-md">
-                <Stat n="3,200+" label="On the list" />
-                <Stat n={`${cities.length || 4}`} label="Cities queued" />
-                <Stat n="< 1 wk" label="Avg wait" />
+                <Stat n={waitlistTotal == null ? "—" : waitlistTotal.toLocaleString()} label="On the list" />
+                <Stat n={`${cities.length}`} label="Cities queued" />
+                <Stat n={metrics.avg_match_minutes?.value_text ?? "Soon"} label="Avg wait" />
               </div>
 
               {referredBy && (

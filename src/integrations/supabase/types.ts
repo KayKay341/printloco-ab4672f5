@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_metrics: {
+        Row: {
+          key: string
+          label: string | null
+          updated_at: string
+          value_number: number | null
+          value_text: string | null
+        }
+        Insert: {
+          key: string
+          label?: string | null
+          updated_at?: string
+          value_number?: number | null
+          value_text?: string | null
+        }
+        Update: {
+          key?: string
+          label?: string | null
+          updated_at?: string
+          value_number?: number | null
+          value_text?: string | null
+        }
+        Relationships: []
+      }
       bulk_quote_requests: {
         Row: {
           budget_cents: number | null
