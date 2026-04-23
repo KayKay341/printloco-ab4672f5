@@ -365,3 +365,67 @@ function signedTetVolume(
     c[0] * (a[1] * b[2] - a[2] * b[1])
   ) / 6;
 }
+
+function hasInlineMesh(mesh: any): boolean {
+  return !!(mesh?.vertices?.vertex && mesh?.triangles?.triangle);
+}
+
+/** Normalize a zip-internal path: strip leading slash, decode, lowercase. */
+function normalizePath(p: string): string {
+  let s = String(p || "").replace(/^\/+/, "");
+  try { s = decodeURIComponent(s); } catch { /* ignore */ }
+  return s.toLowerCase();
+}
+
+/** Resolve a 3MF reference path relative to the file containing the ref. */
+function resolvePath(refPath: string, fromPath: string): string {
+  if (!refPath) return fromPath;
+  const r = String(refPath);
+  if (r.startsWith("/")) return normalizePath(r);
+  const dir = fromPath.includes("/") ? fromPath.replace(/\/[^/]*$/, "") : "";
+  return normalizePath(dir ? `${dir}/${r}` : r);
+}
+
+/** Parse 3MF transform "m11 m12 m13 m21 m22 m23 m31 m32 m33 m41 m42 m43". */
+function parseTransform(s: any): number[] | undefined {
+  if (!s) return undefined;
+  const parts = String(s).trim().split(/\s+/).map(Number);
+  if (parts.length !== 12 || parts.some((n) => !Number.isFinite(n))) return undefined;
+  return parts;
+}
+
+/** Apply a 3MF 4x3 transform to a point. */
+function applyTransform(m: number[], p: number[]): number[] {
+  const [m11, m12, m13, m21, m22, m23, m31, m32, m33, m41, m42, m43] = m;
+  const [x, y, z] = p;
+  return [
+    m11 * x + m21 * y + m31 * z + m41,
+    m12 * x + m22 * y + m32 * z + m42,
+    m13 * x + m23 * y + m33 * z + m43,
+  ];
+}
+
+/** Compose parent ∘ child transforms (child applied first). */
+function composeTransform(parent?: number[], child?: number[]): number[] | undefined {
+  if (!parent) return child;
+  if (!child) return parent;
+  const to44 = (m: number[]) => [
+    m[0], m[3], m[6], m[9],
+    m[1], m[4], m[7], m[10],
+    m[2], m[5], m[8], m[11],
+    0,    0,    0,    1,
+  ];
+  const A = to44(parent);
+  const B = to44(child);
+  const R = new Array(16).fill(0);
+  for (let i = 0; i < 4; i++)
+    for (let j = 0; j < 4; j++)
+      for (let k = 0; k < 4; k++)
+        R[i * 4 + j] += A[i * 4 + k] * B[k * 4 + j];
+  return [
+    R[0], R[4], R[8],
+    R[1], R[5], R[9],
+    R[2], R[6], R[10],
+    R[3], R[7], R[11],
+  ];
+}
