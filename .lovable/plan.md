@@ -41,7 +41,7 @@ The entire site is browsable by the public as a polished demo. Nothing is gated 
 
 **4. Beefed-up `/waitlist`**
 - Hero + signup form
-- "What is PrintLocal" 3-sentence explainer
+- "What is PrintLoco" 3-sentence explainer
 - "How it works" — Upload → Match → Pickup (with icons)
 - "Who it's for" — makers vs customers split
 - City picker with launch ETA pulled from `cities` table

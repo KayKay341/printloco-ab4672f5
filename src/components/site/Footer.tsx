@@ -28,8 +28,8 @@ const cols: { title: string; links: { label: string; href: string }[] }[] = [
   {
     title: "Company",
     links: [
-      { label: "Invest in PrintLocal", href: "/invest" },
-      { label: "Contact", href: "mailto:hello@printlocal.app" },
+      { label: "Invest in PrintLoco", href: "/invest" },
+      { label: "Contact", href: "mailto:hello@printloco.app" },
     ],
   },
 ];
@@ -69,7 +69,7 @@ const Footer = () => (
       </div>
 
       <div className="mt-16 flex flex-col items-start justify-between gap-4 border-t border-border pt-8 text-sm text-muted-foreground sm:flex-row sm:items-center">
-        <div>© {new Date().getFullYear()} PrintLocal · A community maker platform</div>
+        <div>© {new Date().getFullYear()} PrintLoco · A community maker platform</div>
         <div className="flex gap-6">
           <a href="#" className="hover:text-foreground">Privacy</a>
           <a href="#" className="hover:text-foreground">Terms</a>

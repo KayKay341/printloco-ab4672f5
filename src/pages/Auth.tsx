@@ -45,7 +45,7 @@ const Auth = () => {
           },
         });
         if (error) throw error;
-        toast.success("Welcome to PrintLocal!");
+        toast.success("Welcome to PrintLoco!");
         navigate("/dashboard", { replace: true });
       } else if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -103,7 +103,7 @@ const Auth = () => {
   };
 
   const titleMap: Record<Mode, string> = {
-    signup: "Join PrintLocal",
+    signup: "Join PrintLoco",
     signin: "Welcome back",
     otp: "Sign in with email code",
     forgot: "Reset your password",

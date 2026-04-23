@@ -92,7 +92,7 @@ export default function Unsubscribe() {
         {status === "ready" && (
           <>
             <p className="text-muted-foreground mb-6">
-              Click below to unsubscribe from PrintLocal emails. You'll stop
+              Click below to unsubscribe from PrintLoco emails. You'll stop
               receiving updates immediately.
             </p>
             <Button onClick={confirm} className="w-full" size="lg">
@@ -115,7 +115,7 @@ export default function Unsubscribe() {
               waitlist anytime.
             </p>
             <Button asChild variant="outline" className="w-full">
-              <Link to="/">Back to PrintLocal</Link>
+              <Link to="/">Back to PrintLoco</Link>
             </Button>
           </>
         )}
@@ -126,7 +126,7 @@ export default function Unsubscribe() {
               This email is already unsubscribed.
             </p>
             <Button asChild variant="outline" className="w-full">
-              <Link to="/">Back to PrintLocal</Link>
+              <Link to="/">Back to PrintLoco</Link>
             </Button>
           </>
         )}
@@ -140,7 +140,7 @@ export default function Unsubscribe() {
               {errorMsg ?? "The link may have expired or already been used."}
             </p>
             <Button asChild variant="outline" className="w-full">
-              <Link to="/">Back to PrintLocal</Link>
+              <Link to="/">Back to PrintLoco</Link>
             </Button>
           </>
         )}

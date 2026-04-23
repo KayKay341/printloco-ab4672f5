@@ -54,7 +54,7 @@ const Community = () => (
           Manufacturing belongs to <span className="italic">everyone.</span>
         </h2>
         <p className="mt-5 max-w-lg text-muted-foreground">
-          PrintLocal isn't just a marketplace — it's neighborhood infrastructure. We invest a
+          PrintLoco isn't just a marketplace — it's neighborhood infrastructure. We invest a
           portion of every transaction back into the schools, libraries, and nonprofits that share
           our zip codes.
         </p>

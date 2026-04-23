@@ -37,7 +37,7 @@ type ReferralStat = {
   joined_at: string;
 };
 
-const REFERRAL_STORAGE_KEY = "printlocal_referral";
+const REFERRAL_STORAGE_KEY = "printloco_referral";
 
 const ROLES = [
   { id: "customer", label: "I want prints", icon: Sparkles, hint: "Get parts from local makers" },
@@ -246,7 +246,7 @@ const Waitlist = () => {
                 className="mt-6 font-display text-5xl font-semibold leading-[1.02] tracking-tight text-balance sm:text-6xl lg:text-7xl"
               >
                 Be first when{" "}
-                <span className="italic text-primary">PrintLocal</span> opens
+                <span className="italic text-primary">PrintLoco</span> opens
                 <br />
                 in your <span className="text-accent">neighborhood.</span>
               </motion.h1>
@@ -349,7 +349,7 @@ const Waitlist = () => {
                             target="_blank"
                             rel="noreferrer"
                             href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(
-                              `I just joined the PrintLocal waitlist — a 3D printer on every block. Get on the list (and bump our city up):`,
+                              `I just joined the PrintLoco waitlist — a 3D printer on every block. Get on the list (and bump our city up):`,
                             )}&url=${encodeURIComponent(referralUrl)}`}
                           >
                             <Twitter className="h-3.5 w-3.5" /> Tweet it
@@ -360,7 +360,7 @@ const Waitlist = () => {
                             href={`mailto:?subject=${encodeURIComponent(
                               "Want a local 3D printer in our neighborhood?",
                             )}&body=${encodeURIComponent(
-                              `PrintLocal is rolling out city by city. Each signup from this link bumps ours up: ${referralUrl}`,
+                              `PrintLoco is rolling out city by city. Each signup from this link bumps ours up: ${referralUrl}`,
                             )}`}
                           >
                             <MailIcon className="h-3.5 w-3.5" /> Email a friend
@@ -610,7 +610,7 @@ const Waitlist = () => {
               The manifesto
             </div>
             <h2 className="mt-3 font-display text-4xl font-semibold tracking-tight sm:text-5xl text-balance">
-              What is <span className="italic">PrintLocal?</span>
+              What is <span className="italic">PrintLoco?</span>
             </h2>
             <p className="mt-6 text-lg text-muted-foreground">
               Most American homes are within 5 miles of an idle 3D printer. We connect
@@ -878,7 +878,7 @@ const FAQS = [
   },
   {
     q: "Why not just buy from Amazon or Shapeways?",
-    a: "Amazon doesn't sell custom parts. Shapeways/JLC ship from a factory in 7–14 days for $25+. PrintLocal is your neighbor with a printer — same-day, walking distance, a fraction of the price.",
+    a: "Amazon doesn't sell custom parts. Shapeways/JLC ship from a factory in 7–14 days for $25+. PrintLoco is your neighbor with a printer — same-day, walking distance, a fraction of the price.",
   },
 ];
 

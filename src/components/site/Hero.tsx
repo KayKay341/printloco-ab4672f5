@@ -42,7 +42,7 @@ const Hero = () => (
           transition={{ duration: 0.7, delay: 0.1 }}
           className="mt-6 max-w-xl text-lg text-muted-foreground text-balance"
         >
-          PrintLocal is the hyperlocal marketplace for 3D printing. Upload your STL, get a real
+          PrintLoco is the hyperlocal marketplace for 3D printing. Upload your STL, get a real
           quote in seconds, and pick up your part from a maker around the corner — not a warehouse
           across the country.
         </motion.p>

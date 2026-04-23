@@ -20,7 +20,7 @@ const Navbar = () => {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
       <div className="container flex h-16 items-center justify-between">
-        <Link to="/" aria-label="PrintLocal home"><Logo /></Link>
+        <Link to="/" aria-label="PrintLoco home"><Logo /></Link>
         <nav className="hidden items-center gap-8 md:flex">
           {links.map((l) => (
             <Link
