@@ -238,9 +238,9 @@ const Waitlist = () => {
               </motion.p>
 
               <div className="mt-10 grid grid-cols-3 gap-4 max-w-md">
-                <Stat n="3,200+" label="On the list" />
-                <Stat n={`${cities.length || 4}`} label="Cities queued" />
-                <Stat n="< 1 wk" label="Avg wait" />
+                <Stat n={waitlistTotal == null ? "—" : waitlistTotal.toLocaleString()} label="On the list" />
+                <Stat n={`${cities.length}`} label="Cities queued" />
+                <Stat n={metrics.avg_match_minutes?.value_text ?? "Soon"} label="Avg wait" />
               </div>
 
               {referredBy && (
