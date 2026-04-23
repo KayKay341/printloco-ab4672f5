@@ -73,7 +73,39 @@ const Printers = () => {
         if (error) toast.error(error.message);
         const real = (data as unknown as PrinterListing[]) ?? [];
         if (isDemo) {
-          setAll([...real, ...(getSamplePrinters(24) as unknown as PrinterListing[])]);
+          // Mix in user-published demo printers (from localStorage) + sample seed.
+          import("@/lib/demoStore").then(({ demoStore }) => {
+            const userDemo = demoStore.get().printers.map((p) => ({
+              id: p.id,
+              owner_id: "demo",
+              brand: p.brand,
+              model: p.model,
+              materials: p.materials,
+              price_per_gram: p.pricePerGram,
+              neighborhood: p.neighborhood,
+              city: p.city,
+              bio: p.bio,
+              has_ams: p.hasAms,
+              ams_slot_count: p.amsSlotCount,
+              accepts_3mf: p.accepts3mf,
+              accepts_bulk: p.acceptsBulk,
+              min_bulk_quantity: p.minBulkQty,
+              quality_score: p.qualityScore,
+              tier: p.tier,
+              verification_status: "verified",
+              avg_rating: 0,
+              rating_count: 0,
+              total_orders: 0,
+              successful_orders: 0,
+              latitude: 34.02 + Math.random() * 0.05,
+              longitude: -118.45 + Math.random() * 0.05,
+              is_address_verified: true,
+              material_prices: {},
+              profiles: { full_name: "You" },
+              filament_colors: [],
+            } as unknown as PrinterListing));
+            setAll([...userDemo, ...real, ...(getSamplePrinters(24) as unknown as PrinterListing[])]);
+          });
         } else {
           setAll(real);
         }
