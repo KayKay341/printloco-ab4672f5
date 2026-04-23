@@ -40,52 +40,125 @@ const DENSITY: Record<string, number> = {
  * Returns a single merged geometry with vertex colors set per face based on
  * the assigned filament slot, plus the slot list for the buyer to remap.
  */
+type ObjectRec = {
+  id: string;
+  extruder: number;
+  mesh?: any;
+  components?: { objectid: string; path?: string; transform?: number[] }[];
+  /** Source model file path inside the zip (so component refs resolve correctly). */
+  sourcePath: string;
+};
+
 export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
   const zip = await JSZip.loadAsync(buf);
 
-  const modelEntry =
-    zip.file("3D/3dmodel.model") ||
-    zip.file(/3D\/.*\.model$/i)?.[0] ||
-    null;
-  if (!modelEntry) throw new Error("Not a valid 3MF — missing 3D/3dmodel.model");
-
-  const xml = await modelEntry.async("string");
   const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: "",
     allowBooleanAttributes: true,
     parseAttributeValue: false,
   });
-  const doc = parser.parse(xml);
 
-  // Try to read filament/material slots from project settings (Bambu/Orca).
+  // Find the root model. Try the standard path, then fall back to any .model.
+  const rootEntry =
+    zip.file("3D/3dmodel.model") ||
+    zip.file(/3D\/.*\.model$/i)?.[0] ||
+    zip.file(/.*\.model$/i)?.[0] ||
+    null;
+  if (!rootEntry) throw new Error("Not a valid 3MF — no .model file found");
+
+  // Load every .model file in the zip — Bambu/Orca split each object into
+  // its own file under 3D/Objects/ and reference them from the root via
+  // <component p:path="..." objectid="..."/>.
+  const modelFiles = new Map<string, any>(); // normalized path -> parsed doc
+  const allModelEntries = zip.file(/.*\.model$/i) ?? [];
+  for (const entry of allModelEntries) {
+    try {
+      const txt = await entry.async("string");
+      modelFiles.set(normalizePath(entry.name), parser.parse(txt));
+    } catch {
+      // skip unreadable
+    }
+  }
+
+  const rootPath = normalizePath(rootEntry.name);
+  const rootDoc = modelFiles.get(rootPath);
+  if (!rootDoc?.model) throw new Error("3MF root model is unreadable");
+
+  // Index every object across every model file by `${path}#${id}`.
+  const objects = new Map<string, ObjectRec>();
+  for (const [path, doc] of modelFiles.entries()) {
+    const objs = asArray(doc?.model?.resources?.object);
+    for (const obj of objs) {
+      const id = String(obj.id ?? "");
+      if (!id) continue;
+      objects.set(`${path}#${id}`, {
+        id,
+        extruder: Number(obj.extruder ?? obj.pid ?? 1) || 1,
+        mesh: obj.mesh,
+        components: asArray(obj.components?.component).map((c: any) => ({
+          objectid: String(c.objectid ?? ""),
+          path: c.path ?? c["p:path"],
+          transform: parseTransform(c.transform),
+        })),
+        sourcePath: path,
+      });
+    }
+  }
+
   const filaments = await readFilaments(zip);
 
-  // Build merged geometry with per-vertex color based on triangle paint slot.
   const positions: number[] = [];
   const colors: number[] = [];
   const slotVolumeMm3: number[] = new Array(Math.max(1, filaments.length)).fill(0);
 
-  const root = doc.model?.resources;
-  if (!root) throw new Error("3MF missing resources");
+  // Walk the build items — each one references a top-level object that may be
+  // a mesh or a tree of components pointing to meshes in other .model files.
+  const buildItems = asArray(rootDoc.model.build?.item);
+  const itemsToProcess = buildItems.length
+    ? buildItems.map((it: any) => ({
+        objectid: String(it.objectid ?? ""),
+        path: it.path ?? it["p:path"],
+        transform: parseTransform(it.transform),
+      }))
+    : // No <build> — fall back to every object that has an inline mesh.
+      Array.from(objects.values())
+        .filter((o) => hasInlineMesh(o.mesh))
+        .map((o) => ({ objectid: o.id, path: o.sourcePath, transform: undefined }));
 
-  const objects = asArray(root.object);
+  const visit = (
+    objectid: string,
+    refPath: string | undefined,
+    parentXform: number[] | undefined,
+    parentExtruder: number,
+  ) => {
+    if (!objectid) return;
+    const lookupPath = refPath ? resolvePath(refPath, rootPath) : rootPath;
+    const rec =
+      objects.get(`${lookupPath}#${objectid}`) ||
+      // Fallback: same id in any file (some exporters drop the path attr).
+      Array.from(objects.values()).find((o) => o.id === objectid);
+    if (!rec) return;
 
-  // Walk every object's mesh
-  for (const obj of objects) {
-    const mesh = obj.mesh;
-    if (!mesh?.vertices?.vertex || !mesh?.triangles?.triangle) continue;
+    const extruder = rec.extruder || parentExtruder;
 
-    const verts = asArray(mesh.vertices.vertex).map((v: any) => [
-      Number(v.x), Number(v.y), Number(v.z),
-    ]);
+    if (hasInlineMesh(rec.mesh)) {
+      emitMesh(rec.mesh, parentXform, extruder);
+      return;
+    }
+    for (const comp of rec.components ?? []) {
+      const childXform = composeTransform(parentXform, comp.transform);
+      visit(comp.objectid, comp.path ?? rec.sourcePath, childXform, extruder);
+    }
+  };
+
+  const emitMesh = (mesh: any, xform: number[] | undefined, defaultExtruder: number) => {
+    const verts = asArray(mesh.vertices.vertex).map((v: any) => {
+      const p = [Number(v.x), Number(v.y), Number(v.z)];
+      return xform ? applyTransform(xform, p) : p;
+    });
     const tris = asArray(mesh.triangles.triangle);
-
-    // Per-object default slot (Bambu sets an "extruder" / "pid" attr on object).
-    const defaultSlot = clampSlot(
-      Number(obj.extruder ?? obj.pid ?? 1) || 1,
-      filaments.length,
-    );
+    const defaultSlot = clampSlot(defaultExtruder, filaments.length);
 
     for (const t of tris) {
       const a = verts[Number(t.v1)];
@@ -93,9 +166,6 @@ export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
       const c = verts[Number(t.v3)];
       if (!a || !b || !c) continue;
 
-      // Bambu encodes per-face slot in `paint_color` (single digit/letter for
-      // each vertex of the triangle, or a single value applied uniformly).
-      // Fall back to per-object extruder if no paint info.
       const paint = String(t.paint_color ?? t.mmu_ga ?? "").trim();
       const slot = paint
         ? clampSlot(parsePaintSlot(paint), filaments.length)
@@ -107,9 +177,13 @@ export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
       positions.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
       colors.push(col.r, col.g, col.b, col.r, col.g, col.b, col.r, col.g, col.b);
 
-      // Sum up triangle volume for this slot
+      while (slotVolumeMm3.length < slot) slotVolumeMm3.push(0);
       slotVolumeMm3[slot - 1] += Math.abs(signedTetVolume(a, b, c));
     }
+  };
+
+  for (const item of itemsToProcess) {
+    visit(item.objectid, item.path, item.transform, 1);
   }
 
   if (positions.length === 0) {
@@ -290,4 +364,68 @@ function signedTetVolume(
     b[0] * (c[1] * a[2] - c[2] * a[1]) +
     c[0] * (a[1] * b[2] - a[2] * b[1])
   ) / 6;
+}
+
+function hasInlineMesh(mesh: any): boolean {
+  return !!(mesh?.vertices?.vertex && mesh?.triangles?.triangle);
+}
+
+/** Normalize a zip-internal path: strip leading slash, decode, lowercase. */
+function normalizePath(p: string): string {
+  let s = String(p || "").replace(/^\/+/, "");
+  try { s = decodeURIComponent(s); } catch { /* ignore */ }
+  return s.toLowerCase();
+}
+
+/** Resolve a 3MF reference path relative to the file containing the ref. */
+function resolvePath(refPath: string, fromPath: string): string {
+  if (!refPath) return fromPath;
+  const r = String(refPath);
+  if (r.startsWith("/")) return normalizePath(r);
+  const dir = fromPath.includes("/") ? fromPath.replace(/\/[^/]*$/, "") : "";
+  return normalizePath(dir ? `${dir}/${r}` : r);
+}
+
+/** Parse 3MF transform "m11 m12 m13 m21 m22 m23 m31 m32 m33 m41 m42 m43". */
+function parseTransform(s: any): number[] | undefined {
+  if (!s) return undefined;
+  const parts = String(s).trim().split(/\s+/).map(Number);
+  if (parts.length !== 12 || parts.some((n) => !Number.isFinite(n))) return undefined;
+  return parts;
+}
+
+/** Apply a 3MF 4x3 transform to a point. */
+function applyTransform(m: number[], p: number[]): number[] {
+  const [m11, m12, m13, m21, m22, m23, m31, m32, m33, m41, m42, m43] = m;
+  const [x, y, z] = p;
+  return [
+    m11 * x + m21 * y + m31 * z + m41,
+    m12 * x + m22 * y + m32 * z + m42,
+    m13 * x + m23 * y + m33 * z + m43,
+  ];
+}
+
+/** Compose parent ∘ child transforms (child applied first). */
+function composeTransform(parent?: number[], child?: number[]): number[] | undefined {
+  if (!parent) return child;
+  if (!child) return parent;
+  const to44 = (m: number[]) => [
+    m[0], m[3], m[6], m[9],
+    m[1], m[4], m[7], m[10],
+    m[2], m[5], m[8], m[11],
+    0,    0,    0,    1,
+  ];
+  const A = to44(parent);
+  const B = to44(child);
+  const R = new Array(16).fill(0);
+  for (let i = 0; i < 4; i++)
+    for (let j = 0; j < 4; j++)
+      for (let k = 0; k < 4; k++)
+        R[i * 4 + j] += A[i * 4 + k] * B[k * 4 + j];
+  return [
+    R[0], R[4], R[8],
+    R[1], R[5], R[9],
+    R[2], R[6], R[10],
+    R[3], R[7], R[11],
+  ];
 }
