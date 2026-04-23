@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      account_credit_balances: {
+        Row: {
+          balance_cents: number
+          currency: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance_cents?: number
+          currency?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance_cents?: number
+          currency?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       app_metrics: {
         Row: {
           key: string
@@ -300,6 +321,107 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      gift_card_redemptions: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          gift_card_id: string
+          id: string
+          redeemed_by_user_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          gift_card_id: string
+          id?: string
+          redeemed_by_user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          gift_card_id?: string
+          id?: string
+          redeemed_by_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gift_card_redemptions_gift_card_id_fkey"
+            columns: ["gift_card_id"]
+            isOneToOne: false
+            referencedRelation: "gift_cards"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gift_cards: {
+        Row: {
+          code: string
+          created_at: string
+          currency: string
+          delivered_at: string | null
+          delivery_method: string
+          environment: string
+          id: string
+          original_amount_cents: number
+          personal_message: string | null
+          purchaser_email: string
+          purchaser_user_id: string | null
+          recipient_email: string | null
+          recipient_name: string | null
+          remaining_amount_cents: number
+          scheduled_send_at: string | null
+          sender_name: string | null
+          status: string
+          stripe_payment_intent_id: string | null
+          stripe_session_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          currency?: string
+          delivered_at?: string | null
+          delivery_method?: string
+          environment?: string
+          id?: string
+          original_amount_cents: number
+          personal_message?: string | null
+          purchaser_email: string
+          purchaser_user_id?: string | null
+          recipient_email?: string | null
+          recipient_name?: string | null
+          remaining_amount_cents: number
+          scheduled_send_at?: string | null
+          sender_name?: string | null
+          status?: string
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          currency?: string
+          delivered_at?: string | null
+          delivery_method?: string
+          environment?: string
+          id?: string
+          original_amount_cents?: number
+          personal_message?: string | null
+          purchaser_email?: string
+          purchaser_user_id?: string | null
+          recipient_email?: string | null
+          recipient_name?: string | null
+          remaining_amount_cents?: number
+          scheduled_send_at?: string | null
+          sender_name?: string | null
+          status?: string
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       investor_leads: {
         Row: {
@@ -936,6 +1058,14 @@ export type Database = {
           message: Json
           msg_id: number
           read_ct: number
+        }[]
+      }
+      redeem_gift_card: {
+        Args: { _code: string }
+        Returns: {
+          gift_card_id: string
+          new_balance_cents: number
+          redeemed_amount_cents: number
         }[]
       }
     }
