@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
+import { useDemoMode } from "@/hooks/useDemoMode";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
 import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Upload as UploadIcon,
@@ -17,6 +19,8 @@ import {
   Layers,
   Package,
   Palette,
+  Link2,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -30,10 +34,13 @@ import ColorPicker, { COMMON_COLORS } from "@/components/ColorPicker";
 import PrinterMap from "@/components/PrinterMap";
 import CheckoutDialog from "@/components/CheckoutDialog";
 import BulkQuoteDialog from "@/components/BulkQuoteDialog";
+import CostEstimator, { DEFAULT_COST_INPUTS, type CostInputs, type EstimatorOutput } from "@/components/CostEstimator";
 import { scorePrinter, type PrinterForScore, type ScoredPrinter } from "@/lib/printerScore";
 import * as THREE from "three";
 
 const MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
+
+type SourceMode = "file" | "url";
 
 type FilamentColorRow = {
   material: string;
