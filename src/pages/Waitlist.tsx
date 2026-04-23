@@ -141,30 +141,55 @@ const Waitlist = () => {
           .join(" — ") || null
       : notes.trim() || null;
 
-    // Route through the join-waitlist edge function. The function uses the
-    // service role to insert, so per-account auth state can never block a
-    // legitimate signup — fixing the "row-level security" error reported on
-    // multiple accounts.
-    const { data, error } = await supabase.functions.invoke("join-waitlist", {
-      body: {
-        email: cleanEmail,
-        role,
-        zip_code: zip.trim() || null,
-        city: city.trim() || null,
-        notes: composedNotes,
-        source: "waitlist_page",
-        referred_by: referredBy,
-      },
+    // Two layered server paths so signup never gets blocked by RLS,
+    // regardless of which bundle is cached or whether the user is signed in:
+    //   1) join_waitlist RPC (SECURITY DEFINER, granted to anon)
+    //   2) join-waitlist edge function (service-role insert)
+    let code: string | null = null;
+    let alreadyJoined = false;
+    let lastError: string | null = null;
+
+    const rpc = await supabase.rpc("join_waitlist", {
+      _email: cleanEmail,
+      _role: role,
+      _zip_code: zip.trim() || null,
+      _city: city.trim() || null,
+      _notes: composedNotes,
+      _source: "waitlist_page",
+      _referred_by: referredBy,
     });
+
+    if (!rpc.error && Array.isArray(rpc.data) && rpc.data[0]?.referral_code) {
+      code = rpc.data[0].referral_code as string;
+      alreadyJoined = !!rpc.data[0].already_joined;
+    } else {
+      lastError = rpc.error?.message ?? null;
+      const fn = await supabase.functions.invoke("join-waitlist", {
+        body: {
+          email: cleanEmail,
+          role,
+          zip_code: zip.trim() || null,
+          city: city.trim() || null,
+          notes: composedNotes,
+          source: "waitlist_page",
+          referred_by: referredBy,
+        },
+      });
+      if (!fn.error && (fn.data as any)?.ok) {
+        code = (fn.data as any).referral_code as string;
+        alreadyJoined = !!(fn.data as any).alreadyJoined;
+      } else {
+        lastError = (fn.data as any)?.error || fn.error?.message || lastError;
+      }
+    }
+
     setSubmitting(false);
 
-    if (error || !data?.ok) {
-      const message = (data as any)?.error || error?.message || "Couldn't save your signup — please try again.";
-      toast.error(message);
+    if (!code) {
+      toast.error(lastError || "Couldn't save your signup — please try again.");
       return;
     }
 
-    const code = (data as any).referral_code as string;
     setReferralCode(code);
     setDone(true);
     localStorage.setItem(
@@ -172,7 +197,7 @@ const Waitlist = () => {
       JSON.stringify({ code, email: cleanEmail }),
     );
     toast.success(
-      (data as any).alreadyJoined
+      alreadyJoined
         ? "You're already on the list — here's your referral dashboard."
         : "You're in! Check your inbox for a confirmation.",
     );

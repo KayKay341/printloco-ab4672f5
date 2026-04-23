@@ -905,6 +905,22 @@ export type Database = {
         }
         Returns: boolean
       }
+      join_waitlist: {
+        Args: {
+          _city?: string
+          _email: string
+          _notes?: string
+          _referral_code?: string
+          _referred_by?: string
+          _role?: string
+          _source?: string
+          _zip_code?: string
+        }
+        Returns: {
+          already_joined: boolean
+          referral_code: string
+        }[]
+      }
       move_to_dlq: {
         Args: {
           dlq_name: string
