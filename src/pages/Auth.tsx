@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
 import Logo from "@/components/site/Logo";
+import SEO from "@/components/SEO";
 
 type Mode = "signup" | "signin" | "otp" | "forgot";
 

@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MapPin, Search, Star, Map as MapIcon, List, Layers, Package, ShieldCheck, Info } from "lucide-react";
