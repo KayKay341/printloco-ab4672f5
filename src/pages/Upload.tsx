@@ -204,7 +204,7 @@ const Upload = () => {
   );
 
   if (loading) return <div className="container py-24">Loading…</div>;
-  if (!user) return <Navigate to={`/auth?mode=signin`} replace />;
+  // Demo visitors can browse without auth — only redirect signed-out non-demo users at submit time.
 
   // Reassign one slot's color (multi-color preview customization)
   const reassignSlot = (slotIdx: number, hex: string, name?: string) => {
