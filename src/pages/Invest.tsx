@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,18 +20,10 @@ import {
   Users,
   DollarSign,
 } from "lucide-react";
-
-const ROUND_TARGET = 2_500_000;
-const ROUND_RAISED = 875_000;
+import { useAppMetrics } from "@/hooks/useAppMetrics";
 
 const CHECK_SIZES = ["$10K – $25K", "$25K – $100K", "$100K – $500K", "$500K+", "Strategic / advisor"];
 
-const TRACTION = [
-  { n: "3,200+", label: "Pre-launch waitlist" },
-  { n: "42", label: "Cities with demand" },
-  { n: "$0.18", label: "Avg cost per gram" },
-  { n: "10×", label: "Cheaper than Shapeways" },
-];
 
 const PROBLEM = [
   {
