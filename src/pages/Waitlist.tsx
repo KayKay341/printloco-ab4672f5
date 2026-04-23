@@ -92,6 +92,10 @@ const Waitlist = () => {
       .select("*")
       .order("signup_count", { ascending: false })
       .then(({ data }) => setCities((data as City[]) ?? []));
+    supabase
+      .from("waitlist_signups")
+      .select("id", { count: "exact", head: true })
+      .then(({ count }) => setWaitlistTotal(count ?? 0));
   }, []);
 
   const loadReferrals = async (code: string) => {
