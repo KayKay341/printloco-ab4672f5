@@ -71,7 +71,12 @@ type FileKind = "stl" | "3mf";
 
 const Upload = () => {
   const { user, loading } = useAuth();
+  const { isDemo, addDemoUpload, createDemoOrder } = useDemoMode();
   const navigate = useNavigate();
+  const [sourceMode, setSourceMode] = useState<SourceMode>("file");
+  const [urlInput, setUrlInput] = useState("");
+  const [urlLoading, setUrlLoading] = useState(false);
+  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [fileKind, setFileKind] = useState<FileKind>("stl");
   const [parsing, setParsing] = useState(false);
@@ -92,9 +97,46 @@ const Upload = () => {
   const [checkoutPayload, setCheckoutPayload] = useState<any>(null);
   const [savedStlId, setSavedStlId] = useState<string | null>(null);
 
+  // Cost estimator inputs (live)
+  const [costInputs, setCostInputs] = useState<CostInputs>({ ...DEFAULT_COST_INPUTS, material: "PLA" });
+  const [estimate, setEstimate] = useState<EstimatorOutput | null>(null);
+
   // Bulk
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkPrinter, setBulkPrinter] = useState<PrinterRow | null>(null);
+
+  // Sync estimator material with the chosen STL material
+  useEffect(() => {
+    setCostInputs((c) => ({ ...c, material }));
+  }, [material]);
+
+  // Fetch a remote model via the fetch-model edge function and load it as a File
+  const handleFetchUrl = async () => {
+    const trimmed = urlInput.trim();
+    if (!trimmed) {
+      toast.error("Paste a URL to a .stl or .3mf file");
+      return;
+    }
+    setUrlLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-model", { body: { url: trimmed } });
+      if (error || !data?.base64) throw new Error(error?.message ?? data?.error ?? "Could not fetch model");
+      const bin = atob(data.base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], { type: data.contentType });
+      const f = new File([blob], data.fileName, { type: data.contentType });
+      setSourceUrl(data.sourceUrl ?? trimmed);
+      setSavedStlId(null);
+      setFile(f);
+      toast.success("Model loaded from URL");
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not fetch URL");
+    } finally {
+      setUrlLoading(false);
+    }
+  };
+
 
   useEffect(() => {
     supabase
