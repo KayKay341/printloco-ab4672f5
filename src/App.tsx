@@ -19,6 +19,9 @@ import CheckoutReturn from "./pages/CheckoutReturn.tsx";
 import Admin from "./pages/Admin.tsx";
 import Unsubscribe from "./pages/Unsubscribe.tsx";
 import ResetPassword from "./pages/ResetPassword.tsx";
+import GiftCards from "./pages/GiftCards.tsx";
+import RedeemGiftCard from "./pages/RedeemGiftCard.tsx";
+import GiftCardReturn from "./pages/GiftCardReturn.tsx";
 
 const queryClient = new QueryClient();
 
@@ -44,6 +47,9 @@ const App = () => (
             <Route path="/admin" element={<Admin />} />
             <Route path="/unsubscribe" element={<Unsubscribe />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/gift-cards" element={<GiftCards />} />
+            <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
+            <Route path="/gift-cards/return" element={<GiftCardReturn />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
