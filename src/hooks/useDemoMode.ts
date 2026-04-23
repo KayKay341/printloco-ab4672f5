@@ -14,7 +14,10 @@ export const useDemoMode = () => {
 
   // Live snapshot of the demo store so components re-render when it changes.
   const [snapshot, setSnapshot] = useState<DemoState>(() => demoStore.get());
-  useEffect(() => demoStore.subscribe(() => setSnapshot(demoStore.get())), []);
+  useEffect(() => {
+    const unsub = demoStore.subscribe(() => setSnapshot(demoStore.get()));
+    return () => { unsub(); };
+  }, []);
 
   const demoToast = useCallback((action = "do that") => {
     toast.info("You're in demo mode", {
