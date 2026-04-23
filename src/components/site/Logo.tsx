@@ -6,7 +6,7 @@ const Logo = ({ className = "" }: { className?: string }) => (
       <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-accent" />
     </span>
     <span className="font-display text-xl font-semibold tracking-tight">
-      Print<span className="text-accent">Local</span>
+      Print<span className="text-accent">Loco</span>
     </span>
   </a>
 );
