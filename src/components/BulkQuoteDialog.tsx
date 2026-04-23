@@ -53,8 +53,12 @@ export default function BulkQuoteDialog({ open, onOpenChange, printer }: Props) 
       return;
     }
     if (isDemo) {
-      demoToast("send a real bulk request");
+      // Simulated bulk request — no DB write.
+      toast.success("Bulk request sent (demo)", {
+        description: `We'd notify ${printer.brand} ${printer.model} about your ${quantity}-unit order. They typically reply in ~12h.`,
+      });
       onOpenChange(false);
+      setDetails("");
       return;
     }
     setSubmitting(true);

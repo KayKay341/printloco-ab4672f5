@@ -1,19 +1,22 @@
 import { useDemoMode } from "@/hooks/useDemoMode";
-import { Sparkles } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { Link } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 
 export const DemoModeBanner = () => {
-  const { isDemo, loading } = useDemoMode();
-  if (loading || !isDemo) return null;
+  const { isDemo, loading, bannerDismissed, setBannerDismissed } = useDemoMode();
+  if (loading || !isDemo || bannerDismissed) return null;
   return (
     <div className="border-b border-accent/30 bg-accent/10">
       <div className="container flex flex-wrap items-center justify-center gap-x-3 gap-y-1 py-2 text-xs">
-        <Sparkles className="h-3.5 w-3.5 text-accent" />
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/20 px-2 py-0.5 font-semibold text-accent">
+          <Sparkles className="h-3 w-3" /> LIVE DEMO
+        </span>
         <span className="font-medium">
-          You're exploring the live demo.
+          Every button works.
         </span>
         <span className="text-muted-foreground">
-          Real bookings, payouts, and city launches start when we open in your zip.
+          Orders, payments, and maker tools are simulated — your data stays in your browser.
         </span>
         <Link
           to="/waitlist"
@@ -21,7 +24,18 @@ export const DemoModeBanner = () => {
         >
           Join the waitlist →
         </Link>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="ml-1 h-6 w-6"
+          onClick={() => setBannerDismissed(true)}
+          aria-label="Dismiss"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
     </div>
   );
 };
+
+export default DemoModeBanner;
