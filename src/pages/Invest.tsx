@@ -148,6 +148,11 @@ const Invest = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Invest in PrintLoco — The Hyperlocal 3D Printing Marketplace"
+        description="PrintLoco is the Airbnb of local 3D printing — turning idle neighborhood printers into a same-day supply chain. Read the deck and back the seed round."
+        path="/invest"
+      />
       <Navbar />
       <main>
         {/* HERO */}

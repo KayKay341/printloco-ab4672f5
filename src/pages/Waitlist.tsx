@@ -220,6 +220,11 @@ const Waitlist = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Join the PrintLoco Waitlist — Local 3D Printing Coming Soon"
+        description="Be first when PrintLoco opens in your neighborhood. Drop your zip — we'll email you the moment a verified 3D printer maker within 10 miles is live."
+        path="/waitlist"
+      />
       <Navbar />
       <main>
         {/* HERO */}

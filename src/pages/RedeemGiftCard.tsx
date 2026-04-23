@@ -64,6 +64,11 @@ export default function RedeemGiftCard() {
 
   return (
     <div className="min-h-screen bg-background">
+      <SEO
+        title="Redeem a PrintLoco Gift Card"
+        description="Have a PrintLoco gift card? Redeem your code to add credit to your account and book local 3D prints from verified neighborhood makers."
+        path="/gift-cards/redeem"
+      />
       <Navbar />
 
       <main className="container max-w-xl py-16 md:py-24">
