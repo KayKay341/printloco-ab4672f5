@@ -2,3 +2,6 @@ project_id = "xcrdzmqqrgilysomdrik"
 
 [functions.join-waitlist]
 verify_jwt = false
+
+[functions.create-giftcard-checkout]
+verify_jwt = false

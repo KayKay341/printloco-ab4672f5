@@ -8,6 +8,7 @@ import { LogOut, ShieldCheck } from "lucide-react";
 const links = [
   { label: "Find a Printer", to: "/printers" },
   { label: "Upload STL", to: "/upload" },
+  { label: "Gift Cards", to: "/gift-cards" },
   { label: "Waitlist", to: "/waitlist" },
   { label: "Invest", to: "/invest" },
 ];
