@@ -17,19 +17,19 @@ let inFlight: Promise<MetricsMap> | null = null;
 const fetchMetrics = async (): Promise<MetricsMap> => {
   if (cache.current) return cache.current;
   if (inFlight) return inFlight;
-  inFlight = supabase
-    .from("app_metrics")
-    .select("key,value_number,value_text,label")
-    .then(({ data }) => {
-      const map: MetricsMap = {};
-      (data ?? []).forEach((row: any) => {
-        map[row.key] = row as AppMetric;
-      });
-      cache.current = map;
-      subscribers.forEach((s) => s(map));
-      inFlight = null;
-      return map;
+  inFlight = (async () => {
+    const { data } = await supabase
+      .from("app_metrics")
+      .select("key,value_number,value_text,label");
+    const map: MetricsMap = {};
+    (data ?? []).forEach((row: any) => {
+      map[row.key] = row as AppMetric;
     });
+    cache.current = map;
+    subscribers.forEach((s) => s(map));
+    inFlight = null;
+    return map;
+  })();
   return inFlight;
 };
 
