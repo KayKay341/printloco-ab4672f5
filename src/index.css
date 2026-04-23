@@ -4,7 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
-/* PrintLocal design system. All colors HSL. */
+/* PrintLoco design system. All colors HSL. */
 
 @layer base {
   :root {
@@ -21,12 +21,12 @@
     --popover: 0 0% 100%;
     --popover-foreground: 215 45% 14%;
 
-    /* Primary: PrintLocal Blue #2E75B6 */
+    /* Primary: PrintLoco Blue #2E75B6 */
     --primary: 209 60% 45%;
     --primary-foreground: 38 40% 97%;
     --primary-deep: 215 60% 22%;
 
-    /* Accent: PrintLocal Orange #FF8C42 */
+    /* Accent: PrintLoco Orange #FF8C42 */
     --accent: 22 100% 63%;
     --accent-foreground: 215 50% 11%;
     --accent-soft: 22 90% 92%;

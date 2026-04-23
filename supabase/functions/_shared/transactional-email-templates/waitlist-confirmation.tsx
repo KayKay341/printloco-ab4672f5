@@ -14,7 +14,7 @@ import {
 } from 'npm:@react-email/components@0.0.22'
 import type { TemplateEntry } from './registry.ts'
 
-const SITE_NAME = 'PrintLocal'
+const SITE_NAME = 'PrintLoco'
 const SITE_URL = 'https://printloco.shop'
 
 interface WaitlistConfirmationProps {
@@ -119,7 +119,7 @@ const WaitlistConfirmationEmail = ({
 
 export const template = {
   component: WaitlistConfirmationEmail,
-  subject: "You're on the PrintLocal waitlist",
+  subject: "You're on the PrintLoco waitlist",
   displayName: 'Waitlist confirmation',
   previewData: {
     name: 'Jordan',
