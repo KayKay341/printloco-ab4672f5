@@ -55,7 +55,7 @@ type OrderRow = {
 
 const Dashboard = () => {
   const { user, profile, loading } = useAuth();
-  const { isDemo } = useDemoMode();
+  const { isDemo, demoOrders, demoPrinters, resetDemo } = useDemoMode();
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [files, setFiles] = useState<StlRow[]>([]);
   const [orders, setOrders] = useState<OrderRow[]>([]);
