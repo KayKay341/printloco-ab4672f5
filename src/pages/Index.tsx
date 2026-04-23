@@ -9,9 +9,23 @@ import Community from "@/components/site/Community";
 import Testimonials from "@/components/site/Testimonials";
 import FinalCTA from "@/components/site/FinalCTA";
 import Footer from "@/components/site/Footer";
+import SEO from "@/components/SEO";
 
 const Index = () => (
   <div className="min-h-screen bg-background">
+    <SEO
+      title="PrintLoco — Hyperlocal 3D Printing Near You"
+      description="Find trusted 3D printer makers within 10 miles. Upload an STL, get an instant quote, pick up the same day. Local prints, fair prices, real community."
+      path="/"
+      jsonLd={{
+        "@context": "https://schema.org",
+        "@type": "Service",
+        name: "PrintLoco — Hyperlocal 3D Printing",
+        provider: { "@type": "Organization", name: "PrintLoco", url: "https://printloco.shop" },
+        areaServed: "United States",
+        serviceType: "On-demand 3D printing",
+      }}
+    />
     <Navbar />
     <main>
       <Hero />
