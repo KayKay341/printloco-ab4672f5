@@ -22,6 +22,7 @@ import {
   Trophy, RefreshCw,
 } from "lucide-react";
 import { POPULAR_PRINTER_OPTIONS } from "@/lib/popularPrinters";
+import { useAppMetrics } from "@/hooks/useAppMetrics";
 
 type City = {
   id: string; name: string; slug: string;
@@ -66,6 +67,8 @@ const Waitlist = () => {
   const [refreshingRefs, setRefreshingRefs] = useState(false);
   const [visibleRefs, setVisibleRefs] = useState(8);
   const [cities, setCities] = useState<City[]>([]);
+  const [waitlistTotal, setWaitlistTotal] = useState<number | null>(null);
+  const { metrics } = useAppMetrics();
   const referredBy = params.get("ref");
 
   // Load saved referral code from prior signup on this device
