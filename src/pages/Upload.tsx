@@ -515,21 +515,21 @@ const Upload = () => {
 
           {/* RIGHT: live quote + matches */}
           <section className="space-y-6">
-            {totalWeightG > 0 ? (
-              <div className="rounded-3xl bg-gradient-hero p-6 shadow-card">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Live estimate {mfg && "(multi-color)"}
-                </div>
-                <div className="mt-1 font-display text-5xl font-semibold">
-                  ${baseQuote.toFixed(2)}
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
-                  <Stat label="Weight" value={`${totalWeightG.toFixed(1)} g`} />
-                  <Stat label={mfg ? "Slots" : "Print time"} value={mfg ? `${mfg.filaments.length}` : fmtMins(slice?.printMinutes ?? 0)} />
-                  <Stat label="Triangles" value={`${(mfg?.triangles ?? slice?.triangles ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} />
-                </div>
-
-                <div className="mt-5 flex gap-2">
+            {baseWeightG > 0 ? (
+              <>
+                <CostEstimator
+                  base={{
+                    baseWeightG,
+                    basePrintMinutes,
+                    bboxMm: baseBboxMm,
+                    triangles: mfg?.triangles ?? slice?.triangles,
+                  }}
+                  inputs={costInputs}
+                  onChange={setCostInputs}
+                  onResolved={setEstimate}
+                  hideMaterial={!!mfg}
+                />
+                <div className="flex gap-2">
                   <Button variant="hero" onClick={handleSaveQuote} disabled={submitting}>
                     {submitting ? "Saving…" : "Save quote"}
                   </Button>
@@ -537,7 +537,7 @@ const Upload = () => {
                     Browse all printers
                   </Button>
                 </div>
-              </div>
+              </>
             ) : (
               <div className="rounded-3xl border border-dashed border-border bg-card/50 p-10 text-center">
                 <Sparkles className="mx-auto h-8 w-8 text-primary" />
