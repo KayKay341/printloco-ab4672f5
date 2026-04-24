@@ -1,48 +1,103 @@
-## Plan
+# In-Browser Slicer — Plan
 
-1. Replace estimator math with slicer-truth math
-- Stop using `computeEstimate()` to scale grams and time from a base value with cubic heuristics.
-- Make the quote come only from a real open-source slice run for the current settings: material, layer height, infill, supports, scale, and selected machine/plate.
-- Treat the slicer’s generated G-code as the source of truth for material usage by summing actual extrusion moves if metadata looks ambiguous, instead of trusting `filamentUsage`/`materialUsage` blindly.
-- Keep raw mesh volume only as an informational/debug stat, never as pricing input.
+Turn `/upload` into a slicer-style workspace: load parts onto a build plate, move/rotate them, add duplicates or extra plates, then press **Slice plate** to compute weight/time/cost (no more instant re-slice on every input change).
 
-2. Add selectable build plates and fit validation
-- Add a build-plate selector on `/upload` with presets such as Bambu X1 Carbon (256×256), A1 Mini, P1S, etc.
-- Parse each printer’s `build_volume` and compare the rotated/scaled model footprint against the selected plate.
-- Show clear fit states: fits, too large, or borderline depending on X/Y footprint and Z height.
-- Use the selected plate to filter/prioritize maker matches so printers that cannot fit the part are excluded or clearly marked.
+---
 
-3. Upgrade the 3D preview into a plate preview
-- Extend `StlPreview` to render a real build plate under the model with dimensions matching the selected preset.
-- Center the model on the plate, show plate boundaries/grid, and visually indicate overflow when the part exceeds the plate.
-- Add simple orientation/rotation controls relevant to fit checking so the preview and fit logic stay aligned.
+## What the user gets
 
-4. Rework slicer configuration so units are consistent
-- Explicitly normalize uploaded geometry units before slicing so inch-authored models are converted once, not multiplied later in pricing math.
-- Pass machine/profile overrides into the slicer for the chosen plate size instead of slicing with generic defaults.
-- Add a reliable unit path for STL and keep 3MF embedded slicer data only when it is clearly valid for the active settings.
+1. **A build plate workspace** showing every part you've added, with a top-down + 3D orbit view.
+2. **Per-part transform controls** — translate (X/Y), rotate (X/Y/Z in 90°/free steps), "lay flat", duplicate, delete.
+3. **Multi-part / multi-plate** — add another copy of the current part, add more parts, or add additional plates if it doesn't all fit.
+4. **Manual slicing** — settings (material, infill, layer height, walls, supports, scale, plate, units) just edit the *plan*. Nothing slices until you press **Slice plate**.
+5. **Slice output panel** — grams, filament length, print time, cost, per-part breakdown, and the printer match list. A "Stale" badge appears whenever a setting changes after the last slice.
+6. **Plate fit indicator** — collisions between parts and overflow off the plate are highlighted in red live (no slicing required).
 
-5. Make pricing depend on actual sliced grams
-- Use sliced grams + material price as the pricing basis after each real slice.
-- Recompute quote and printer matches whenever the user changes settings that affect the slice.
-- Remove the current path where a correct bbox can still lead to an inflated quote because weight/time are being post-scaled outside the slicer.
+---
 
-6. Add regression coverage for the failure cases
-- Add tests for mm vs inch uploads, known cube/cylinder fixtures, and at least one large-part scenario that previously produced inflated grams.
-- Add tests for plate-fit logic and for the “cannot measure / does not fit” states.
+## UX flow
 
-## Files likely to change
-- `src/lib/stlSlicer.ts`
-- `src/components/CostEstimator.tsx`
+```text
+Upload .stl/.3mf  ──►  Part appears centered on Plate 1
+                          │
+                          ▼
+   [Move] [Rotate] [Duplicate] [Delete] [Lay flat] [Auto-arrange]
+                          │
+   Settings panel: material, infill, layer h, walls, supports, scale, plate model
+                          │
+                          ▼
+                 ┌──────────────────────┐
+                 │  ⏵  Slice plate      │  ← only this triggers Cura WASM
+                 └──────────────────────┘
+                          │
+                          ▼
+   Result: 134.2 g · 1h 47m · $26.80   [Stale once any setting changes]
+   Per-part rows · Printer matches · Checkout
+```
+
+Tabs at the top of the workspace: **Plate 1 · Plate 2 · + Add plate**.
+
+---
+
+## Technical changes
+
+### New files
+- `src/lib/sliceJob.ts` — types for `Part` (`id`, `fileName`, `buffer`, `geometry`, `transform {tx,ty,rotX,rotY,rotZ,scale}`) and `Plate` (`id`, `plateId`, `parts: Part[]`, `lastSlice: SliceResult | null`, `dirty: boolean`).
+- `src/lib/stlTransform.ts` — apply translate/rotate/scale to an STL `ArrayBuffer` (reuse the binary/ASCII rewriter already in `stlSlicer.ts`, extend it with a 3×3 rotation + offset). Used both for preview and to bake transforms before handing to Cura.
+- `src/lib/mergeStl.ts` — merge multiple transformed STL buffers into one binary STL so Cura WASM slices the whole plate as a single job (Cura WASM only accepts one mesh per slice call).
+- `src/components/PartTransformPanel.tsx` — translate/rotate sliders + 90° step buttons, lay-flat, duplicate, delete.
+- `src/components/PlateTabs.tsx` — tab strip with dirty/sliced badge per plate.
+
+### Modified files
 - `src/components/StlPreview.tsx`
+  - Accept `parts: { geometry, transform, color, selected, collides }[]` instead of a single geometry.
+  - Render each part with its transform; outline the selected part; tint colliding parts red.
+  - Add click-to-select and drag-on-plate (XY) using a Three.js raycaster + plane drag.
 - `src/pages/Upload.tsx`
-- `src/lib/printerScore.ts`
-- `src/test/example.test.ts`
+  - Remove the auto-slice `useEffect` (the one keyed on every cost input). Replace with explicit `handleSlicePlate()` triggered by a button.
+  - Hold a `plates: Plate[]` array + `activePlateId` in state; replace single-`file`/`slice` state.
+  - Mark `activePlate.dirty = true` whenever any part transform or slice setting changes.
+  - On **Slice plate**: bake each part's transform via `stlTransform`, merge with `mergeStl`, call `sliceStlBufferAccurate`, store result on the plate, clear `dirty`.
+  - Drive printer matching off `activePlate.lastSlice` (or the sum across plates for "all plates" view).
+- `src/components/CostEstimator.tsx`
+  - Add a `dirty` prop. When true, show a "Settings changed — re-slice for an accurate quote" banner and grey-out the price.
+  - Remove the `useEffect` auto-call to `onResolved` when dirty.
 
-## Technical details
-- The current overpricing is not just UI: the app still multiplies slicer weight/time in `CostEstimator` using volume-based scaling (`scale^3`, shell heuristics, support multipliers). That can inflate quotes even when bbox looks correct.
-- The current slicer package is Cura-based and open source, but its returned metadata fields are too ambiguous to trust directly. The safer implementation is to configure the slicer with explicit machine dimensions and derive usage from generated G-code/extrusion totals when needed.
-- Existing `printer_presets` and maker `build_volume` data can be reused for plate presets and fit filtering; no database migration should be necessary unless we later want richer per-printer machine profiles.
+### Slicer integration details
+- Cura WASM still slices a single mesh per call → we **bake transforms + merge** client-side. Each part's STL is rewritten with its rotation/translation, then concatenated into one binary STL (header + summed triCount + concatenated triangle blocks). This keeps `gramsFromGcode` accurate because the slicer sees the real plate layout.
+- Plate dimensions still drive `machine_width/depth/height` overrides.
+- Collision detection is a cheap AABB check on each part's bounding box after transform — runs every frame, no slicer needed.
 
-## Result
-After this change, users will see the model on a real selectable build plate, get a quote based on an actual slice for that machine/profile, and only be matched with printers that can physically print the part.
+### State shape (Upload.tsx)
+```ts
+type PartState = {
+  id: string;
+  fileName: string;
+  kind: "stl" | "3mf";
+  buffer: ArrayBuffer;          // original file bytes
+  geometry: BufferGeometry;     // for preview
+  transform: { tx: number; ty: number; rotX: number; rotY: number; rotZ: number; scale: number };
+  color: string;
+};
+type PlateState = {
+  id: string;
+  plateId: string;              // BUILD_PLATES id
+  parts: PartState[];
+  lastSlice: SliceResult | null;
+  dirty: boolean;
+};
+```
+
+### Out of scope (this pass)
+- Auto-arrange/nesting algorithm beyond a simple grid placement when duplicating.
+- 3MF transform baking (3MF jobs stay single-part, single-plate; warn if user adds a 3MF to a multi-part plate).
+- Saving plate layouts to the backend.
+
+---
+
+## Acceptance criteria
+- Changing infill/layer height/scale/etc. **does not** trigger a slice; the price is greyed out with a "Stale" pill until **Slice plate** is pressed.
+- I can drag a part on the plate, rotate it 90° on Z, duplicate it, and see both copies on the plate; collision overlap highlights red.
+- Pressing **Slice plate** produces grams/time consistent with the actual transformed layout (verified by adding 2× the same part → ~2× grams).
+- Adding a second plate gives a separate tab with its own parts, dirty state, and slice result.
+- Existing single-STL flow (upload → slice → match printer → checkout) still works end-to-end.
