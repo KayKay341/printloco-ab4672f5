@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { computeEstimate, DEFAULT_COST_INPUTS } from "@/components/CostEstimator";
 import { sliceStlBuffer, gramsFromGcode, MATERIAL_DENSITY } from "@/lib/stlSlicer";
 import { checkFit, getPlate, parseBuildVolume } from "@/lib/buildPlates";
+import { bakeStl, mergeBinaryStls, bboxOfStl } from "@/lib/stlTransform";
 
 describe("CostEstimator math", () => {
   it("multiplies slicer grams by quantity, never inflates by scale^3", () => {
@@ -88,5 +89,50 @@ describe("Build plate fit", () => {
     expect(parseBuildVolume("256x256x256mm")).toEqual({ x: 256, y: 256, z: 256 });
     expect(parseBuildVolume("350 × 320 × 325 mm")).toEqual({ x: 350, y: 320, z: 325 });
     expect(parseBuildVolume(null)).toBeNull();
+  });
+});
+
+describe("STL bake + merge", () => {
+  const ASCII_CUBE = new TextEncoder().encode(`solid cube
+facet normal 0 0 -1
+ outer loop
+  vertex 0 0 0
+  vertex 10 10 0
+  vertex 10 0 0
+ endloop
+endfacet
+facet normal 0 0 -1
+ outer loop
+  vertex 0 0 0
+  vertex 0 10 0
+  vertex 10 10 0
+ endloop
+endfacet
+endsolid cube`).buffer;
+
+  it("scales an STL via preScale", () => {
+    const out = bakeStl(ASCII_CUBE, { preScale: 2 });
+    const bb = bboxOfStl(out);
+    expect(bb.x).toBeCloseTo(20, 3);
+    expect(bb.y).toBeCloseTo(20, 3);
+  });
+
+  it("translates via translate vector after layFlat", () => {
+    const out = bakeStl(ASCII_CUBE, { layFlatToPlate: true, translate: [50, -25, 0] });
+    const bb = bboxOfStl(out);
+    // Cube was centered to 0 then moved to (50,-25)
+    expect((bb.minX + bb.maxX) / 2).toBeCloseTo(50, 3);
+    expect((bb.minY + bb.maxY) / 2).toBeCloseTo(-25, 3);
+    expect(bb.minZ).toBeCloseTo(0, 3);
+  });
+
+  it("merges two STLs into one with combined triangle count", () => {
+    const a = bakeStl(ASCII_CUBE, { translate: [0, 0, 0] });
+    const b = bakeStl(ASCII_CUBE, { translate: [50, 0, 0] });
+    const merged = mergeBinaryStls([a, b]);
+    const triCount = new DataView(merged).getUint32(80, true);
+    expect(triCount).toBe(4); // 2 + 2 triangles
+    const bb = bboxOfStl(merged);
+    expect(bb.maxX).toBeCloseTo(60, 3); // 0..10 and 50..60 combined
   });
 });

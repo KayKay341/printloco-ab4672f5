@@ -79,6 +79,11 @@ type Props = {
   onResolved?: (out: EstimatorOutput) => void;
   /** When true, the material picker is hidden (3MF jobs already use multi-material). */
   hideMaterial?: boolean;
+  /** When true, settings have changed since the last slice — show a stale banner. */
+  dirty?: boolean;
+  /** Optional handler for the "Slice plate" button rendered when dirty. */
+  onSlice?: () => void;
+  slicing?: boolean;
 };
 
 const LAYER_HEIGHTS = [0.08, 0.12, 0.16, 0.2, 0.28];
@@ -109,7 +114,7 @@ export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOu
   };
 }
 
-export default function CostEstimator({ base, inputs, onChange, onResolved, hideMaterial }: Props) {
+export default function CostEstimator({ base, inputs, onChange, onResolved, hideMaterial, dirty, onSlice, slicing }: Props) {
   const out = useMemo(() => computeEstimate(base, inputs), [base, inputs]);
 
   useEffect(() => {
@@ -127,8 +132,19 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
 
   return (
     <div className="rounded-3xl bg-gradient-hero p-6 shadow-card">
+      {dirty && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-600 dark:text-amber-400">
+          <span className="font-medium">Settings changed — re-slice to refresh the quote.</span>
+          {onSlice && (
+            <Button size="sm" variant="hero" onClick={onSlice} disabled={slicing}>
+              {slicing ? "Slicing…" : "Slice plate"}
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Big total */}
-      <div className="flex items-end justify-between gap-3">
+      <div className={`flex items-end justify-between gap-3 ${dirty ? "opacity-50" : ""}`}>
         <div>
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Live estimate</div>
           <div className="mt-1 font-display text-5xl font-semibold leading-none">
