@@ -26,10 +26,10 @@ import {
 import { MATERIAL_BASE_PRICE } from "@/lib/stlSlicer";
 
 export type CostInputs = {
-  /** Display units AND source-mesh interpretation. "in" treats raw mesh
-   *  coordinates as inches (×25.4 to convert to mm) — fixes huge quotes
-   *  on STLs that were exported in inches. */
+  /** Controls how dimensions are displayed to the user. */
   units: "mm" | "in";
+  /** Controls how uploaded mesh coordinates are interpreted for pricing/sizing. */
+  sourceUnits: "mm" | "in";
   scalePct: number;
   quantity: number;
   material: string;
@@ -42,6 +42,7 @@ export type CostInputs = {
 
 export const DEFAULT_COST_INPUTS: CostInputs = {
   units: "mm",
+  sourceUnits: "mm",
   scalePct: 100,
   quantity: 1,
   material: "PLA",
@@ -86,10 +87,9 @@ const LAYER_HEIGHTS = [0.08, 0.12, 0.16, 0.2, 0.28];
 export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOutput {
   // Volume scales as scale^3.
   const userScale = Math.max(10, Math.min(500, i.scalePct)) / 100;
-  // If user says model is in inches, convert mesh from inches → mm: ×25.4 linear,
-  // ×16387.064 volumetric. We only apply this if the bbox in mm is suspicious
-  // (e.g. >2m or <2mm), OR the user explicitly toggled to inches.
-  const unitFactor = i.units === "in" ? 25.4 : 1;
+  // If the uploaded model was authored in inches, convert source coordinates
+  // from inches → mm for size/weight/time calculations.
+  const unitFactor = i.sourceUnits === "in" ? 25.4 : 1;
   const linearScale = userScale * unitFactor;
   const volScale = Math.pow(linearScale, 3);
 
@@ -176,10 +176,10 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
 
       {/* Controls */}
       <div className="mt-5 space-y-5">
-        {/* Units + Quantity */}
-        <div className="grid gap-4 sm:grid-cols-2">
+        {/* Display units + model units + quantity */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Units</Label>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Display units</Label>
             <div className="mt-2 inline-flex rounded-full border border-border bg-background p-0.5">
               {(["mm", "in"] as const).map((u) => (
                 <button
@@ -193,6 +193,27 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
                   {u}
                 </button>
               ))}
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Model units</Label>
+            <div className="mt-2 inline-flex rounded-full border border-border bg-background p-0.5">
+              {(["mm", "in"] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => setI({ sourceUnits: u })}
+                  className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${
+                    inputs.sourceUnits === u ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+            <div className="mt-1 text-[11px] text-muted-foreground">
+              Changes quote sizing only if the uploaded file used inches.
             </div>
           </div>
 
