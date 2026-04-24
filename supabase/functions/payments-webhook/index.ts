@@ -7,9 +7,15 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
 );
 
+const SITE_URL = Deno.env.get("SITE_URL") ?? "https://printloco.shop";
+
 function pickupCode(): string {
   return Math.random().toString(36).slice(2, 6).toUpperCase() + "-" +
     Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+function formatUsd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 serve(async (req) => {
@@ -29,18 +35,7 @@ serve(async (req) => {
       if (kind === "gift_card") {
         await handleGiftCardPaid(session);
       } else {
-        const orderId = session.metadata?.orderId;
-        if (orderId) {
-          await supabase
-            .from("orders")
-            .update({
-              status: "paid",
-              stripe_payment_intent_id: session.payment_intent ?? null,
-              pickup_code: pickupCode(),
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", orderId);
-        }
+        await handlePrintOrderPaid(session);
       }
     }
 
@@ -54,8 +49,128 @@ serve(async (req) => {
   }
 });
 
-function formatUsd(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+async function handlePrintOrderPaid(session: any) {
+  const orderId = session.metadata?.orderId;
+  if (!orderId) {
+    console.warn("Print session missing orderId metadata", session.id);
+    return;
+  }
+
+  const code = pickupCode();
+
+  // Mark the order paid and stamp the pickup code.
+  const { data: order, error: updErr } = await supabase
+    .from("orders")
+    .update({
+      status: "paid",
+      stripe_payment_intent_id: session.payment_intent ?? null,
+      pickup_code: code,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", orderId)
+    .select(
+      "id, customer_id, maker_id, printer_id, material, quantity, amount_total, platform_fee, notes, pickup_code",
+    )
+    .single();
+
+  if (updErr || !order) {
+    console.error("Failed to mark order paid", updErr);
+    return;
+  }
+
+  // Pull related data in parallel.
+  const [{ data: customerProfile }, { data: makerProfile }, { data: printer }] =
+    await Promise.all([
+      supabase.from("profiles").select("full_name").eq("id", order.customer_id).maybeSingle(),
+      supabase.from("profiles").select("full_name").eq("id", order.maker_id).maybeSingle(),
+      order.printer_id
+        ? supabase.from("printers").select("brand, model").eq("id", order.printer_id).maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+
+  // Resolve emails via the auth admin API (service role).
+  const [{ data: customerUser }, { data: makerUser }] = await Promise.all([
+    supabase.auth.admin.getUserById(order.customer_id),
+    supabase.auth.admin.getUserById(order.maker_id),
+  ]);
+
+  const customerEmail =
+    session.customer_details?.email ||
+    session.customer_email ||
+    customerUser?.user?.email ||
+    null;
+  const makerEmail = makerUser?.user?.email ?? null;
+
+  // Best-effort: parse "Color: X · ..." prefix the checkout writes into notes.
+  let colorName: string | undefined;
+  let cleanNotes: string | undefined;
+  if (order.notes) {
+    const parts = order.notes.split(" · ");
+    const colorPart = parts.find((p: string) => p.toLowerCase().startsWith("color:"));
+    if (colorPart) colorName = colorPart.slice(colorPart.indexOf(":") + 1).trim();
+    cleanNotes = parts
+      .filter((p: string) => !p.toLowerCase().startsWith("color:"))
+      .join(" · ") || undefined;
+  }
+
+  const printerLabel = printer ? `${printer.brand ?? ""} ${printer.model ?? ""}`.trim() : undefined;
+  const totalFormatted = formatUsd(order.amount_total);
+  const payoutFormatted = formatUsd(Math.max(0, order.amount_total - (order.platform_fee ?? 0)));
+
+  // Customer receipt
+  if (customerEmail) {
+    try {
+      await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "print-order-receipt",
+          recipientEmail: customerEmail,
+          templateData: {
+            amountFormatted: totalFormatted,
+            material: order.material,
+            colorName,
+            quantity: order.quantity,
+            makerName: makerProfile?.full_name || "your local maker",
+            printerLabel,
+            pickupCode: order.pickup_code ?? code,
+            orderId: order.id,
+          },
+        },
+      });
+    } catch (e) {
+      console.error("Failed to send customer receipt", e);
+    }
+  } else {
+    console.warn("No customer email on file for order", order.id);
+  }
+
+  // Maker notification
+  if (makerEmail) {
+    try {
+      await supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "maker-new-order",
+          recipientEmail: makerEmail,
+          templateData: {
+            payoutFormatted,
+            totalFormatted,
+            material: order.material,
+            colorName,
+            quantity: order.quantity,
+            customerName: customerProfile?.full_name || undefined,
+            printerLabel,
+            pickupCode: order.pickup_code ?? code,
+            orderId: order.id,
+            notes: cleanNotes,
+            dashboardUrl: `${SITE_URL}/dashboard`,
+          },
+        },
+      });
+    } catch (e) {
+      console.error("Failed to send maker notification", e);
+    }
+  } else {
+    console.warn("No maker email on file for order", order.id);
+  }
 }
 
 async function handleGiftCardPaid(session: any) {
