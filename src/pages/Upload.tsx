@@ -36,6 +36,7 @@ import CheckoutDialog from "@/components/CheckoutDialog";
 import BulkQuoteDialog from "@/components/BulkQuoteDialog";
 import CostEstimator, { DEFAULT_COST_INPUTS, type CostInputs, type EstimatorOutput } from "@/components/CostEstimator";
 import { scorePrinter, type PrinterForScore, type ScoredPrinter } from "@/lib/printerScore";
+import { BUILD_PLATES, DEFAULT_PLATE_ID, getPlate, checkFit, parseBuildVolume } from "@/lib/buildPlates";
 import * as THREE from "three";
 
 const MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
