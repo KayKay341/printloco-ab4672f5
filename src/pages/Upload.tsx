@@ -212,15 +212,15 @@ const Upload = () => {
     return slice?.printMinutes ?? 0;
   }, [mfg, slice]);
 
-  // Auto-detect inch-scale STLs (very small "mm" bbox) and switch units once.
+  // Auto-detect inch-scale STLs (very small "mm" bbox) and switch source units once.
   useEffect(() => {
     if (!slice) return;
     const max = Math.max(slice.bbox.x, slice.bbox.y, slice.bbox.z);
-    if (max > 0 && max < 8 && costInputs.units === "mm") {
-      setCostInputs((c) => ({ ...c, units: "in" }));
-      toast.info("Detected tiny model — interpreting as inches. Toggle units to override.");
+    if (max > 0 && max < 8 && costInputs.sourceUnits === "mm") {
+      setCostInputs((c) => ({ ...c, sourceUnits: "in", units: "in" }));
+      toast.info("Detected inch-based model units. You can change model units if this looks wrong.");
     }
-  }, [slice]);
+  }, [slice, costInputs.sourceUnits]);
 
   /** Live total weight after estimator inputs (falls back to raw slice weight). */
   const totalWeightG = estimate?.weightG ?? baseWeightG;
