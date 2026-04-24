@@ -612,8 +612,8 @@ const Upload = () => {
               <>
                 <CostEstimator
                   base={{
-                    baseWeightG,
-                    basePrintMinutes,
+                    weightG: baseWeightG,
+                    printMinutes: basePrintMinutes,
                     bboxMm: baseBboxMm,
                     triangles: mfg?.triangles ?? slice?.triangles,
                   }}
