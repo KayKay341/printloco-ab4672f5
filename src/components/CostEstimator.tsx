@@ -79,6 +79,11 @@ type Props = {
   onResolved?: (out: EstimatorOutput) => void;
   /** When true, the material picker is hidden (3MF jobs already use multi-material). */
   hideMaterial?: boolean;
+  /** When true, settings have changed since the last slice — show a stale banner. */
+  dirty?: boolean;
+  /** Optional handler for the "Slice plate" button rendered when dirty. */
+  onSlice?: () => void;
+  slicing?: boolean;
 };
 
 const LAYER_HEIGHTS = [0.08, 0.12, 0.16, 0.2, 0.28];
