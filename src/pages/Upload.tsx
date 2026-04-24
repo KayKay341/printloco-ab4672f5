@@ -192,24 +192,33 @@ const Upload = () => {
     });
   }, [material, fileKind]);
 
-  /** Active total weight regardless of file type. */
-  const totalWeightG = useMemo(() => {
+  /** Raw base weight from slicer (1×, mm interpretation). */
+  const baseWeightG = useMemo(() => {
     if (mfg) return mfg.totalWeightG;
     if (slice) return slice.weightG;
     return 0;
   }, [mfg, slice]);
 
-  const baseQuote = useMemo(() => {
-    if (mfg) {
-      // Sum each slot's weight × that slot material's base price.
-      return mfg.weightPerSlot.reduce((acc, w, i) => {
-        const t = mfg.filaments[i]?.type ?? "PLA";
-        return acc + w * (MATERIAL_BASE_PRICE[t] ?? 0.2);
-      }, 0);
+  const baseBboxMm = useMemo(() => {
+    if (slice) return slice.bbox;
+    return { x: 0, y: 0, z: 0 };
+  }, [slice]);
+
+  const basePrintMinutes = useMemo(() => slice?.printMinutes ?? 0, [slice]);
+
+  // Auto-detect inch-scale STLs (very small "mm" bbox) and switch units once.
+  useEffect(() => {
+    if (!slice) return;
+    const max = Math.max(slice.bbox.x, slice.bbox.y, slice.bbox.z);
+    if (max > 0 && max < 8 && costInputs.units === "mm") {
+      setCostInputs((c) => ({ ...c, units: "in" }));
+      toast.info("Detected tiny model — interpreting as inches. Toggle units to override.");
     }
-    if (slice) return slice.weightG * (MATERIAL_BASE_PRICE[material] ?? 0.2);
-    return 0;
-  }, [mfg, slice, material]);
+  }, [slice]);
+
+  /** Live total weight after estimator inputs (falls back to raw slice weight). */
+  const totalWeightG = estimate?.weightG ?? baseWeightG;
+  const baseQuote = estimate ? estimate.amountCents / 100 : baseWeightG * (MATERIAL_BASE_PRICE[material] ?? 0.2);
 
   const previewGeometry: THREE.BufferGeometry | null = mfg?.geometry ?? slice?.geometry ?? null;
 
@@ -506,21 +515,21 @@ const Upload = () => {
 
           {/* RIGHT: live quote + matches */}
           <section className="space-y-6">
-            {totalWeightG > 0 ? (
-              <div className="rounded-3xl bg-gradient-hero p-6 shadow-card">
-                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Live estimate {mfg && "(multi-color)"}
-                </div>
-                <div className="mt-1 font-display text-5xl font-semibold">
-                  ${baseQuote.toFixed(2)}
-                </div>
-                <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
-                  <Stat label="Weight" value={`${totalWeightG.toFixed(1)} g`} />
-                  <Stat label={mfg ? "Slots" : "Print time"} value={mfg ? `${mfg.filaments.length}` : fmtMins(slice?.printMinutes ?? 0)} />
-                  <Stat label="Triangles" value={`${(mfg?.triangles ?? slice?.triangles ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} />
-                </div>
-
-                <div className="mt-5 flex gap-2">
+            {baseWeightG > 0 ? (
+              <>
+                <CostEstimator
+                  base={{
+                    baseWeightG,
+                    basePrintMinutes,
+                    bboxMm: baseBboxMm,
+                    triangles: mfg?.triangles ?? slice?.triangles,
+                  }}
+                  inputs={costInputs}
+                  onChange={setCostInputs}
+                  onResolved={setEstimate}
+                  hideMaterial={!!mfg}
+                />
+                <div className="flex gap-2">
                   <Button variant="hero" onClick={handleSaveQuote} disabled={submitting}>
                     {submitting ? "Saving…" : "Save quote"}
                   </Button>
@@ -528,7 +537,7 @@ const Upload = () => {
                     Browse all printers
                   </Button>
                 </div>
-              </div>
+              </>
             ) : (
               <div className="rounded-3xl border border-dashed border-border bg-card/50 p-10 text-center">
                 <Sparkles className="mx-auto h-8 w-8 text-primary" />
