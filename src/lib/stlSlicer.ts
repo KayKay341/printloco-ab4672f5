@@ -1,5 +1,6 @@
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import * as THREE from "three";
+import type { BuildPlate } from "@/lib/buildPlates";
 
 // Material densities g/cm^3
 export const MATERIAL_DENSITY: Record<string, number> = {
@@ -21,23 +22,42 @@ export const MATERIAL_BASE_PRICE: Record<string, number> = {
   Resin: 0.8,
 };
 
-export type WeightSource = "slicer-filament" | "slicer-material" | "none";
+export type WeightSource =
+  | "slicer-gcode"     // grams summed from extrusion moves in the produced G-code
+  | "slicer-filament"  // slicer metadata reported a filament length
+  | "slicer-material"  // slicer metadata reported a material volume
+  | "none";
 
 export type SliceResult = {
   geometry: THREE.BufferGeometry;
-  volumeCm3: number;       // raw mesh volume (informational only)
-  weightG: number;         // grams from slicer-reported usage; 0 if unavailable
+  /** Raw mesh volume mm³ — informational only, never used for pricing. */
+  volumeMm3: number;
+  /** Grams from the slicer (g-code first, metadata second). 0 = couldn't measure. */
+  weightG: number;
   weightSource: WeightSource;
   printMinutes: number;
-  bbox: { x: number; y: number; z: number }; // mm
+  /** Bounding box (mm) of the geometry actually sent to the slicer (after scale + units). */
+  bbox: { x: number; y: number; z: number };
   triangles: number;
 };
 
-type SliceOptions = {
+export type SliceOptions = {
   material: string;
+  /** 0..100 */
   infillPct: number;
   layerHeightMm?: number;
+  /** Filament diameter (mm). Defaults to 1.75. */
   filamentDiameterMm?: number;
+  /** "in" → multiply incoming geometry by 25.4 before slicing. */
+  sourceUnits?: "mm" | "in";
+  /** 1 = 100%. Applied to geometry before slicing. */
+  scale?: number;
+  /** Walls/perimeter count (default 3). */
+  walls?: number;
+  /** Adds support generation. */
+  supports?: boolean;
+  /** Selected build plate (drives Cura machine_width/depth/height). */
+  plate?: Pick<BuildPlate, "x" | "y" | "z">;
 };
 
 type CuraSliceMetadata = {
@@ -49,10 +69,7 @@ type CuraSliceMetadata = {
 
 let curaModulePromise: Promise<{ CuraWASM: new (config: any) => any }> | null = null;
 
-/**
- * Compute signed volume of a triangle mesh.
- * Sum of signed tetrahedron volumes from origin -> triangle vertices.
- */
+/** Signed-tetrahedron volume → absolute mesh volume in mm³. */
 function meshVolumeMm3(geom: THREE.BufferGeometry): number {
   const pos = geom.getAttribute("position");
   if (!pos) return 0;
@@ -68,34 +85,65 @@ function meshVolumeMm3(geom: THREE.BufferGeometry): number {
 }
 
 /**
- * Browser-side "slicer" — loads STL, computes solid mesh volume in mm^3,
- * applies an infill model (perimeter shell solid + interior * infill density),
- * and converts to grams using material density. Print time uses a calibrated
- * volumetric flow rate (mm^3/s) typical for FDM.
+ * Apply user-controlled scale + units to an STL by rewriting positions.
+ * We do this BEFORE handing the buffer to the slicer so the slicer's
+ * reported usage matches what the customer is being quoted on.
  */
+function rescaleStlBuffer(buf: ArrayBuffer, factor: number): ArrayBuffer {
+  if (factor === 1) return buf.slice(0);
+
+  // Detect ASCII vs binary: ASCII STLs start with "solid " and contain "facet".
+  const head = new TextDecoder().decode(new Uint8Array(buf, 0, Math.min(256, buf.byteLength))).toLowerCase();
+  const isAscii = head.startsWith("solid") && head.includes("facet");
+
+  if (isAscii) {
+    const text = new TextDecoder().decode(new Uint8Array(buf));
+    const out = text.replace(
+      /vertex\s+(-?[0-9.eE+-]+)\s+(-?[0-9.eE+-]+)\s+(-?[0-9.eE+-]+)/g,
+      (_m, x, y, z) =>
+        `vertex ${(Number(x) * factor).toFixed(6)} ${(Number(y) * factor).toFixed(6)} ${(Number(z) * factor).toFixed(6)}`,
+    );
+    return new TextEncoder().encode(out).buffer;
+  }
+
+  // Binary: 80-byte header + uint32 triCount + 50 bytes per triangle (normal + 3 verts + attr).
+  const src = new DataView(buf);
+  const out = new ArrayBuffer(buf.byteLength);
+  new Uint8Array(out).set(new Uint8Array(buf));
+  const dst = new DataView(out);
+  const triCount = src.getUint32(80, true);
+  let off = 84;
+  for (let i = 0; i < triCount; i++) {
+    // Skip normal (3 floats), then scale 3 vertices (9 floats).
+    off += 12;
+    for (let j = 0; j < 9; j++) {
+      const cur = src.getFloat32(off, true);
+      dst.setFloat32(off, cur * factor, true);
+      off += 4;
+    }
+    off += 2; // attribute byte count
+  }
+  return out;
+}
+
 /**
  * Loads STL geometry and reports bbox / volume for display only.
  * Weight is intentionally NOT derived here — grams must come from the slicer.
  */
-export function sliceStlBuffer(buf: ArrayBuffer, _opts: {
-  material: string;
-  infillPct: number; // 0..100
-}): SliceResult {
+export function sliceStlBuffer(buf: ArrayBuffer, _opts: { material: string; infillPct: number }): SliceResult {
   const loader = new STLLoader();
   const geometry = loader.parse(buf);
   geometry.computeBoundingBox();
   geometry.computeVertexNormals();
 
   const volMm3 = meshVolumeMm3(geometry);
-  const volCm3 = volMm3 / 1000;
-
   const bbox = geometry.boundingBox!;
   const size = new THREE.Vector3();
   bbox.getSize(size);
 
   return {
     geometry,
-    volumeCm3: volCm3,
+    volumeMm3: volMm3,
     weightG: 0,
     weightSource: "none",
     printMinutes: 0,
@@ -105,33 +153,35 @@ export function sliceStlBuffer(buf: ArrayBuffer, _opts: {
 }
 
 /**
- * Higher-accuracy path: use Cura WASM when available for print time + filament
- * length, then convert the returned filament length into grams. Falls back to
- * geometry-based estimation if the slicer is unavailable or errors.
+ * Real-slice path: rescale STL to user units + scale, configure Cura with the
+ * selected machine plate, and derive grams from the produced G-code.
  */
 export async function sliceStlBufferAccurate(buf: ArrayBuffer, opts: SliceOptions): Promise<SliceResult> {
-  const fallback = sliceStlBuffer(buf, opts);
+  const unitFactor = opts.sourceUnits === "in" ? 25.4 : 1;
+  const userScale = Math.max(0.1, Math.min(5, opts.scale ?? 1));
+  const factor = unitFactor * userScale;
+
+  const scaledBuf = rescaleStlBuffer(buf, factor);
+  const fallback = sliceStlBuffer(scaledBuf, opts);
 
   try {
     const { CuraWASM } = await loadCuraModule();
+    const overrides = buildOverrides(opts);
+
     const slicer = new CuraWASM({
       transfer: false,
       verbose: false,
-      overrides: [
-        { key: "infill_sparse_density", value: String(Math.max(0, Math.min(100, opts.infillPct))) },
-        { key: "layer_height", value: String(Math.max(0.04, opts.layerHeightMm ?? 0.2)) },
-      ],
+      overrides,
     });
 
     try {
-      const { metadata } = await slicer.slice(buf.slice(0), "stl");
-      const sliced = toSliceResult(fallback, metadata, opts);
-      return sliced;
+      const { gcode, metadata } = await slicer.slice(scaledBuf.slice(0), "stl");
+      return toSliceResult(fallback, gcode, metadata, opts);
     } finally {
       try {
         await slicer.destroy?.();
       } catch {
-        // Best-effort cleanup only.
+        /* best-effort */
       }
     }
   } catch {
@@ -146,27 +196,123 @@ async function loadCuraModule() {
   return curaModulePromise;
 }
 
-function toSliceResult(base: SliceResult, metadata: CuraSliceMetadata | null | undefined, opts: SliceOptions): SliceResult {
-  if (!metadata) return base;
+function buildOverrides(opts: SliceOptions): Array<{ scope?: string; key: string; value: string }> {
+  const layer = Math.max(0.04, opts.layerHeightMm ?? 0.2);
+  const infill = Math.max(0, Math.min(100, opts.infillPct));
+  const walls = Math.max(1, Math.min(8, opts.walls ?? 3));
+  const supports = !!opts.supports;
+  const plate = opts.plate;
 
-  const resolved = resolveWeightFromMetadata(metadata, opts);
-  const printMinutes = metadata.printTime && metadata.printTime > 0 ? metadata.printTime / 60 : base.printMinutes;
+  const list: Array<{ scope?: string; key: string; value: string }> = [
+    { key: "infill_sparse_density", value: String(infill) },
+    { key: "layer_height", value: String(layer) },
+    { key: "wall_line_count", value: String(walls) },
+    { key: "support_enable", value: supports ? "true" : "false" },
+  ];
 
+  if (plate) {
+    list.push(
+      { key: "machine_width", value: String(plate.x) },
+      { key: "machine_depth", value: String(plate.y) },
+      { key: "machine_height", value: String(plate.z) },
+    );
+  }
+  return list;
+}
+
+function toSliceResult(
+  base: SliceResult,
+  gcode: ArrayBuffer | string | null | undefined,
+  metadata: CuraSliceMetadata | null | undefined,
+  opts: SliceOptions,
+): SliceResult {
+  const fromGcode = gcode ? gramsFromGcode(gcode, opts) : null;
+
+  if (fromGcode && fromGcode.weightG > 0) {
+    return {
+      ...base,
+      weightG: fromGcode.weightG,
+      weightSource: "slicer-gcode",
+      printMinutes: fromGcode.printMinutes ?? metadataMinutes(metadata) ?? base.printMinutes,
+    };
+  }
+
+  const resolved = resolveWeightFromMetadata(metadata ?? {}, opts);
   return {
     ...base,
     weightG: resolved.weightG,
     weightSource: resolved.source,
-    printMinutes,
+    printMinutes: metadataMinutes(metadata) ?? base.printMinutes,
   };
 }
 
+function metadataMinutes(metadata: CuraSliceMetadata | null | undefined): number | undefined {
+  if (!metadata?.printTime || metadata.printTime <= 0) return undefined;
+  return metadata.printTime / 60;
+}
+
 /**
- * Strictly derive grams from slicer-reported usage:
- *   1. Prefer filament length (mm) → cylinder volume × material density.
- *   2. Otherwise use slicer-reported material volume(s) (mm^3) × density.
- * If the slicer returns nothing usable, weight is 0 and source is "none" —
- * we never fall back to raw mesh volume.
+ * Parse extrusion (E-axis) from generated G-code and convert filament length
+ * → grams using filament diameter + material density. This is the SOURCE OF
+ * TRUTH because it's what the printer would actually push regardless of
+ * ambiguous metadata fields.
  */
+export function gramsFromGcode(
+  gcode: ArrayBuffer | string,
+  opts: SliceOptions,
+): { weightG: number; printMinutes?: number } | null {
+  let text: string;
+  if (typeof gcode === "string") text = gcode;
+  else {
+    try { text = new TextDecoder().decode(new Uint8Array(gcode)); } catch { return null; }
+  }
+
+  let absoluteE = true; // M82 = absolute (default), M83 = relative
+  let lastE = 0;
+  let totalMm = 0;
+  let timeSec = 0;
+
+  // Quick scan — split on newlines, ignore comments after ';'.
+  const lines = text.split(/\r?\n/);
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line.startsWith(";")) {
+      // Cura sometimes embeds "TIME:1234" or ";TIME:1234"
+      const t = /TIME:\s*([0-9.]+)/i.exec(line);
+      if (t) timeSec = Math.max(timeSec, Number(t[1]));
+      continue;
+    }
+    const code = line.split(";")[0].trim();
+    if (code === "M82") { absoluteE = true; lastE = 0; continue; }
+    if (code === "M83") { absoluteE = false; continue; }
+    if (/^G92\b/.test(code)) {
+      const m = /E(-?[0-9.]+)/.exec(code);
+      if (m) lastE = Number(m[1]);
+      continue;
+    }
+    if (/^G[01]\b/.test(code)) {
+      const m = /E(-?[0-9.]+)/.exec(code);
+      if (!m) continue;
+      const e = Number(m[1]);
+      if (!Number.isFinite(e)) continue;
+      if (absoluteE) {
+        const delta = e - lastE;
+        if (delta > 0) totalMm += delta;
+        lastE = e;
+      } else {
+        if (e > 0) totalMm += e;
+      }
+    }
+  }
+
+  if (totalMm <= 0) return null;
+
+  const density = MATERIAL_DENSITY[opts.material] ?? MATERIAL_DENSITY.PLA;
+  const diameter = opts.filamentDiameterMm ?? 1.75;
+  const weightG = filamentLengthMmToWeightG(totalMm, diameter, density);
+  return { weightG, printMinutes: timeSec > 0 ? timeSec / 60 : undefined };
+}
+
 function resolveWeightFromMetadata(
   metadata: CuraSliceMetadata,
   opts: SliceOptions,
@@ -175,15 +321,11 @@ function resolveWeightFromMetadata(
   const diameter = opts.filamentDiameterMm ?? 1.75;
 
   const fromFilament = filamentLengthMmToWeightG(metadata.filamentUsage ?? 0, diameter, density);
-  if (fromFilament > 0) {
-    return { weightG: fromFilament, source: "slicer-filament" };
-  }
+  if (fromFilament > 0) return { weightG: fromFilament, source: "slicer-filament" };
 
   const materialVolumeMm3 = (metadata.material1Usage ?? 0) + (metadata.material2Usage ?? 0);
   const fromMaterial = materialVolumeMm3ToWeightG(materialVolumeMm3, density);
-  if (fromMaterial > 0) {
-    return { weightG: fromMaterial, source: "slicer-material" };
-  }
+  if (fromMaterial > 0) return { weightG: fromMaterial, source: "slicer-material" };
 
   return { weightG: 0, source: "none" };
 }
