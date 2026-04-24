@@ -36,6 +36,7 @@ import CheckoutDialog from "@/components/CheckoutDialog";
 import BulkQuoteDialog from "@/components/BulkQuoteDialog";
 import CostEstimator, { DEFAULT_COST_INPUTS, type CostInputs, type EstimatorOutput } from "@/components/CostEstimator";
 import { scorePrinter, type PrinterForScore, type ScoredPrinter } from "@/lib/printerScore";
+import { BUILD_PLATES, DEFAULT_PLATE_ID, getPlate, checkFit, parseBuildVolume } from "@/lib/buildPlates";
 import * as THREE from "three";
 
 const MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
@@ -62,6 +63,7 @@ type PrinterRow = PrinterForScore & {
   accepts_3mf: boolean;
   accepts_bulk: boolean;
   min_bulk_quantity: number;
+  build_volume: string | null;
   material_prices: Record<string, number> | null;
   profiles: { full_name: string | null } | null;
   filament_colors: FilamentColorRow[];
@@ -100,6 +102,10 @@ const Upload = () => {
   // Cost estimator inputs (live)
   const [costInputs, setCostInputs] = useState<CostInputs>({ ...DEFAULT_COST_INPUTS, material: "PLA" });
   const [estimate, setEstimate] = useState<EstimatorOutput | null>(null);
+
+  // Build plate selection
+  const [plateId, setPlateId] = useState<string>(DEFAULT_PLATE_ID);
+  const plate = useMemo(() => getPlate(plateId), [plateId]);
 
   // Bulk
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -141,7 +147,7 @@ const Upload = () => {
   useEffect(() => {
     supabase
       .from("printers")
-      .select("id, owner_id, brand, model, materials, price_per_gram, material_prices, neighborhood, city, bio, latitude, longitude, has_ams, ams_slot_count, accepts_3mf, accepts_bulk, min_bulk_quantity, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock, surcharge_per_gram)")
+      .select("id, owner_id, brand, model, materials, price_per_gram, material_prices, neighborhood, city, bio, latitude, longitude, has_ams, ams_slot_count, accepts_3mf, accepts_bulk, min_bulk_quantity, build_volume, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock, surcharge_per_gram)")
       .eq("is_active", true)
       .then(({ data, error }) => {
         if (error) toast.error(error.message);
@@ -149,52 +155,74 @@ const Upload = () => {
       });
   }, []);
 
-  // Parse on file change
+  // Parse-only on file change. The 3MF path uses embedded slicer data; the
+  // STL path is sliced separately by the settings-driven effect below.
   useEffect(() => {
     if (!file) {
       setSlice(null);
       setMfg(null);
       return;
     }
-    setParsing(true);
     const ext = file.name.toLowerCase().split(".").pop();
     const kind: FileKind = ext === "3mf" ? "3mf" : "stl";
     setFileKind(kind);
 
-    file.arrayBuffer()
-      .then(async (buf) => {
-        if (kind === "3mf") {
-          const result = await parse3mf(buf);
+    if (kind === "3mf") {
+      setParsing(true);
+      file.arrayBuffer()
+        .then((buf) => parse3mf(buf))
+        .then((result) => {
           setMfg(result);
           setOriginalSlots(result.filaments.map((f) => ({ ...f })));
           setSlice(null);
-        } else {
-          const result = await sliceStlBufferAccurate(buf, { material, infillPct: 20, layerHeightMm: 0.2 });
-          setSlice(result);
+        })
+        .catch((err) => {
+          toast.error(`Could not parse 3MF: ${err.message}`);
           setMfg(null);
-        }
-      })
-      .catch((err) => {
-        toast.error(`Could not parse ${kind.toUpperCase()}: ` + err.message);
-        setSlice(null);
-        setMfg(null);
-      })
-      .finally(() => setParsing(false));
+        })
+        .finally(() => setParsing(false));
+    } else {
+      setMfg(null);
+    }
   }, [file]);
 
-  // Re-slice STL when material changes (no infill anymore — fixed at 20%).
+  // Re-slice STL whenever any setting that affects grams/time/fit changes.
+  // The slicer is the source of truth — no post-scaling in CostEstimator.
   useEffect(() => {
     if (fileKind !== "stl" || !file) return;
-    file.arrayBuffer().then((buf) => {
-      sliceStlBufferAccurate(buf, { material, infillPct: 20, layerHeightMm: 0.2 })
-        .then(setSlice)
-        .catch(() => {
-          /* ignore */
-        });
-    });
-  }, [material, fileKind]);
+    let cancelled = false;
+    setParsing(true);
+    file.arrayBuffer()
+      .then((buf) =>
+        sliceStlBufferAccurate(buf, {
+          material,
+          infillPct: costInputs.infillPct,
+          layerHeightMm: costInputs.layerHeightMm,
+          walls: costInputs.walls,
+          supports: costInputs.supports,
+          sourceUnits: costInputs.sourceUnits,
+          scale: costInputs.scalePct / 100,
+          plate,
+        }),
+      )
+      .then((result) => {
+        if (!cancelled) setSlice(result);
+      })
+      .catch(() => {
+        if (!cancelled) setSlice(null);
+      })
+      .finally(() => {
+        if (!cancelled) setParsing(false);
+      });
+    return () => { cancelled = true; };
+  }, [
+    file, fileKind, material,
+    costInputs.infillPct, costInputs.layerHeightMm, costInputs.walls,
+    costInputs.supports, costInputs.sourceUnits, costInputs.scalePct,
+    plate.x, plate.y, plate.z,
+  ]);
 
-  /** Raw base weight from slicer (1×, mm interpretation). */
+  /** Per-unit weight from real slicer output. */
   const baseWeightG = useMemo(() => {
     if (mfg) return mfg.totalWeightG;
     if (slice) return slice.weightG;
@@ -218,24 +246,33 @@ const Upload = () => {
     const max = Math.max(slice.bbox.x, slice.bbox.y, slice.bbox.z);
     if (max > 0 && max < 8 && costInputs.sourceUnits === "mm") {
       setCostInputs((c) => ({ ...c, sourceUnits: "in", units: "in" }));
-      toast.info("Detected inch-based model units. You can change model units if this looks wrong.");
+      toast.info("Detected inch-based model. Re-slicing in inches.");
     }
   }, [slice, costInputs.sourceUnits]);
 
-  /** Live total weight after estimator inputs (falls back to raw slice weight). */
+  // Fit check against the selected build plate.
+  const fit = useMemo(() => checkFit(baseBboxMm, plate), [baseBboxMm, plate]);
+  const overflow = fit.status === "too-large";
+
+  /** Live total weight after estimator inputs (falls back to per-unit slice weight). */
   const totalWeightG = estimate?.weightG ?? baseWeightG;
   const baseQuote = estimate ? estimate.amountCents / 100 : baseWeightG * (MATERIAL_BASE_PRICE[material] ?? 0.2);
 
   const previewGeometry: THREE.BufferGeometry | null = mfg?.geometry ?? slice?.geometry ?? null;
 
-  // Build printer matches
-  const matches: (PrinterRow & ScoredPrinter)[] = useMemo(() => {
+  // Build printer matches — exclude printers whose declared build_volume can't fit the part.
+  const matches: (PrinterRow & ScoredPrinter & { fitsPlate: boolean })[] = useMemo(() => {
     if (totalWeightG <= 0) return [];
     return printers
       .map((p) => {
         const score = scorePrinter(p, { weightG: totalWeightG, material, colorName });
-        return { ...p, ...score };
+        const bv = parseBuildVolume(p.build_volume);
+        const fitsPlate = bv
+          ? checkFit(baseBboxMm, { x: bv.x, y: bv.y, z: bv.z } as any).status !== "too-large"
+          : true;
+        return { ...p, ...score, fitsPlate };
       })
+      .filter((p) => p.fitsPlate)
       // For 3MF jobs, only show printers that can do multi-color
       .filter((p) => {
         if (fileKind !== "3mf" || !mfg) return true;
@@ -244,7 +281,7 @@ const Upload = () => {
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 8);
-  }, [printers, totalWeightG, material, colorName, fileKind, mfg]);
+  }, [printers, totalWeightG, material, colorName, fileKind, mfg, baseBboxMm]);
 
   const mapPins = useMemo(
     () =>
@@ -417,7 +454,50 @@ const Upload = () => {
               />
             </label>
 
-            {/* 3D preview */}
+            {/* Build plate selector */}
+            {file && (
+              <div className="rounded-2xl border border-border bg-background/40 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Build plate</Label>
+                  {baseWeightG > 0 && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        fit.status === "fits"
+                          ? "bg-primary/10 text-primary"
+                          : fit.status === "tight"
+                          ? "bg-amber-500/15 text-amber-500"
+                          : "bg-destructive/15 text-destructive"
+                      }`}
+                      title={fit.reason}
+                    >
+                      {fit.status === "fits" ? "Fits ✓" : fit.status === "tight" ? "Tight" : "Too large"}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {BUILD_PLATES.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPlateId(p.id)}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                        plateId === p.id
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-muted-foreground hover:text-foreground"
+                      }`}
+                      title={`${p.brand} ${p.model} — ${p.x} × ${p.y} × ${p.z} mm`}
+                    >
+                      {p.short}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 text-[11px] text-muted-foreground">
+                  {plate.brand} {plate.model} · {plate.x} × {plate.y} × {plate.z} mm
+                </div>
+              </div>
+            )}
+
+            {/* 3D preview with build plate */}
             {file && (
               <div className="rounded-2xl border border-border bg-gradient-hero p-2">
                 <div className="relative h-72 w-full overflow-hidden rounded-xl">
@@ -430,9 +510,16 @@ const Upload = () => {
                     geometry={previewGeometry}
                     color={colorHex}
                     vertexColors={fileKind === "3mf"}
+                    plate={plate}
+                    overflow={overflow}
                     className="h-full w-full"
                   />
                 </div>
+                {overflow && baseWeightG > 0 && (
+                  <div className="mt-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">
+                    Doesn't fit on {plate.short}: {fit.reason}. Try scaling down or pick a larger plate.
+                  </div>
+                )}
               </div>
             )}
 
@@ -525,8 +612,8 @@ const Upload = () => {
               <>
                 <CostEstimator
                   base={{
-                    baseWeightG,
-                    basePrintMinutes,
+                    weightG: baseWeightG,
+                    printMinutes: basePrintMinutes,
                     bboxMm: baseBboxMm,
                     triangles: mfg?.triangles ?? slice?.triangles,
                   }}
