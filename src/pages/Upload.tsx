@@ -192,24 +192,33 @@ const Upload = () => {
     });
   }, [material, fileKind]);
 
-  /** Active total weight regardless of file type. */
-  const totalWeightG = useMemo(() => {
+  /** Raw base weight from slicer (1×, mm interpretation). */
+  const baseWeightG = useMemo(() => {
     if (mfg) return mfg.totalWeightG;
     if (slice) return slice.weightG;
     return 0;
   }, [mfg, slice]);
 
-  const baseQuote = useMemo(() => {
-    if (mfg) {
-      // Sum each slot's weight × that slot material's base price.
-      return mfg.weightPerSlot.reduce((acc, w, i) => {
-        const t = mfg.filaments[i]?.type ?? "PLA";
-        return acc + w * (MATERIAL_BASE_PRICE[t] ?? 0.2);
-      }, 0);
+  const baseBboxMm = useMemo(() => {
+    if (slice) return slice.bbox;
+    return { x: 0, y: 0, z: 0 };
+  }, [slice]);
+
+  const basePrintMinutes = useMemo(() => slice?.printMinutes ?? 0, [slice]);
+
+  // Auto-detect inch-scale STLs (very small "mm" bbox) and switch units once.
+  useEffect(() => {
+    if (!slice) return;
+    const max = Math.max(slice.bbox.x, slice.bbox.y, slice.bbox.z);
+    if (max > 0 && max < 8 && costInputs.units === "mm") {
+      setCostInputs((c) => ({ ...c, units: "in" }));
+      toast.info("Detected tiny model — interpreting as inches. Toggle units to override.");
     }
-    if (slice) return slice.weightG * (MATERIAL_BASE_PRICE[material] ?? 0.2);
-    return 0;
-  }, [mfg, slice, material]);
+  }, [slice]);
+
+  /** Live total weight after estimator inputs (falls back to raw slice weight). */
+  const totalWeightG = estimate?.weightG ?? baseWeightG;
+  const baseQuote = estimate ? estimate.amountCents / 100 : baseWeightG * (MATERIAL_BASE_PRICE[material] ?? 0.2);
 
   const previewGeometry: THREE.BufferGeometry | null = mfg?.geometry ?? slice?.geometry ?? null;
 
