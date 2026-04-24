@@ -49,7 +49,7 @@ import {
   type PartTransform,
   type PlateState,
 } from "@/lib/sliceJob";
-import { bakeStl, mergeBinaryStls } from "@/lib/stlTransform";
+import { bakeStl, geometryToBinaryStl, mergeBinaryStls } from "@/lib/stlTransform";
 import PartTransformPanel from "@/components/PartTransformPanel";
 import PlateTabs from "@/components/PlateTabs";
 
@@ -184,9 +184,38 @@ const Upload = () => {
       try {
         const buf = await file.arrayBuffer();
         const result = await parse3mf(buf);
+        const sliceBuf = geometryToBinaryStl(result.geometry);
+        const sliceResult = await sliceStlBufferAccurate(sliceBuf, {
+          material: result.sliceSettings.material,
+          infillPct: result.sliceSettings.infillPct,
+          layerHeightMm: result.sliceSettings.layerHeightMm,
+          walls: result.sliceSettings.walls,
+          supports: result.sliceSettings.supports,
+          filamentDiameterMm: result.sliceSettings.filamentDiameterMm,
+          materialDensityGPerCm3: result.sliceSettings.materialDensityGPerCm3,
+          sourceUnits: "mm",
+          scale: 1,
+          plate: plateModel,
+        });
+        if (sliceResult.weightG > 0) {
+          result.totalWeightG = sliceResult.weightG;
+          result.printMinutes = sliceResult.printMinutes || result.printMinutes;
+        }
         setMfg(result);
         setMfgFile(file);
         setOriginalSlots(result.filaments.map((f) => ({ ...f })));
+        setMaterial(result.sliceSettings.material);
+        setCostInputs((prev) => ({
+          ...prev,
+          material: result.sliceSettings.material,
+          infillPct: result.sliceSettings.infillPct,
+          layerHeightMm: result.sliceSettings.layerHeightMm,
+          walls: result.sliceSettings.walls,
+          supports: result.sliceSettings.supports,
+        }));
+        if (sliceResult.weightG <= 0) {
+          toast.error("Could not read real filament usage from this 3MF. No quote shown until slicing succeeds.");
+        }
       } catch (err: any) {
         toast.error(`Could not parse 3MF: ${err.message}`);
       } finally {
@@ -406,6 +435,7 @@ const Upload = () => {
   const totalWeightG = estimate?.weightG ?? baseWeightG;
   const baseQuote = estimate ? estimate.amountCents / 100 : baseWeightG * (MATERIAL_BASE_PRICE[material] ?? 0.2);
   const isStale = activePlate.dirty && activePlate.parts.length > 0 && !mfg;
+  const hasAccurateQuote = mfg ? mfg.totalWeightG > 0 : activePlate.lastSlice?.weightG ? activePlate.lastSlice.weightG > 0 : false;
 
   // Printer matches
   const matches: (PrinterRow & ScoredPrinter & { fitsPlate: boolean })[] = useMemo(() => {
@@ -837,7 +867,7 @@ const Upload = () => {
 
           {/* RIGHT: quote + matches */}
           <section className="space-y-6">
-            {hasAnyPart && (mfg || activePlate.lastSlice) ? (
+            {hasAnyPart && ((mfg && hasAccurateQuote) || activePlate.lastSlice) ? (
               <>
                 <CostEstimator
                   base={{
@@ -880,7 +910,7 @@ const Upload = () => {
               </div>
             )}
 
-            {totalWeightG > 0 && !isStale && matches.length > 0 && (
+            {totalWeightG > 0 && !isStale && hasAccurateQuote && matches.length > 0 && (
               <>
                 <div className="rounded-3xl border border-border bg-card p-2 shadow-soft">
                   <PrinterMap pins={mapPins} className="h-64 w-full overflow-hidden rounded-2xl" />

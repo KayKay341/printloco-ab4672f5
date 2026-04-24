@@ -48,6 +48,8 @@ export type SliceOptions = {
   layerHeightMm?: number;
   /** Filament diameter (mm). Defaults to 1.75. */
   filamentDiameterMm?: number;
+  /** Optional exact density from the source slicer/profile. */
+  materialDensityGPerCm3?: number;
   /** "in" → multiply incoming geometry by 25.4 before slicing. */
   sourceUnits?: "mm" | "in";
   /** 1 = 100%. Applied to geometry before slicing. */
@@ -307,7 +309,7 @@ export function gramsFromGcode(
 
   if (totalMm <= 0) return null;
 
-  const density = MATERIAL_DENSITY[opts.material] ?? MATERIAL_DENSITY.PLA;
+  const density = resolveDensity(opts);
   const diameter = opts.filamentDiameterMm ?? 1.75;
   const weightG = filamentLengthMmToWeightG(totalMm, diameter, density);
   return { weightG, printMinutes: timeSec > 0 ? timeSec / 60 : undefined };
@@ -317,7 +319,7 @@ function resolveWeightFromMetadata(
   metadata: CuraSliceMetadata,
   opts: SliceOptions,
 ): { weightG: number; source: WeightSource } {
-  const density = MATERIAL_DENSITY[opts.material] ?? MATERIAL_DENSITY.PLA;
+  const density = resolveDensity(opts);
   const diameter = opts.filamentDiameterMm ?? 1.75;
 
   const fromFilament = filamentLengthMmToWeightG(metadata.filamentUsage ?? 0, diameter, density);
@@ -328,6 +330,13 @@ function resolveWeightFromMetadata(
   if (fromMaterial > 0) return { weightG: fromMaterial, source: "slicer-material" };
 
   return { weightG: 0, source: "none" };
+}
+
+function resolveDensity(opts: SliceOptions): number {
+  if (Number.isFinite(opts.materialDensityGPerCm3) && (opts.materialDensityGPerCm3 ?? 0) > 0) {
+    return opts.materialDensityGPerCm3!;
+  }
+  return MATERIAL_DENSITY[opts.material] ?? MATERIAL_DENSITY.PLA;
 }
 
 function filamentLengthMmToWeightG(lengthMm: number, diameterMm: number, densityGPerCm3: number): number {
