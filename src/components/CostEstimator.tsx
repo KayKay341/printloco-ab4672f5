@@ -26,6 +26,9 @@ import {
 import { MATERIAL_BASE_PRICE } from "@/lib/stlSlicer";
 
 export type CostInputs = {
+  /** Display units AND source-mesh interpretation. "in" treats raw mesh
+   *  coordinates as inches (×25.4 to convert to mm) — fixes huge quotes
+   *  on STLs that were exported in inches. */
   units: "mm" | "in";
   scalePct: number;
   quantity: number;
