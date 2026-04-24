@@ -1,3 +1,5 @@
+import * as THREE from "three";
+
 /**
  * STL buffer transforms used to "bake" each part's translate/rotate/scale
  * into raw geometry bytes so the slicer sees the actual plate layout.
@@ -189,4 +191,18 @@ export function bboxOfStl(buf: ArrayBuffer) {
     if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
   }
   return { minX, minY, minZ, maxX, maxY, maxZ, x: maxX - minX, y: maxY - minY, z: maxZ - minZ };
+}
+
+/** Convert a triangle-only Three geometry into binary STL for the slicer. */
+export function geometryToBinaryStl(geometry: THREE.BufferGeometry): ArrayBuffer {
+  const pos = geometry.getAttribute("position");
+  if (!pos || pos.itemSize < 3) return writeBinaryStl(new Float32Array(0));
+
+  const verts = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    verts[i * 3 + 0] = pos.getX(i);
+    verts[i * 3 + 1] = pos.getY(i);
+    verts[i * 3 + 2] = pos.getZ(i);
+  }
+  return writeBinaryStl(verts);
 }

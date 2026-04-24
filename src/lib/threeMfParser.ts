@@ -19,6 +19,15 @@ export type Mfg3mfResult = {
   totalWeightG: number;
   /** Estimated print minutes parsed from embedded slicer metadata when present. */
   printMinutes: number;
+  sliceSettings: {
+    material: string;
+    infillPct: number;
+    layerHeightMm: number;
+    walls: number;
+    supports: boolean;
+    filamentDiameterMm: number;
+    materialDensityGPerCm3: number;
+  };
   bbox: { x: number; y: number; z: number };
   triangles: number;
 };
@@ -110,6 +119,7 @@ export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
 
   const filaments = await readFilaments(zip);
   const embeddedMeta = await readEmbeddedSliceMeta(zip, filaments);
+  const sliceSettings = await readSliceSettings(zip, filaments);
 
   const positions: number[] = [];
   const colors: number[] = [];
@@ -203,21 +213,12 @@ export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
   const size = new THREE.Vector3();
   bb.getSize(size);
 
-  // Convert to grams. Use slot's filament type density when available; else PLA.
-  // Apply same effective-solid heuristic as the STL slicer (treat as 35% — already
-  // sliced/oriented model so a bit denser than raw STL).
-  const EFFECTIVE_SOLID = 0.35;
-  const weightPerSlot = slotVolumeMm3.map((mm3, idx) => {
-    const cm3 = (mm3 / 1000) * EFFECTIVE_SOLID;
-    const type = filaments[idx]?.type ?? "PLA";
-    return cm3 * (DENSITY[type] ?? DENSITY.PLA);
-  });
-  const totalWeightFromGeometryG = weightPerSlot.reduce((a, b) => a + b, 0);
-  const totalWeightG = embeddedMeta.totalWeightG ?? totalWeightFromGeometryG;
+  const weightPerSlot = embeddedMeta.weightPerSlot?.length
+    ? padWeights(embeddedMeta.weightPerSlot, Math.max(embeddedMeta.weightPerSlot.length, slotVolumeMm3.length))
+    : new Array(Math.max(1, slotVolumeMm3.length)).fill(0);
+  const totalWeightG = embeddedMeta.totalWeightG ?? 0;
   const normalizedWeightPerSlot =
-    embeddedMeta.weightPerSlot?.length
-      ? padWeights(embeddedMeta.weightPerSlot, Math.max(embeddedMeta.weightPerSlot.length, slotVolumeMm3.length))
-      : weightPerSlot;
+    embeddedMeta.weightPerSlot?.length ? weightPerSlot : weightPerSlot;
 
   // Pad filaments to match observed slot count if XML referenced a slot we
   // didn't read settings for.
@@ -237,6 +238,7 @@ export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
     weightPerSlot: normalizedWeightPerSlot,
     totalWeightG,
     printMinutes: embeddedMeta.printMinutes ?? estimatePrintMinutesFromGeometry(size, totalWeightG),
+    sliceSettings,
     bbox: { x: size.x, y: size.y, z: size.z },
     triangles: positions.length / 9,
   };
@@ -315,6 +317,75 @@ async function readFilaments(zip: JSZip): Promise<FilamentSlot[]> {
     }
   }
   return [];
+}
+
+async function readSliceSettings(zip: JSZip, filaments: FilamentSlot[]) {
+  const text = await readConfigText(zip, [
+    "Metadata/project_settings.config",
+    "Metadata/model_settings.config",
+    "Metadata/slice_info.config",
+    "Metadata/creality.config",
+  ]);
+
+  const firstType = String(readScalar(text, "filament_type") ?? filaments[0]?.type ?? "PLA").toUpperCase();
+  const material = normalizeMaterial(firstType);
+  const density = Number(readScalar(text, "filament_density") ?? (DENSITY[material] ?? DENSITY.PLA));
+  const diameter = Number(readScalar(text, "filament_diameter") ?? 1.75);
+  const layerHeight = Number(readScalar(text, "layer_height") ?? 0.2);
+  const infillRaw = String(readScalar(text, "sparse_infill_density") ?? readScalar(text, "infill_density") ?? "15");
+  const walls = Number(readScalar(text, "wall_loops") ?? readScalar(text, "wall_line_count") ?? 2);
+  const supportRaw = String(readScalar(text, "enable_support") ?? readScalar(text, "support_enable") ?? "0");
+
+  return {
+    material,
+    infillPct: parsePercent(infillRaw, 15),
+    layerHeightMm: Number.isFinite(layerHeight) && layerHeight > 0 ? layerHeight : 0.2,
+    walls: Number.isFinite(walls) && walls > 0 ? walls : 2,
+    supports: /^(1|true|yes)$/i.test(supportRaw.trim()),
+    filamentDiameterMm: Number.isFinite(diameter) && diameter > 0 ? diameter : 1.75,
+    materialDensityGPerCm3: Number.isFinite(density) && density > 0 ? density : (DENSITY[material] ?? DENSITY.PLA),
+  };
+}
+
+async function readConfigText(zip: JSZip, paths: string[]): Promise<string> {
+  for (const path of paths) {
+    const file = zip.file(path);
+    if (!file) continue;
+    try {
+      return await file.async("string");
+    } catch {
+      // try next
+    }
+  }
+  return "";
+}
+
+function readScalar(text: string, key: string): string | undefined {
+  if (!text) return undefined;
+  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`"${escaped}"\\s*:\\s*(\\[[^\\]]*\\]|"[^"]*"|[^,\\n\\r}]+)`);
+  const raw = re.exec(text)?.[1]?.trim();
+  if (!raw) return undefined;
+  if (raw.startsWith("[")) {
+    const first = /"([^"]+)"/.exec(raw)?.[1] ?? /([0-9.%-]+)/.exec(raw)?.[1];
+    return first?.trim();
+  }
+  return raw.replace(/^"|"$/g, "").trim();
+}
+
+function parsePercent(raw: string, fallback: number): number {
+  const n = Number(String(raw).replace(/%/g, "").trim());
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeMaterial(raw: string): keyof typeof DENSITY {
+  const value = raw.toUpperCase();
+  if (value.includes("PETG")) return "PETG";
+  if (value.includes("ABS")) return "ABS";
+  if (value.includes("TPU")) return "TPU";
+  if (value.includes("NYLON") || value.includes("PA")) return "Nylon";
+  if (value.includes("RESIN")) return "Resin";
+  return "PLA";
 }
 
 function asArray<T>(v: T | T[] | undefined | null): T[] {
