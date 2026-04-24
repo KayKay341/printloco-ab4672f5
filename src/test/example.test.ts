@@ -148,6 +148,10 @@ endsolid cube`).buffer;
     expect(result.bbox.y).toBeCloseTo(10, 5);
     expect(result.bbox.z).toBeCloseTo(10, 5);
     expect(result.volumeCm3).toBeCloseTo(1, 5);
-    expect(result.weightG).toBeCloseTo(0.496, 3);
+    // Weight is intentionally NOT derived from raw mesh volume — it must come
+    // from the slicer's reported filament/material usage. Without slicer data,
+    // weight is 0 and the source is "none".
+    expect(result.weightG).toBe(0);
+    expect(result.weightSource).toBe("none");
   });
 });

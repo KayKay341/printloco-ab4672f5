@@ -547,9 +547,15 @@ const Upload = () => {
             ) : (
               <div className="rounded-3xl border border-dashed border-border bg-card/50 p-10 text-center">
                 <Sparkles className="mx-auto h-8 w-8 text-primary" />
-                <div className="mt-3 font-display text-lg font-semibold">Drop a model to see the quote</div>
+                <div className="mt-3 font-display text-lg font-semibold">
+                  {fileKind === "stl" && slice && slice.weightSource === "none"
+                    ? "Slicer couldn't measure this model"
+                    : "Drop a model to see the quote"}
+                </div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  We slice locally — nothing leaves your browser until you save.
+                  {fileKind === "stl" && slice && slice.weightSource === "none"
+                    ? "We only quote from real slicer output. The mesh may be non-manifold or the slicer didn't return filament usage. Try repairing the STL or upload a 3MF."
+                    : "We slice locally — nothing leaves your browser until you save."}
                 </div>
               </div>
             )}

@@ -21,10 +21,13 @@ export const MATERIAL_BASE_PRICE: Record<string, number> = {
   Resin: 0.8,
 };
 
+export type WeightSource = "slicer-filament" | "slicer-material" | "none";
+
 export type SliceResult = {
   geometry: THREE.BufferGeometry;
-  volumeCm3: number;       // raw mesh volume
-  weightG: number;         // adjusted for infill + shell
+  volumeCm3: number;       // raw mesh volume (informational only)
+  weightG: number;         // grams from slicer-reported usage; 0 if unavailable
+  weightSource: WeightSource;
   printMinutes: number;
   bbox: { x: number; y: number; z: number }; // mm
   triangles: number;
@@ -43,9 +46,6 @@ type CuraSliceMetadata = {
   material2Usage?: number;
   filamentUsage?: number;
 };
-
-const MIN_WEIGHT_RATIO = 0.2;
-const MAX_WEIGHT_RATIO = 4;
 
 let curaModulePromise: Promise<{ CuraWASM: new (config: any) => any }> | null = null;
 
@@ -73,7 +73,11 @@ function meshVolumeMm3(geom: THREE.BufferGeometry): number {
  * and converts to grams using material density. Print time uses a calibrated
  * volumetric flow rate (mm^3/s) typical for FDM.
  */
-export function sliceStlBuffer(buf: ArrayBuffer, opts: {
+/**
+ * Loads STL geometry and reports bbox / volume for display only.
+ * Weight is intentionally NOT derived here — grams must come from the slicer.
+ */
+export function sliceStlBuffer(buf: ArrayBuffer, _opts: {
   material: string;
   infillPct: number; // 0..100
 }): SliceResult {
@@ -85,22 +89,6 @@ export function sliceStlBuffer(buf: ArrayBuffer, opts: {
   const volMm3 = meshVolumeMm3(geometry);
   const volCm3 = volMm3 / 1000;
 
-  // Effective material model:
-  //   shell ~15% of bounding shell as solid wall + interior at infill density.
-  // For simplicity, treat the "solid skin" as 25% solid baseline plus
-  // the rest scaled by infill.
-  const infill = Math.max(0, Math.min(100, opts.infillPct)) / 100;
-  const effectiveSolid = 0.25 + 0.75 * infill;
-  const adjVolCm3 = volCm3 * effectiveSolid;
-
-  const density = MATERIAL_DENSITY[opts.material] ?? MATERIAL_DENSITY.PLA;
-  const weightG = adjVolCm3 * density;
-
-  // FDM volumetric flow rate ~10 mm^3/s typical; assume 7 for safety w/ travel moves.
-  // Time = effective_volume_mm3 / 7 mm^3/s, then add 60s base.
-  const printSeconds = (adjVolCm3 * 1000) / 7 + 60;
-  const printMinutes = printSeconds / 60;
-
   const bbox = geometry.boundingBox!;
   const size = new THREE.Vector3();
   bbox.getSize(size);
@@ -108,8 +96,9 @@ export function sliceStlBuffer(buf: ArrayBuffer, opts: {
   return {
     geometry,
     volumeCm3: volCm3,
-    weightG,
-    printMinutes,
+    weightG: 0,
+    weightSource: "none",
+    printMinutes: 0,
     bbox: { x: size.x, y: size.y, z: size.z },
     triangles: (geometry.getAttribute("position").count) / 3,
   };
@@ -160,37 +149,43 @@ async function loadCuraModule() {
 function toSliceResult(base: SliceResult, metadata: CuraSliceMetadata | null | undefined, opts: SliceOptions): SliceResult {
   if (!metadata) return base;
 
-  const weightG = resolveWeightFromMetadata(base.weightG, metadata, opts);
+  const resolved = resolveWeightFromMetadata(metadata, opts);
   const printMinutes = metadata.printTime && metadata.printTime > 0 ? metadata.printTime / 60 : base.printMinutes;
 
   return {
     ...base,
-    weightG,
+    weightG: resolved.weightG,
+    weightSource: resolved.source,
     printMinutes,
   };
 }
 
-function resolveWeightFromMetadata(baseWeightG: number, metadata: CuraSliceMetadata, opts: SliceOptions): number {
+/**
+ * Strictly derive grams from slicer-reported usage:
+ *   1. Prefer filament length (mm) → cylinder volume × material density.
+ *   2. Otherwise use slicer-reported material volume(s) (mm^3) × density.
+ * If the slicer returns nothing usable, weight is 0 and source is "none" —
+ * we never fall back to raw mesh volume.
+ */
+function resolveWeightFromMetadata(
+  metadata: CuraSliceMetadata,
+  opts: SliceOptions,
+): { weightG: number; source: WeightSource } {
   const density = MATERIAL_DENSITY[opts.material] ?? MATERIAL_DENSITY.PLA;
   const diameter = opts.filamentDiameterMm ?? 1.75;
 
-  const candidates = [
-    filamentLengthMmToWeightG(metadata.filamentUsage ?? 0, diameter, density),
-    materialVolumeMm3ToWeightG(metadata.material1Usage ?? 0, density),
-    materialVolumeMm3ToWeightG(metadata.material2Usage ?? 0, density),
-    materialVolumeMm3ToWeightG((metadata.material1Usage ?? 0) + (metadata.material2Usage ?? 0), density),
-  ].filter((v) => Number.isFinite(v) && v > 0);
+  const fromFilament = filamentLengthMmToWeightG(metadata.filamentUsage ?? 0, diameter, density);
+  if (fromFilament > 0) {
+    return { weightG: fromFilament, source: "slicer-filament" };
+  }
 
-  if (!candidates.length || baseWeightG <= 0) return baseWeightG;
+  const materialVolumeMm3 = (metadata.material1Usage ?? 0) + (metadata.material2Usage ?? 0);
+  const fromMaterial = materialVolumeMm3ToWeightG(materialVolumeMm3, density);
+  if (fromMaterial > 0) {
+    return { weightG: fromMaterial, source: "slicer-material" };
+  }
 
-  const plausible = candidates
-    .filter((candidate) => {
-      const ratio = candidate / baseWeightG;
-      return ratio >= MIN_WEIGHT_RATIO && ratio <= MAX_WEIGHT_RATIO;
-    })
-    .sort((a, b) => Math.abs(a - baseWeightG) - Math.abs(b - baseWeightG));
-
-  return plausible[0] ?? baseWeightG;
+  return { weightG: 0, source: "none" };
 }
 
 function filamentLengthMmToWeightG(lengthMm: number, diameterMm: number, densityGPerCm3: number): number {
