@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { computeEstimate, DEFAULT_COST_INPUTS } from "@/components/CostEstimator";
 import { sliceStlBuffer, gramsFromGcode, MATERIAL_DENSITY } from "@/lib/stlSlicer";
 import { checkFit, getPlate, parseBuildVolume } from "@/lib/buildPlates";
+import { bakeStl, mergeBinaryStls, bboxOfStl } from "@/lib/stlTransform";
 
 describe("CostEstimator math", () => {
   it("multiplies slicer grams by quantity, never inflates by scale^3", () => {
