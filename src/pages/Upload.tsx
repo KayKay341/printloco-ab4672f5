@@ -25,7 +25,7 @@ import {
 import { toast } from "sonner";
 import {
   MATERIAL_BASE_PRICE,
-  sliceStlBuffer,
+  sliceStlBufferAccurate,
   type SliceResult,
 } from "@/lib/stlSlicer";
 import { parse3mf, recolorBySlot, type FilamentSlot, type Mfg3mfResult } from "@/lib/threeMfParser";
@@ -169,7 +169,7 @@ const Upload = () => {
           setOriginalSlots(result.filaments.map((f) => ({ ...f })));
           setSlice(null);
         } else {
-          const result = sliceStlBuffer(buf, { material, infillPct: 20 });
+          const result = await sliceStlBufferAccurate(buf, { material, infillPct: 20, layerHeightMm: 0.2 });
           setSlice(result);
           setMfg(null);
         }
@@ -186,9 +186,11 @@ const Upload = () => {
   useEffect(() => {
     if (fileKind !== "stl" || !file) return;
     file.arrayBuffer().then((buf) => {
-      try {
-        setSlice(sliceStlBuffer(buf, { material, infillPct: 20 }));
-      } catch {/* ignore */}
+      sliceStlBufferAccurate(buf, { material, infillPct: 20, layerHeightMm: 0.2 })
+        .then(setSlice)
+        .catch(() => {
+          /* ignore */
+        });
     });
   }, [material, fileKind]);
 
@@ -200,11 +202,15 @@ const Upload = () => {
   }, [mfg, slice]);
 
   const baseBboxMm = useMemo(() => {
+    if (mfg) return mfg.bbox;
     if (slice) return slice.bbox;
     return { x: 0, y: 0, z: 0 };
-  }, [slice]);
+  }, [mfg, slice]);
 
-  const basePrintMinutes = useMemo(() => slice?.printMinutes ?? 0, [slice]);
+  const basePrintMinutes = useMemo(() => {
+    if (mfg) return mfg.printMinutes;
+    return slice?.printMinutes ?? 0;
+  }, [mfg, slice]);
 
   // Auto-detect inch-scale STLs (very small "mm" bbox) and switch units once.
   useEffect(() => {
