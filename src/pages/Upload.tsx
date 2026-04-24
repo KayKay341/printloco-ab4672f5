@@ -181,45 +181,73 @@ const Upload = () => {
 
     if (ext === "3mf") {
       setParsing(true);
+      let parsed: Mfg3mfResult | null = null;
       try {
         const buf = await file.arrayBuffer();
-        const result = await parse3mf(buf);
-        const sliceBuf = geometryToBinaryStl(result.geometry);
-        const sliceResult = await sliceStlBufferAccurate(sliceBuf, {
-          material: result.sliceSettings.material,
-          infillPct: result.sliceSettings.infillPct,
-          layerHeightMm: result.sliceSettings.layerHeightMm,
-          walls: result.sliceSettings.walls,
-          supports: result.sliceSettings.supports,
-          filamentDiameterMm: result.sliceSettings.filamentDiameterMm,
-          materialDensityGPerCm3: result.sliceSettings.materialDensityGPerCm3,
-          sourceUnits: "mm",
-          scale: 1,
-          plate: plateModel,
-        });
-        if (sliceResult.weightG > 0) {
-          result.totalWeightG = sliceResult.weightG;
-          result.printMinutes = sliceResult.printMinutes || result.printMinutes;
-        }
-        setMfg(result);
+        parsed = await parse3mf(buf);
+
+        // Show the model in the preview IMMEDIATELY — don't wait for the slicer.
+        setMfg(parsed);
         setMfgFile(file);
-        setOriginalSlots(result.filaments.map((f) => ({ ...f })));
-        setMaterial(result.sliceSettings.material);
+        setOriginalSlots(parsed.filaments.map((f) => ({ ...f })));
+        setMaterial(parsed.sliceSettings.material);
         setCostInputs((prev) => ({
           ...prev,
-          material: result.sliceSettings.material,
-          infillPct: result.sliceSettings.infillPct,
-          layerHeightMm: result.sliceSettings.layerHeightMm,
-          walls: result.sliceSettings.walls,
-          supports: result.sliceSettings.supports,
+          material: parsed!.sliceSettings.material,
+          infillPct: parsed!.sliceSettings.infillPct,
+          layerHeightMm: parsed!.sliceSettings.layerHeightMm,
+          walls: parsed!.sliceSettings.walls,
+          supports: parsed!.sliceSettings.supports,
         }));
-        if (sliceResult.weightG <= 0) {
-          toast.error("Could not read real filament usage from this 3MF. No quote shown until slicing succeeds.");
+
+        if (parsed.totalWeightG > 0) {
+          toast.success(`3MF loaded · ${parsed.totalWeightG.toFixed(1)}g (from embedded G-code)`);
+        } else {
+          toast.info("3MF loaded — re-slicing in background to compute weight…");
         }
       } catch (err: any) {
         toast.error(`Could not parse 3MF: ${err.message}`);
+        setParsing(false);
+        return;
       } finally {
         setParsing(false);
+      }
+
+      // Background re-slice (only if no weight was read from embedded G-code).
+      if (parsed && parsed.totalWeightG <= 0) {
+        const captured = parsed;
+        setSlicing(true);
+        (async () => {
+          try {
+            const sliceBuf = geometryToBinaryStl(captured.geometry);
+            const sliceResult = await sliceStlBufferAccurate(sliceBuf, {
+              material: captured.sliceSettings.material,
+              infillPct: captured.sliceSettings.infillPct,
+              layerHeightMm: captured.sliceSettings.layerHeightMm,
+              walls: captured.sliceSettings.walls,
+              supports: captured.sliceSettings.supports,
+              filamentDiameterMm: captured.sliceSettings.filamentDiameterMm,
+              materialDensityGPerCm3: captured.sliceSettings.materialDensityGPerCm3,
+              sourceUnits: "mm",
+              scale: 1,
+              plate: plateModel,
+            });
+            if (sliceResult.weightG > 0) {
+              setMfg((cur) => cur === captured ? {
+                ...cur,
+                totalWeightG: sliceResult.weightG,
+                printMinutes: sliceResult.printMinutes || cur.printMinutes,
+              } : cur);
+              toast.success(`Slice complete · ${sliceResult.weightG.toFixed(1)}g`);
+            } else {
+              toast.error("Slicer could not compute weight for this 3MF.");
+            }
+          } catch (err: any) {
+            toast.error(`Slice failed: ${err.message ?? "unknown error"}`);
+          } finally {
+            setSlicing(false);
+          }
+        })();
       }
       return;
     }
