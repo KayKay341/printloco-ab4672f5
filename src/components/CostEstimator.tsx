@@ -1,10 +1,9 @@
 /**
- * Interactive cost estimator. Reads a base "slice" (weight/time/bbox) and
- * applies user-tunable parameters (units, scale, qty, infill, layer height,
- * walls, supports, rush) to derive live totals.
- *
- * Pure presentational — parent owns the source mesh. We expose the resolved
- * total so the parent can pass it into checkout.
+ * Interactive cost estimator. The slicer is the source of truth for
+ * grams + minutes for the CURRENT settings (material, layer height, infill,
+ * walls, supports, scale, units). This component layers on quantity, rush
+ * surcharge, and per-gram price to derive the customer-facing total — no
+ * cubic post-scaling, no infill heuristics, no shell math.
  */
 
 import { useEffect, useMemo } from "react";
@@ -28,7 +27,7 @@ import { MATERIAL_BASE_PRICE } from "@/lib/stlSlicer";
 export type CostInputs = {
   /** Controls how dimensions are displayed to the user. */
   units: "mm" | "in";
-  /** Controls how uploaded mesh coordinates are interpreted for pricing/sizing. */
+  /** Controls how uploaded mesh coordinates are interpreted by the slicer. */
   sourceUnits: "mm" | "in";
   scalePct: number;
   quantity: number;
@@ -54,11 +53,11 @@ export const DEFAULT_COST_INPUTS: CostInputs = {
 };
 
 export type EstimatorBase = {
-  /** Weight from the unmodified slice (1×, 20% infill, 0.2mm). */
-  baseWeightG: number;
-  /** Print minutes from the unmodified slice. */
-  basePrintMinutes: number;
-  /** Bounding box in mm, original scale. */
+  /** Grams per unit from the most-recent real slice. */
+  weightG: number;
+  /** Print minutes per unit from the most-recent real slice. */
+  printMinutes: number;
+  /** Bounding box (mm) of the geometry the slicer received (already scaled). */
   bboxMm: { x: number; y: number; z: number };
   /** Per-gram price override (e.g. picked maker's price). Falls back to material default. */
   pricePerGram?: number;
@@ -85,50 +84,29 @@ type Props = {
 const LAYER_HEIGHTS = [0.08, 0.12, 0.16, 0.2, 0.28];
 
 export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOutput {
-  // Volume scales as scale^3.
-  const userScale = Math.max(10, Math.min(500, i.scalePct)) / 100;
-  // If the uploaded model was authored in inches, convert source coordinates
-  // from inches → mm for size/weight/time calculations.
-  const unitFactor = i.sourceUnits === "in" ? 25.4 : 1;
-  const linearScale = userScale * unitFactor;
-  const volScale = Math.pow(linearScale, 3);
-
-  // Infill model: shell stays solid, interior scales with infill density.
-  const shellSolidFraction = Math.min(0.5, 0.1 + i.walls * 0.05);
-  const infill = Math.max(0, Math.min(100, i.infillPct)) / 100;
-  const effectiveSolid = shellSolidFraction + (1 - shellSolidFraction) * infill;
-  const baselineSolid = 0.25 + 0.75 * 0.2; // matches sliceStlBuffer default
-  const massRatio = effectiveSolid / baselineSolid;
-
-  let weightPerUnit = base.baseWeightG * volScale * massRatio;
-  if (i.supports) weightPerUnit *= 1.08;
-
-  // Print time scales with volume and inversely with layer height.
-  const layerFactor = 0.2 / Math.max(0.04, i.layerHeightMm);
-  let timePerUnit = base.basePrintMinutes * volScale * layerFactor;
-  if (i.supports) timePerUnit *= 1.12;
-
   const qty = Math.max(1, Math.min(500, Math.floor(i.quantity)));
-  const totalWeightG = weightPerUnit * qty;
-  const totalMinutes = timePerUnit * qty;
+
+  // Weight + time come straight from the slicer (already accounts for scale,
+  // units, infill, walls, supports because we re-sliced when those changed).
+  const totalWeightG = Math.max(0, base.weightG) * qty;
+  const totalMinutes = Math.max(0, base.printMinutes) * qty;
 
   const ppg = base.pricePerGram ?? MATERIAL_BASE_PRICE[i.material] ?? 0.2;
   const baseCost = totalWeightG * ppg;
-  const supportsBump = i.supports ? Math.max(0.5, totalWeightG * 0.02) : 0;
+  const supportsBump = i.supports && totalWeightG > 0 ? Math.max(0.5, totalWeightG * 0.02) : 0;
   let total = baseCost + supportsBump;
   if (i.rush) total *= 1.25;
 
-  const amountCents = Math.max(100, Math.round(total * 100));
-  const perUnitCents = Math.round(amountCents / qty);
+  const amountCents = totalWeightG > 0 ? Math.max(100, Math.round(total * 100)) : 0;
+  const perUnitCents = qty > 0 ? Math.round(amountCents / qty) : 0;
 
-  // Bbox in MM after scale + source-unit interpretation.
-  const bboxMm = {
-    x: base.bboxMm.x * linearScale,
-    y: base.bboxMm.y * linearScale,
-    z: base.bboxMm.z * linearScale,
+  return {
+    weightG: totalWeightG,
+    printMinutes: totalMinutes,
+    amountCents,
+    perUnitCents,
+    bbox: { ...base.bboxMm },
   };
-
-  return { weightG: totalWeightG, printMinutes: totalMinutes, amountCents, perUnitCents, bbox: bboxMm };
 }
 
 export default function CostEstimator({ base, inputs, onChange, onResolved, hideMaterial }: Props) {
@@ -167,7 +145,7 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
         </div>
       </div>
 
-      {/* Quick stats grid (mobile + always visible) */}
+      {/* Quick stats grid */}
       <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-background/60 p-3 text-xs">
         <Stat icon={<Sparkles className="h-3 w-3" />} label="Weight" value={weightLabel} />
         <Stat icon={<Timer className="h-3 w-3" />} label="Print time" value={timeLabel} />
@@ -213,7 +191,7 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
               ))}
             </div>
             <div className="mt-1 text-[11px] text-muted-foreground">
-              Changes quote sizing only if the uploaded file used inches.
+              Re-slices the model in inches if your file was authored that way.
             </div>
           </div>
 
@@ -252,6 +230,7 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
             onValueChange={([v]) => setI({ scalePct: v })}
             className="mt-2"
           />
+          <div className="mt-1 text-[11px] text-muted-foreground">Re-slices the model at the new size.</div>
         </div>
 
         {/* Infill */}
@@ -268,30 +247,25 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
             onValueChange={([v]) => setI({ infillPct: v })}
             className="mt-2"
           />
-          <div className="mt-1 text-[11px] text-muted-foreground">
-            Lower = lighter and faster · Higher = stronger
-          </div>
         </div>
 
         {/* Layer height + walls */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-              <Layers className="mr-1 inline h-3 w-3" /> Layer height
-            </Label>
+            <Label className="text-xs uppercase tracking-wider text-muted-foreground">Layer height</Label>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {LAYER_HEIGHTS.map((lh) => (
                 <button
                   key={lh}
                   type="button"
                   onClick={() => setI({ layerHeightMm: lh })}
-                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${
-                    Math.abs(inputs.layerHeightMm - lh) < 0.001
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                    inputs.layerHeightMm === lh
                       ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background hover:border-foreground/30"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  {lh}
+                  {lh.toFixed(2)} mm
                 </button>
               ))}
             </div>
@@ -305,12 +279,12 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
               <Input
                 type="number"
                 min={1}
-                max={6}
+                max={8}
                 value={inputs.walls}
-                onChange={(e) => setI({ walls: Math.max(1, Math.min(6, Number(e.target.value) || 1)) })}
-                className="h-9 w-16 text-center"
+                onChange={(e) => setI({ walls: Math.max(1, Math.min(8, Number(e.target.value) || 1)) })}
+                className="h-9 w-20 text-center"
               />
-              <Button type="button" size="icon" variant="outline" onClick={() => setI({ walls: Math.min(6, inputs.walls + 1) })}>
+              <Button type="button" size="icon" variant="outline" onClick={() => setI({ walls: Math.min(8, inputs.walls + 1) })}>
                 <Plus className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -319,20 +293,18 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
 
         {/* Toggles */}
         <div className="grid gap-3 sm:grid-cols-2">
-          <ToggleRow
-            icon={<Wrench className="h-4 w-4" />}
-            label="Supports"
-            hint="+8% material, +12% time"
-            checked={inputs.supports}
-            onChange={(v) => setI({ supports: v })}
-          />
-          <ToggleRow
-            icon={<Zap className="h-4 w-4" />}
-            label="Rush (24h)"
-            hint="+25% surcharge"
-            checked={inputs.rush}
-            onChange={(v) => setI({ rush: v })}
-          />
+          <label className="flex items-center justify-between rounded-2xl border border-border bg-background/60 p-3">
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <Wrench className="h-4 w-4 text-primary" /> Supports
+            </span>
+            <Switch checked={inputs.supports} onCheckedChange={(v) => setI({ supports: v })} />
+          </label>
+          <label className="flex items-center justify-between rounded-2xl border border-border bg-background/60 p-3">
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <Zap className="h-4 w-4 text-primary" /> Rush (24h) <span className="text-xs text-muted-foreground">+25%</span>
+            </span>
+            <Switch checked={inputs.rush} onCheckedChange={(v) => setI({ rush: v })} />
+          </label>
         </div>
       </div>
     </div>
@@ -340,42 +312,17 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
 }
 
 const Stat = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
-  <div className="rounded-xl bg-card/50 p-2">
-    <div className="flex items-center gap-1 text-muted-foreground">
+  <div>
+    <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
       {icon}
-      <span className="text-[10px] uppercase tracking-wider">{label}</span>
+      {label}
     </div>
-    <div className="mt-0.5 truncate font-semibold">{value}</div>
+    <div className="mt-0.5 font-display text-sm font-semibold">{value}</div>
   </div>
 );
 
-const ToggleRow = ({
-  icon,
-  label,
-  hint,
-  checked,
-  onChange,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  hint: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) => (
-  <label className="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-border bg-background/50 p-3">
-    <div className="flex items-center gap-2">
-      <span className="text-primary">{icon}</span>
-      <div>
-        <div className="text-sm font-semibold">{label}</div>
-        <div className="text-[11px] text-muted-foreground">{hint}</div>
-      </div>
-    </div>
-    <Switch checked={checked} onCheckedChange={onChange} />
-  </label>
-);
-
 function fmtMinutes(mins: number): string {
-  if (mins < 1) return "< 1 min";
+  if (!Number.isFinite(mins) || mins <= 0) return "—";
   if (mins < 60) return `${Math.round(mins)} min`;
   const h = Math.floor(mins / 60);
   const m = Math.round(mins % 60);
