@@ -40,7 +40,7 @@ export default function PartTransformPanel({
   const rotBtn = (axis: "rotX" | "rotY" | "rotZ", deg: number, label: string) => (
     <button
       type="button"
-      onClick={() => onChange({ [axis]: (t[axis] + deg) % 360 } as Partial<PartTransform>)}
+      onClick={() => onChange({ [axis]: ((t[axis] + deg) % 360 + 360) % 360 - (((t[axis] + deg) % 360 + 360) % 360 > 180 ? 360 : 0) } as Partial<PartTransform>)}
       className="rounded-full border border-border bg-background px-2 py-1 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
     >
       {label}
@@ -70,8 +70,8 @@ export default function PartTransformPanel({
           <Move className="h-3 w-3" /> Position (mm)
         </div>
         <div className="grid grid-cols-2 gap-3">
-          <AxisSlider label="X" value={t.tx} min={-halfX} max={halfX} onChange={(v) => onChange({ tx: v })} />
-          <AxisSlider label="Y" value={t.ty} min={-halfY} max={halfY} onChange={(v) => onChange({ ty: v })} />
+          <AxisRow label="X" value={t.tx} min={-halfX} max={halfX} step={0.5} onChange={(v) => onChange({ tx: v })} />
+          <AxisRow label="Y" value={t.ty} min={-halfY} max={halfY} step={0.5} onChange={(v) => onChange({ ty: v })} />
         </div>
         <div className="mt-2 flex gap-1.5">
           <Button size="sm" variant="ghost" onClick={onCenter} className="h-7 px-2 text-[11px]">
@@ -92,7 +92,7 @@ export default function PartTransformPanel({
           {(["rotX", "rotY", "rotZ"] as const).map((axis) => {
             const lbl = axis === "rotX" ? "X" : axis === "rotY" ? "Y" : "Z";
             return (
-              <div key={axis} className="grid grid-cols-[20px_1fr_auto] items-center gap-2">
+              <div key={axis} className="grid grid-cols-[20px_1fr_auto_auto] items-center gap-2">
                 <span className="text-xs font-semibold">{lbl}</span>
                 <Slider
                   value={[t[axis]]}
@@ -101,10 +101,19 @@ export default function PartTransformPanel({
                   step={1}
                   onValueChange={([v]) => onChange({ [axis]: v } as Partial<PartTransform>)}
                 />
-                <div className="flex items-center gap-1">
-                  <span className="w-10 text-right text-xs tabular-nums">{Math.round(t[axis])}°</span>
-                  {rotBtn(axis, 90, "+90°")}
-                </div>
+                <Input
+                  type="number"
+                  min={-360}
+                  max={360}
+                  step={1}
+                  value={Math.round(t[axis] * 10) / 10}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (Number.isFinite(v)) onChange({ [axis]: v } as Partial<PartTransform>);
+                  }}
+                  className="h-8 w-16 text-center text-xs tabular-nums"
+                />
+                {rotBtn(axis, 90, "+90°")}
               </div>
             );
           })}
@@ -114,7 +123,7 @@ export default function PartTransformPanel({
       {/* Per-part scale */}
       <div>
         <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-          Scale
+          Scale (%)
         </div>
         <div className="grid grid-cols-[1fr_auto] items-center gap-2">
           <Slider
@@ -128,8 +137,12 @@ export default function PartTransformPanel({
             type="number"
             min={25}
             max={300}
+            step={1}
             value={Math.round(t.scale * 100)}
-            onChange={(e) => onChange({ scale: Math.max(0.25, Math.min(3, Number(e.target.value) / 100 || 1)) })}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              if (Number.isFinite(n)) onChange({ scale: Math.max(0.25, Math.min(3, n / 100)) });
+            }}
             className="h-8 w-16 text-center"
           />
         </div>
@@ -138,14 +151,40 @@ export default function PartTransformPanel({
   );
 }
 
-function AxisSlider({ label, value, min, max, onChange }: { label: string; value: number; min: number; max: number; onChange: (v: number) => void }) {
+/** Slider + numeric text input row so users can type exact values. */
+function AxisRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
   return (
     <div>
       <div className="mb-1 flex items-center justify-between text-[11px]">
         <span className="font-semibold">{label}</span>
-        <span className="tabular-nums text-muted-foreground">{value.toFixed(1)}</span>
+        <Input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          value={Math.round(value * 10) / 10}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (Number.isFinite(v)) onChange(v);
+          }}
+          className="h-6 w-20 text-right text-[11px] tabular-nums"
+        />
       </div>
-      <Slider value={[value]} min={min} max={max} step={0.5} onValueChange={([v]) => onChange(v)} />
+      <Slider value={[value]} min={min} max={max} step={step} onValueChange={([v]) => onChange(v)} />
     </div>
   );
 }
