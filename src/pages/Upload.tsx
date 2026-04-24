@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { useDemoMode } from "@/hooks/useDemoMode";
@@ -7,7 +7,6 @@ import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
 import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Upload as UploadIcon,
@@ -19,25 +18,40 @@ import {
   Layers,
   Package,
   Palette,
-  Link2,
-  Download,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import * as THREE from "three";
 import {
   MATERIAL_BASE_PRICE,
   sliceStlBufferAccurate,
   type SliceResult,
 } from "@/lib/stlSlicer";
 import { parse3mf, recolorBySlot, type FilamentSlot, type Mfg3mfResult } from "@/lib/threeMfParser";
-import StlPreview from "@/components/StlPreview";
-import ColorPicker, { COMMON_COLORS } from "@/components/ColorPicker";
+import StlPreview, { type PreviewPart } from "@/components/StlPreview";
+import ColorPicker from "@/components/ColorPicker";
 import PrinterMap from "@/components/PrinterMap";
 import CheckoutDialog from "@/components/CheckoutDialog";
 import BulkQuoteDialog from "@/components/BulkQuoteDialog";
 import CostEstimator, { DEFAULT_COST_INPUTS, type CostInputs, type EstimatorOutput } from "@/components/CostEstimator";
 import { scorePrinter, type PrinterForScore, type ScoredPrinter } from "@/lib/printerScore";
 import { BUILD_PLATES, DEFAULT_PLATE_ID, getPlate, checkFit, parseBuildVolume } from "@/lib/buildPlates";
-import * as THREE from "three";
+import {
+  cryptoId,
+  findCollisions,
+  IDENTITY_TRANSFORM,
+  makePlate,
+  plateOverflow,
+  previewGeometry,
+  transformedBbox,
+  type PartState,
+  type PartTransform,
+  type PlateState,
+} from "@/lib/sliceJob";
+import { bakeStl, mergeBinaryStls } from "@/lib/stlTransform";
+import PartTransformPanel from "@/components/PartTransformPanel";
+import PlateTabs from "@/components/PlateTabs";
 
 const MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
 
@@ -69,54 +83,154 @@ type PrinterRow = PrinterForScore & {
   filament_colors: FilamentColorRow[];
 };
 
-type FileKind = "stl" | "3mf";
-
 const Upload = () => {
   const { user, loading } = useAuth();
-  const { isDemo, addDemoUpload, createDemoOrder } = useDemoMode();
+  const { isDemo } = useDemoMode();
   const navigate = useNavigate();
+
+  // Source / file UI
   const [sourceMode, setSourceMode] = useState<SourceMode>("file");
   const [urlInput, setUrlInput] = useState("");
   const [urlLoading, setUrlLoading] = useState(false);
-  const [sourceUrl, setSourceUrl] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [fileKind, setFileKind] = useState<FileKind>("stl");
+
+  // 3MF (single-plate, single-part path)
+  const [mfg, setMfg] = useState<Mfg3mfResult | null>(null);
+  const [mfgFile, setMfgFile] = useState<File | null>(null);
+  const [originalSlots, setOriginalSlots] = useState<FilamentSlot[]>([]);
   const [parsing, setParsing] = useState(false);
 
-  // STL path
-  const [slice, setSlice] = useState<SliceResult | null>(null);
-
-  // 3MF path
-  const [mfg, setMfg] = useState<Mfg3mfResult | null>(null);
-  const [originalSlots, setOriginalSlots] = useState<FilamentSlot[]>([]);
-
+  // Material / color (STL path)
   const [material, setMaterial] = useState("PLA");
   const [colorName, setColorName] = useState<string | null>(null);
   const [colorHex, setColorHex] = useState<string>("#9333EA");
+
+  // Printers
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
+
+  // Plates / parts (STL path)
+  const [plates, setPlates] = useState<PlateState[]>(() => [makePlate(DEFAULT_PLATE_ID)]);
+  const [activePlateId, setActivePlateId] = useState<string>(plates[0].id);
+  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
+  const [slicing, setSlicing] = useState(false);
+
+  // Cost inputs (settings panel — DOES NOT auto-slice)
+  const [costInputs, setCostInputs] = useState<CostInputs>({ ...DEFAULT_COST_INPUTS, material: "PLA" });
+  const [estimate, setEstimate] = useState<EstimatorOutput | null>(null);
+
+  // Submit / checkout
   const [submitting, setSubmitting] = useState(false);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [checkoutPayload, setCheckoutPayload] = useState<any>(null);
   const [savedStlId, setSavedStlId] = useState<string | null>(null);
 
-  // Cost estimator inputs (live)
-  const [costInputs, setCostInputs] = useState<CostInputs>({ ...DEFAULT_COST_INPUTS, material: "PLA" });
-  const [estimate, setEstimate] = useState<EstimatorOutput | null>(null);
-
-  // Build plate selection
-  const [plateId, setPlateId] = useState<string>(DEFAULT_PLATE_ID);
-  const plate = useMemo(() => getPlate(plateId), [plateId]);
-
   // Bulk
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkPrinter, setBulkPrinter] = useState<PrinterRow | null>(null);
 
-  // Sync estimator material with the chosen STL material
-  useEffect(() => {
-    setCostInputs((c) => ({ ...c, material }));
-  }, [material]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch a remote model via the fetch-model edge function and load it as a File
+  useEffect(() => { setCostInputs((c) => ({ ...c, material })); }, [material]);
+
+  // Fetch printers once
+  useEffect(() => {
+    supabase
+      .from("printers")
+      .select("id, owner_id, brand, model, materials, price_per_gram, material_prices, neighborhood, city, bio, latitude, longitude, has_ams, ams_slot_count, accepts_3mf, accepts_bulk, min_bulk_quantity, build_volume, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock, surcharge_per_gram)")
+      .eq("is_active", true)
+      .then(({ data, error }) => {
+        if (error) toast.error(error.message);
+        else setPrinters((data as unknown as PrinterRow[]) ?? []);
+      });
+  }, []);
+
+  // ----- Active plate helpers -----
+  const activePlate: PlateState = useMemo(
+    () => plates.find((p) => p.id === activePlateId) ?? plates[0],
+    [plates, activePlateId],
+  );
+  const plateModel = useMemo(() => getPlate(activePlate.plateId), [activePlate.plateId]);
+
+  const updateActivePlate = (updater: (p: PlateState) => PlateState, markDirty = true) => {
+    setPlates((prev) => prev.map((p) => p.id === activePlateId ? updater({ ...p, dirty: markDirty ? true : p.dirty }) : p));
+  };
+
+  const updatePart = (partId: string, patch: Partial<PartTransform>) => {
+    updateActivePlate((p) => ({
+      ...p,
+      parts: p.parts.map((part) => part.id === partId ? { ...part, transform: { ...part.transform, ...patch } } : part),
+    }));
+  };
+
+  const selectedPart = useMemo(
+    () => activePlate.parts.find((p) => p.id === selectedPartId) ?? null,
+    [activePlate.parts, selectedPartId],
+  );
+
+  // ----- File input → load as STL part(s) or 3MF -----
+  const handleFile = async (file: File) => {
+    const ext = file.name.toLowerCase().split(".").pop();
+    if (ext !== "stl" && ext !== "3mf") {
+      toast.error("Please upload a .stl or .3mf file");
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("File is too large (50MB max)");
+      return;
+    }
+    setSavedStlId(null);
+
+    if (ext === "3mf") {
+      setParsing(true);
+      try {
+        const buf = await file.arrayBuffer();
+        const result = await parse3mf(buf);
+        setMfg(result);
+        setMfgFile(file);
+        setOriginalSlots(result.filaments.map((f) => ({ ...f })));
+      } catch (err: any) {
+        toast.error(`Could not parse 3MF: ${err.message}`);
+      } finally {
+        setParsing(false);
+      }
+      return;
+    }
+
+    // STL → add as a part to the active plate
+    setMfg(null);
+    setMfgFile(null);
+    try {
+      setParsing(true);
+      const buf = await file.arrayBuffer();
+      const loader = new STLLoader();
+      const geom = loader.parse(buf);
+      geom.computeBoundingBox();
+      const sz = new THREE.Vector3();
+      geom.boundingBox!.getSize(sz);
+
+      // Heuristic inch detection: very small "mm" bbox
+      const sourceUnits: "mm" | "in" = (Math.max(sz.x, sz.y, sz.z) > 0 && Math.max(sz.x, sz.y, sz.z) < 8) ? "in" : "mm";
+
+      const part: PartState = {
+        id: cryptoId(),
+        fileName: file.name,
+        kind: "stl",
+        buffer: buf,
+        geometry: geom,
+        baseBboxMm: { x: sz.x * (sourceUnits === "in" ? 25.4 : 1), y: sz.y * (sourceUnits === "in" ? 25.4 : 1), z: sz.z * (sourceUnits === "in" ? 25.4 : 1) },
+        transform: { ...IDENTITY_TRANSFORM, scale: sourceUnits === "in" ? 25.4 : 1 },
+        color: colorHex,
+        sourceUnits,
+      };
+      updateActivePlate((p) => ({ ...p, parts: [...p.parts, part] }));
+      setSelectedPartId(part.id);
+      if (sourceUnits === "in") toast.info("Detected inch-based STL — auto-scaled to mm.");
+    } catch (err: any) {
+      toast.error(err.message ?? "Could not load STL");
+    } finally {
+      setParsing(false);
+    }
+  };
+
   const handleFetchUrl = async () => {
     const trimmed = urlInput.trim();
     if (!trimmed) {
@@ -132,9 +246,7 @@ const Upload = () => {
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const blob = new Blob([bytes], { type: data.contentType });
       const f = new File([blob], data.fileName, { type: data.contentType });
-      setSourceUrl(data.sourceUrl ?? trimmed);
-      setSavedStlId(null);
-      setFile(f);
+      await handleFile(f);
       toast.success("Model loaded from URL");
     } catch (err: any) {
       toast.error(err.message ?? "Could not fetch URL");
@@ -143,165 +255,194 @@ const Upload = () => {
     }
   };
 
+  // ----- Part actions -----
+  const duplicatePart = (id: string) => {
+    const src = activePlate.parts.find((p) => p.id === id);
+    if (!src) return;
+    const copy: PartState = {
+      ...src,
+      id: cryptoId(),
+      transform: { ...src.transform, tx: src.transform.tx + 30, ty: src.transform.ty + 30 },
+    };
+    updateActivePlate((p) => ({ ...p, parts: [...p.parts, copy] }));
+    setSelectedPartId(copy.id);
+  };
+  const deletePart = (id: string) => {
+    updateActivePlate((p) => ({ ...p, parts: p.parts.filter((q) => q.id !== id) }));
+    if (selectedPartId === id) setSelectedPartId(null);
+  };
+  const centerPart = (id: string) => updatePart(id, { tx: 0, ty: 0 });
+  const layFlat = (id: string) => updatePart(id, { rotX: 0, rotY: 0 });
 
-  useEffect(() => {
-    supabase
-      .from("printers")
-      .select("id, owner_id, brand, model, materials, price_per_gram, material_prices, neighborhood, city, bio, latitude, longitude, has_ams, ams_slot_count, accepts_3mf, accepts_bulk, min_bulk_quantity, build_volume, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock, surcharge_per_gram)")
-      .eq("is_active", true)
-      .then(({ data, error }) => {
-        if (error) toast.error(error.message);
-        else setPrinters((data as unknown as PrinterRow[]) ?? []);
-      });
-  }, []);
+  // ----- Plate actions -----
+  const addPlate = () => {
+    const p = makePlate(activePlate.plateId);
+    setPlates((prev) => [...prev, p]);
+    setActivePlateId(p.id);
+    setSelectedPartId(null);
+  };
+  const removePlate = (id: string) => {
+    setPlates((prev) => {
+      const next = prev.filter((p) => p.id !== id);
+      if (next.length === 0) return [makePlate(DEFAULT_PLATE_ID)];
+      return next;
+    });
+    if (activePlateId === id) {
+      const next = plates.find((p) => p.id !== id);
+      if (next) setActivePlateId(next.id);
+    }
+  };
+  const setActivePlateModel = (plateId: string) => {
+    updateActivePlate((p) => ({ ...p, plateId }));
+  };
 
-  // Parse-only on file change. The 3MF path uses embedded slicer data; the
-  // STL path is sliced separately by the settings-driven effect below.
+  // Mark dirty when slice settings change (material, infill, etc.)
+  const settingsKey = `${material}|${costInputs.infillPct}|${costInputs.layerHeightMm}|${costInputs.walls}|${costInputs.supports}|${costInputs.scalePct}|${plateModel.x}x${plateModel.y}x${plateModel.z}`;
+  const lastSettingsKey = useRef(settingsKey);
   useEffect(() => {
-    if (!file) {
-      setSlice(null);
-      setMfg(null);
+    if (lastSettingsKey.current !== settingsKey) {
+      lastSettingsKey.current = settingsKey;
+      setPlates((prev) => prev.map((p) => p.id === activePlateId ? { ...p, dirty: true } : p));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsKey]);
+
+  // ----- Preview parts (transformed geometries) -----
+  const collisions = useMemo(() => findCollisions(activePlate.parts), [activePlate.parts]);
+  const overflow = useMemo(() => plateOverflow(activePlate.parts, plateModel), [activePlate.parts, plateModel]);
+
+  const previewParts: PreviewPart[] = useMemo(
+    () => activePlate.parts.map((p) => ({
+      id: p.id,
+      geometry: previewGeometry(p),
+      color: p.color,
+      selected: p.id === selectedPartId,
+      collides: collisions.has(p.id),
+    })),
+    [activePlate.parts, selectedPartId, collisions],
+  );
+
+  // Handler: drag a part on plate
+  const handleDragMove = (partId: string, dx: number, dy: number) => {
+    const p = activePlate.parts.find((pp) => pp.id === partId);
+    if (!p) return;
+    updatePart(partId, { tx: p.transform.tx + dx, ty: p.transform.ty + dy });
+  };
+
+  // ----- Slice plate (manual) -----
+  const handleSlicePlate = async () => {
+    if (activePlate.parts.length === 0) {
+      toast.error("Add a part to the plate first.");
       return;
     }
-    const ext = file.name.toLowerCase().split(".").pop();
-    const kind: FileKind = ext === "3mf" ? "3mf" : "stl";
-    setFileKind(kind);
+    setSlicing(true);
+    try {
+      // Bake each part: per-part-scale (transform.scale already includes inch→mm) + rotation, lay-flat, then translate.
+      const baked: ArrayBuffer[] = [];
+      for (const p of activePlate.parts) {
+        const bb = transformedBbox(p);
+        // We rotate + scale + drop-to-floor then translate. But previewGeometry already
+        // encodes lay-flat + translate; for the bake we recompute from the original
+        // buffer to avoid double-applying.
+        const out = bakeStl(p.buffer, {
+          preScale: p.transform.scale,
+          rotXDeg: p.transform.rotX,
+          rotYDeg: p.transform.rotY,
+          rotZDeg: p.transform.rotZ,
+          layFlatToPlate: true,
+          translate: [p.transform.tx, p.transform.ty, 0],
+        });
+        // bb computed but not strictly needed — could be used to flag oversize before slicing
+        void bb;
+        baked.push(out);
+      }
+      const merged = mergeBinaryStls(baked);
 
-    if (kind === "3mf") {
-      setParsing(true);
-      file.arrayBuffer()
-        .then((buf) => parse3mf(buf))
-        .then((result) => {
-          setMfg(result);
-          setOriginalSlots(result.filaments.map((f) => ({ ...f })));
-          setSlice(null);
-        })
-        .catch((err) => {
-          toast.error(`Could not parse 3MF: ${err.message}`);
-          setMfg(null);
-        })
-        .finally(() => setParsing(false));
-    } else {
-      setMfg(null);
-    }
-  }, [file]);
+      // Apply user-level scale slider on top of per-part scale (kept for global "make whole plate bigger")
+      const userScale = costInputs.scalePct / 100;
+      const sliceBuf = userScale === 1 ? merged : bakeStl(merged, { preScale: userScale });
 
-  // Re-slice STL whenever any setting that affects grams/time/fit changes.
-  // The slicer is the source of truth — no post-scaling in CostEstimator.
-  useEffect(() => {
-    if (fileKind !== "stl" || !file) return;
-    let cancelled = false;
-    setParsing(true);
-    file.arrayBuffer()
-      .then((buf) =>
-        sliceStlBufferAccurate(buf, {
-          material,
-          infillPct: costInputs.infillPct,
-          layerHeightMm: costInputs.layerHeightMm,
-          walls: costInputs.walls,
-          supports: costInputs.supports,
-          sourceUnits: costInputs.sourceUnits,
-          scale: costInputs.scalePct / 100,
-          plate,
-        }),
-      )
-      .then((result) => {
-        if (!cancelled) setSlice(result);
-      })
-      .catch(() => {
-        if (!cancelled) setSlice(null);
-      })
-      .finally(() => {
-        if (!cancelled) setParsing(false);
+      const result = await sliceStlBufferAccurate(sliceBuf, {
+        material,
+        infillPct: costInputs.infillPct,
+        layerHeightMm: costInputs.layerHeightMm,
+        walls: costInputs.walls,
+        supports: costInputs.supports,
+        sourceUnits: "mm",          // already baked into mm
+        scale: 1,                   // already applied
+        plate: plateModel,
       });
-    return () => { cancelled = true; };
-  }, [
-    file, fileKind, material,
-    costInputs.infillPct, costInputs.layerHeightMm, costInputs.walls,
-    costInputs.supports, costInputs.sourceUnits, costInputs.scalePct,
-    plate.x, plate.y, plate.z,
-  ]);
 
-  /** Per-unit weight from real slicer output. */
+      if (result.weightG <= 0) {
+        toast.error("Slicer returned no material usage. Try repairing the STL or changing settings.");
+      } else {
+        toast.success(`Plate sliced: ${result.weightG.toFixed(1)}g · ${formatMins(result.printMinutes)}`);
+      }
+
+      setPlates((prev) => prev.map((p) =>
+        p.id === activePlateId ? { ...p, lastSlice: result, dirty: false } : p,
+      ));
+    } catch (err: any) {
+      toast.error(err.message ?? "Slice failed");
+    } finally {
+      setSlicing(false);
+    }
+  };
+
+  // ----- Quote inputs -----
   const baseWeightG = useMemo(() => {
     if (mfg) return mfg.totalWeightG;
-    if (slice) return slice.weightG;
-    return 0;
-  }, [mfg, slice]);
-
+    return activePlate.lastSlice?.weightG ?? 0;
+  }, [mfg, activePlate.lastSlice]);
   const baseBboxMm = useMemo(() => {
     if (mfg) return mfg.bbox;
-    if (slice) return slice.bbox;
-    return { x: 0, y: 0, z: 0 };
-  }, [mfg, slice]);
-
+    return activePlate.lastSlice?.bbox ?? { x: 0, y: 0, z: 0 };
+  }, [mfg, activePlate.lastSlice]);
   const basePrintMinutes = useMemo(() => {
     if (mfg) return mfg.printMinutes;
-    return slice?.printMinutes ?? 0;
-  }, [mfg, slice]);
+    return activePlate.lastSlice?.printMinutes ?? 0;
+  }, [mfg, activePlate.lastSlice]);
 
-  // Auto-detect inch-scale STLs (very small "mm" bbox) and switch source units once.
-  useEffect(() => {
-    if (!slice) return;
-    const max = Math.max(slice.bbox.x, slice.bbox.y, slice.bbox.z);
-    if (max > 0 && max < 8 && costInputs.sourceUnits === "mm") {
-      setCostInputs((c) => ({ ...c, sourceUnits: "in", units: "in" }));
-      toast.info("Detected inch-based model. Re-slicing in inches.");
-    }
-  }, [slice, costInputs.sourceUnits]);
-
-  // Fit check against the selected build plate.
-  const fit = useMemo(() => checkFit(baseBboxMm, plate), [baseBboxMm, plate]);
-  const overflow = fit.status === "too-large";
-
-  /** Live total weight after estimator inputs (falls back to per-unit slice weight). */
   const totalWeightG = estimate?.weightG ?? baseWeightG;
   const baseQuote = estimate ? estimate.amountCents / 100 : baseWeightG * (MATERIAL_BASE_PRICE[material] ?? 0.2);
+  const isStale = activePlate.dirty && activePlate.parts.length > 0 && !mfg;
 
-  const previewGeometry: THREE.BufferGeometry | null = mfg?.geometry ?? slice?.geometry ?? null;
-
-  // Build printer matches — exclude printers whose declared build_volume can't fit the part.
+  // Printer matches
   const matches: (PrinterRow & ScoredPrinter & { fitsPlate: boolean })[] = useMemo(() => {
-    if (totalWeightG <= 0) return [];
+    if (totalWeightG <= 0 || isStale) return [];
+    const refBbox = mfg ? mfg.bbox : baseBboxMm;
     return printers
       .map((p) => {
         const score = scorePrinter(p, { weightG: totalWeightG, material, colorName });
         const bv = parseBuildVolume(p.build_volume);
-        const fitsPlate = bv
-          ? checkFit(baseBboxMm, { x: bv.x, y: bv.y, z: bv.z } as any).status !== "too-large"
-          : true;
+        const fitsPlate = bv ? checkFit(refBbox, { x: bv.x, y: bv.y, z: bv.z } as any).status !== "too-large" : true;
         return { ...p, ...score, fitsPlate };
       })
       .filter((p) => p.fitsPlate)
-      // For 3MF jobs, only show printers that can do multi-color
       .filter((p) => {
-        if (fileKind !== "3mf" || !mfg) return true;
+        if (!mfg) return true;
         const slotsNeeded = mfg.filaments.length;
         return p.has_ams && p.accepts_3mf && p.ams_slot_count >= slotsNeeded;
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 8);
-  }, [printers, totalWeightG, material, colorName, fileKind, mfg, baseBboxMm]);
+  }, [printers, totalWeightG, material, colorName, mfg, baseBboxMm, isStale]);
 
   const mapPins = useMemo(
-    () =>
-      matches
-        .filter((m) => m.latitude != null && m.longitude != null)
-        .map((m) => ({
-          id: m.id,
-          lng: m.longitude!,
-          lat: m.latitude!,
-          label: `${m.brand} ${m.model} · $${m.totalPrice.toFixed(2)}`,
-          color: m.matchedHex ?? colorHex,
-        })),
-    [matches, colorHex]
+    () => matches
+      .filter((m) => m.latitude != null && m.longitude != null)
+      .map((m) => ({
+        id: m.id, lng: m.longitude!, lat: m.latitude!,
+        label: `${m.brand} ${m.model} · $${m.totalPrice.toFixed(2)}`,
+        color: m.matchedHex ?? colorHex,
+      })),
+    [matches, colorHex],
   );
 
   if (loading) return <div className="container py-24">Loading…</div>;
-  // Demo visitors can browse without auth — only redirect signed-out non-demo users at submit time.
 
-  // Reassign one slot's color (multi-color preview customization)
-  const reassignSlot = (slotIdx: number, hex: string, name?: string) => {
+  // 3MF: reassign one slot's color
+  const reassignSlot = (slotIdx: number, hex: string) => {
     if (!mfg) return;
     const before = mfg.filaments.map((f) => ({ ...f }));
     const after = mfg.filaments.map((f, i) => (i === slotIdx ? { ...f, hex } : f));
@@ -310,11 +451,27 @@ const Upload = () => {
   };
 
   const ensureFileSaved = async (): Promise<string | null> => {
-    if (!file || !user) return null;
+    if (!user) return null;
+    // For STL, save the merged plate buffer; for 3MF, save the original 3MF.
+    let file: File | null = null;
+    if (mfg && mfgFile) {
+      file = mfgFile;
+    } else if (activePlate.parts.length > 0) {
+      const baked: ArrayBuffer[] = activePlate.parts.map((p) => bakeStl(p.buffer, {
+        preScale: p.transform.scale,
+        rotXDeg: p.transform.rotX, rotYDeg: p.transform.rotY, rotZDeg: p.transform.rotZ,
+        layFlatToPlate: true,
+        translate: [p.transform.tx, p.transform.ty, 0],
+      }));
+      const merged = mergeBinaryStls(baked);
+      const name = activePlate.parts.length === 1 ? activePlate.parts[0].fileName : `plate-${plates.findIndex((pp) => pp.id === activePlateId) + 1}.stl`;
+      file = new File([merged], name, { type: "model/stl" });
+    }
+    if (!file) return null;
     if (savedStlId) return savedStlId;
 
     const path = `${user.id}/${Date.now()}-${file.name}`;
-    const contentType = fileKind === "3mf" ? "model/3mf" : "model/stl";
+    const contentType = mfg ? "model/3mf" : "model/stl";
     const { error: upErr } = await supabase.storage
       .from("stl-files")
       .upload(path, file, { contentType, upsert: false });
@@ -339,8 +496,8 @@ const Upload = () => {
   };
 
   const handleSaveQuote = async () => {
-    if (!file || totalWeightG <= 0) {
-      toast.error("Upload a model first.");
+    if (totalWeightG <= 0) {
+      toast.error("Slice the plate first.");
       return;
     }
     setSubmitting(true);
@@ -356,8 +513,8 @@ const Upload = () => {
   };
 
   const handleBook = async (m: PrinterRow & ScoredPrinter) => {
-    if (!file || totalWeightG <= 0 || !user) {
-      toast.error("Upload a model first.");
+    if (totalWeightG <= 0 || !user) {
+      toast.error("Slice the plate first.");
       return;
     }
     try {
@@ -366,9 +523,9 @@ const Upload = () => {
       const noteParts: string[] = [`${totalWeightG.toFixed(1)}g`];
       if (mfg) {
         noteParts.push(`${mfg.filaments.length} colors`);
-        mfg.filaments.forEach((f, i) => {
-          noteParts.push(`Slot ${i + 1}: ${f.type} ${f.hex}`);
-        });
+        mfg.filaments.forEach((f, i) => noteParts.push(`Slot ${i + 1}: ${f.type} ${f.hex}`));
+      } else if (activePlate.parts.length > 1) {
+        noteParts.push(`${activePlate.parts.length} parts`);
       }
       setCheckoutPayload({
         printerId: m.id,
@@ -388,138 +545,222 @@ const Upload = () => {
     }
   };
 
-  const openBulk = (m: PrinterRow) => {
-    setBulkPrinter(m);
-    setBulkOpen(true);
-  };
+  const openBulk = (m: PrinterRow) => { setBulkPrinter(m); setBulkOpen(true); };
+
+  const hasAnyPart = activePlate.parts.length > 0 || !!mfg;
 
   return (
     <div className="min-h-screen bg-background">
       <SEO
-        title="Upload STL or 3MF — Get an Instant 3D Print Quote | PrintLoco"
-        description="Upload your STL or .3mf file and get a real-time slice, weight estimate, and quote. Match with a verified local maker and book in seconds."
+        title="In-browser slicer for STL & 3MF — instant 3D print quotes | PrintLoco"
+        description="Drop STL/3MF files onto a virtual build plate, rotate and arrange them, slice in your browser, and book a local maker — all without installing software."
         path="/upload"
       />
       <Navbar />
       <main className="container max-w-6xl py-12">
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Get a quote</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">In-browser slicer</div>
         <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
-          Upload, slice, match — <span className="italic text-primary">in seconds</span>
+          Arrange, slice, match — <span className="italic text-primary">all in your browser</span>
         </h1>
         <p className="mt-2 text-muted-foreground">
-          STL for single-color prints, or upload a Bambu <strong>.3mf</strong> to preview every painted color in 3D.
+          Drop one or more STLs onto a build plate, rotate and lay-flat, then press <strong>Slice plate</strong>.
         </p>
 
         <div className="mt-10 grid gap-8 lg:grid-cols-[1.1fr_1fr]">
-          {/* LEFT: upload + controls */}
+          {/* LEFT: workspace */}
           <section className="space-y-6 rounded-3xl border border-border bg-card p-6 shadow-soft">
-            <label
-              htmlFor="stl"
-              className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-10 text-center transition-colors ${
-                file ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/30"
-              }`}
-            >
-              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-primary/10 text-primary">
-                {file ? <FileBox className="h-7 w-7" /> : <UploadIcon className="h-7 w-7" />}
+            {/* Upload box */}
+            <div>
+              <div className="mb-3 inline-flex rounded-full border border-border bg-background p-0.5 text-xs">
+                {(["file", "url"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setSourceMode(m)}
+                    className={`rounded-full px-3 py-1 font-semibold transition-colors ${
+                      sourceMode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {m === "file" ? "File" : "From URL"}
+                  </button>
+                ))}
               </div>
-              <div className="font-display text-lg font-semibold">
-                {file ? file.name : "Click to upload an STL or .3mf"}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {file
-                  ? `${(file.size / 1024 / 1024).toFixed(2)} MB · ${fileKind.toUpperCase()}`
-                  : "Max 50MB · .stl or Bambu .3mf"}
-              </div>
-              <input
-                id="stl"
-                type="file"
-                accept=".stl,.3mf,model/stl,model/3mf"
-                className="sr-only"
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  if (f) {
-                    const ext = f.name.toLowerCase().split(".").pop();
-                    if (ext !== "stl" && ext !== "3mf") {
-                      toast.error("Please upload a .stl or .3mf file");
-                      return;
-                    }
-                    if (f.size > 50 * 1024 * 1024) {
-                      toast.error("File is too large (50MB max)");
-                      return;
-                    }
-                  }
-                  setSavedStlId(null);
-                  setFile(f);
-                }}
-              />
-            </label>
 
-            {/* Build plate selector */}
-            {file && (
-              <div className="rounded-2xl border border-border bg-background/40 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Build plate</Label>
-                  {baseWeightG > 0 && (
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        fit.status === "fits"
-                          ? "bg-primary/10 text-primary"
-                          : fit.status === "tight"
-                          ? "bg-amber-500/15 text-amber-500"
-                          : "bg-destructive/15 text-destructive"
-                      }`}
-                      title={fit.reason}
-                    >
-                      {fit.status === "fits" ? "Fits ✓" : fit.status === "tight" ? "Tight" : "Too large"}
-                    </span>
-                  )}
+              {sourceMode === "file" ? (
+                <label
+                  htmlFor="stl"
+                  className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
+                    hasAnyPart ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/30"
+                  }`}
+                >
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
+                    {hasAnyPart ? <FileBox className="h-6 w-6" /> : <UploadIcon className="h-6 w-6" />}
+                  </div>
+                  <div className="font-display text-base font-semibold">
+                    {hasAnyPart ? "Drop another file to add to the plate" : "Click to upload an STL or .3mf"}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground">Max 50MB</div>
+                  <input
+                    id="stl"
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".stl,.3mf,model/stl,model/3mf"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      if (f) handleFile(f);
+                      if (fileInputRef.current) fileInputRef.current.value = "";
+                    }}
+                  />
+                </label>
+              ) : (
+                <div className="flex gap-2">
+                  <input
+                    type="url"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    placeholder="https://example.com/model.stl"
+                    className="flex h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                  <Button onClick={handleFetchUrl} disabled={urlLoading}>
+                    {urlLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fetch"}
+                  </Button>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {BUILD_PLATES.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => setPlateId(p.id)}
-                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                        plateId === p.id
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-background text-muted-foreground hover:text-foreground"
-                      }`}
-                      title={`${p.brand} ${p.model} — ${p.x} × ${p.y} × ${p.z} mm`}
-                    >
-                      {p.short}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-2 text-[11px] text-muted-foreground">
-                  {plate.brand} {plate.model} · {plate.x} × {plate.y} × {plate.z} mm
+              )}
+            </div>
+
+            {/* Plate tabs (only show in STL workflow) */}
+            {!mfg && (
+              <div className="space-y-3">
+                <PlateTabs
+                  plates={plates}
+                  activeId={activePlateId}
+                  onSelect={(id) => { setActivePlateId(id); setSelectedPartId(null); }}
+                  onAdd={addPlate}
+                  onRemove={removePlate}
+                />
+
+                {/* Plate model selector */}
+                <div className="rounded-2xl border border-border bg-background/40 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Build plate</Label>
+                    {activePlate.parts.length > 0 && (
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        overflow ? "bg-destructive/15 text-destructive" : "bg-primary/10 text-primary"
+                      }`}>
+                        {overflow ? "Off plate" : "Fits"}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {BUILD_PLATES.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => setActivePlateModel(p.id)}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                          activePlate.plateId === p.id
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        }`}
+                        title={`${p.brand} ${p.model} — ${p.x} × ${p.y} × ${p.z} mm`}
+                      >
+                        {p.short}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-[11px] text-muted-foreground">
+                    {plateModel.brand} {plateModel.model} · {plateModel.x} × {plateModel.y} × {plateModel.z} mm
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* 3D preview with build plate */}
-            {file && (
+            {/* 3D preview */}
+            {(hasAnyPart) && (
               <div className="rounded-2xl border border-border bg-gradient-hero p-2">
-                <div className="relative h-72 w-full overflow-hidden rounded-xl">
-                  {parsing && (
+                <div className="relative h-80 w-full overflow-hidden rounded-xl">
+                  {(parsing || slicing) && (
                     <div className="absolute inset-0 z-10 grid place-items-center bg-background/60 backdrop-blur-sm">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                        {slicing ? "Slicing plate…" : "Loading…"}
+                      </div>
                     </div>
                   )}
-                  <StlPreview
-                    geometry={previewGeometry}
-                    color={colorHex}
-                    vertexColors={fileKind === "3mf"}
-                    plate={plate}
-                    overflow={overflow}
-                    className="h-full w-full"
-                  />
+                  {mfg ? (
+                    <StlPreview
+                      geometry={mfg.geometry}
+                      color={colorHex}
+                      vertexColors
+                      plate={plateModel}
+                      className="h-full w-full"
+                    />
+                  ) : (
+                    <StlPreview
+                      parts={previewParts}
+                      plate={plateModel}
+                      overflow={overflow}
+                      onSelect={setSelectedPartId}
+                      onDragMove={handleDragMove}
+                      className="h-full w-full"
+                    />
+                  )}
                 </div>
-                {overflow && baseWeightG > 0 && (
-                  <div className="mt-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">
-                    Doesn't fit on {plate.short}: {fit.reason}. Try scaling down or pick a larger plate.
+                {!mfg && activePlate.parts.length > 0 && (
+                  <div className="mt-2 flex items-center justify-between gap-2 px-1 text-[11px] text-muted-foreground">
+                    <span>Click a part to select · drag to move · use the panel below to rotate</span>
+                    <Button size="sm" variant="hero" onClick={handleSlicePlate} disabled={slicing}>
+                      <Play className="mr-1 h-3.5 w-3.5" />
+                      {slicing ? "Slicing…" : "Slice plate"}
+                    </Button>
                   </div>
                 )}
+                {overflow && !mfg && (
+                  <div className="mt-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">
+                    One or more parts overflow {plateModel.short}. Move/scale them or pick a larger plate.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Per-part transform panel */}
+            {!mfg && activePlate.parts.length > 0 && (
+              <PartTransformPanel
+                part={selectedPart ?? activePlate.parts[0]}
+                onChange={(patch) => updatePart((selectedPart ?? activePlate.parts[0]).id, patch)}
+                onDuplicate={() => duplicatePart((selectedPart ?? activePlate.parts[0]).id)}
+                onDelete={() => deletePart((selectedPart ?? activePlate.parts[0]).id)}
+                onCenter={() => centerPart((selectedPart ?? activePlate.parts[0]).id)}
+                onLayFlat={() => layFlat((selectedPart ?? activePlate.parts[0]).id)}
+                plate={{ x: plateModel.x, y: plateModel.y }}
+              />
+            )}
+
+            {/* Parts list */}
+            {!mfg && activePlate.parts.length > 1 && (
+              <div className="rounded-2xl border border-border bg-background/40 p-3">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Parts on this plate ({activePlate.parts.length})
+                </div>
+                <ul className="space-y-1">
+                  {activePlate.parts.map((p) => (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPartId(p.id)}
+                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors ${
+                          selectedPartId === p.id ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-background"
+                        }`}
+                      >
+                        <span className="truncate">{p.fileName}</span>
+                        <span className="text-[10px] tabular-nums opacity-70">
+                          {Math.round(p.transform.tx)}, {Math.round(p.transform.ty)} mm
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
 
@@ -534,10 +775,7 @@ const Upload = () => {
                   {mfg.filaments.map((f, i) => (
                     <div key={i} className="flex items-center justify-between gap-3 rounded-xl bg-card p-2">
                       <div className="flex items-center gap-3">
-                        <div
-                          className="h-8 w-8 rounded-lg border border-border"
-                          style={{ backgroundColor: f.hex }}
-                        />
+                        <div className="h-8 w-8 rounded-lg border border-border" style={{ backgroundColor: f.hex }} />
                         <div>
                           <div className="text-sm font-semibold">Slot {i + 1} · {f.type}</div>
                           <div className="text-xs text-muted-foreground">
@@ -555,13 +793,10 @@ const Upload = () => {
                     </div>
                   ))}
                 </div>
-                <div className="mt-3 text-xs text-muted-foreground">
-                  Tap a swatch to recolor any slot. We'll show only AMS-equipped makers with enough slots.
-                </div>
               </div>
             )}
 
-            {/* STL: material + single color */}
+            {/* STL: material + color */}
             {!mfg && (
               <>
                 <div>
@@ -592,62 +827,60 @@ const Upload = () => {
                   <div className="mt-2">
                     <ColorPicker
                       value={colorName}
-                      onChange={(name, hex) => {
-                        setColorName(name);
-                        setColorHex(hex);
-                      }}
+                      onChange={(name, hex) => { setColorName(name); setColorHex(hex); }}
                     />
-                  </div>
-                  <div className="mt-2 text-xs text-muted-foreground">
-                    {colorName ? `Matching makers who stock ${colorName} ${material}` : "Optional — pick to filter by stocked color"}
                   </div>
                 </div>
               </>
             )}
           </section>
 
-          {/* RIGHT: live quote + matches */}
+          {/* RIGHT: quote + matches */}
           <section className="space-y-6">
-            {baseWeightG > 0 ? (
+            {hasAnyPart && (mfg || activePlate.lastSlice) ? (
               <>
                 <CostEstimator
                   base={{
                     weightG: baseWeightG,
                     printMinutes: basePrintMinutes,
                     bboxMm: baseBboxMm,
-                    triangles: mfg?.triangles ?? slice?.triangles,
+                    triangles: mfg?.triangles ?? activePlate.lastSlice?.triangles,
                   }}
                   inputs={costInputs}
                   onChange={setCostInputs}
                   onResolved={setEstimate}
                   hideMaterial={!!mfg}
+                  dirty={isStale}
+                  onSlice={handleSlicePlate}
+                  slicing={slicing}
                 />
                 <div className="flex gap-2">
-                  <Button variant="hero" onClick={handleSaveQuote} disabled={submitting}>
+                  <Button variant="hero" onClick={handleSaveQuote} disabled={submitting || isStale}>
                     {submitting ? "Saving…" : "Save quote"}
                   </Button>
-                  <Button variant="ghost" onClick={() => navigate("/printers")}>
-                    Browse all printers
-                  </Button>
+                  <Button variant="ghost" onClick={() => navigate("/printers")}>Browse all printers</Button>
                 </div>
               </>
             ) : (
               <div className="rounded-3xl border border-dashed border-border bg-card/50 p-10 text-center">
                 <Sparkles className="mx-auto h-8 w-8 text-primary" />
                 <div className="mt-3 font-display text-lg font-semibold">
-                  {fileKind === "stl" && slice && slice.weightSource === "none"
-                    ? "Slicer couldn't measure this model"
-                    : "Drop a model to see the quote"}
+                  {hasAnyPart ? "Press \"Slice plate\" to compute the quote" : "Drop a model to start"}
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground">
-                  {fileKind === "stl" && slice && slice.weightSource === "none"
-                    ? "We only quote from real slicer output. The mesh may be non-manifold or the slicer didn't return filament usage. Try repairing the STL or upload a 3MF."
+                  {hasAnyPart
+                    ? "Settings only update the quote when you slice — just like a desktop slicer."
                     : "We slice locally — nothing leaves your browser until you save."}
                 </div>
+                {hasAnyPart && !mfg && (
+                  <Button className="mt-4" variant="hero" onClick={handleSlicePlate} disabled={slicing}>
+                    <Play className="mr-1 h-4 w-4" /> {slicing ? "Slicing…" : "Slice plate"}
+                  </Button>
+                )}
               </div>
             )}
 
-            {totalWeightG > 0 && matches.length > 0 && (
+            {totalWeightG > 0 && !isStale && matches.length > 0 && (
               <>
                 <div className="rounded-3xl border border-border bg-card p-2 shadow-soft">
                   <PrinterMap pins={mapPins} className="h-64 w-full overflow-hidden rounded-2xl" />
@@ -655,9 +888,9 @@ const Upload = () => {
 
                 <div>
                   <h2 className="font-display text-xl font-semibold">Top matches</h2>
-                  {fileKind === "3mf" && (
+                  {mfg && (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      Filtered to AMS-equipped makers with at least {mfg?.filaments.length} slots.
+                      Filtered to AMS-equipped makers with at least {mfg.filaments.length} slots.
                     </p>
                   )}
                   <div className="mt-3 space-y-3">
@@ -674,18 +907,12 @@ const Upload = () => {
                             <div className="text-xs text-muted-foreground">by {m.profiles?.full_name || "Anonymous Maker"}</div>
                             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
                               {m.has_ams && (
-                                <Badge tone="ok">
-                                  <Layers className="h-3 w-3" />
-                                  AMS · {m.ams_slot_count}
-                                </Badge>
+                                <Badge tone="ok"><Layers className="h-3 w-3" /> AMS · {m.ams_slot_count}</Badge>
                               )}
                               <Badge tone={m.hasMaterial ? "ok" : "off"}>{m.hasMaterial ? "✓" : "✗"} {material}</Badge>
                               {colorName && !mfg && (
                                 <Badge tone={m.hasColor ? "ok" : "off"}>
-                                  <span
-                                    className="inline-block h-2 w-2 rounded-full border border-border"
-                                    style={{ backgroundColor: m.matchedHex ?? "transparent" }}
-                                  />
+                                  <span className="inline-block h-2 w-2 rounded-full border border-border" style={{ backgroundColor: m.matchedHex ?? "transparent" }} />
                                   {m.hasColor ? colorName : `no ${colorName}`}
                                 </Badge>
                               )}
@@ -725,13 +952,6 @@ const Upload = () => {
   );
 };
 
-const Stat = ({ label, value }: { label: string; value: string }) => (
-  <div>
-    <div className="text-xs uppercase tracking-wider text-muted-foreground">{label}</div>
-    <div className="mt-0.5 font-display text-base font-semibold">{value}</div>
-  </div>
-);
-
 const Badge = ({ children, tone }: { children: React.ReactNode; tone: "ok" | "off" }) => (
   <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
     tone === "ok" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
@@ -740,7 +960,8 @@ const Badge = ({ children, tone }: { children: React.ReactNode; tone: "ok" | "of
   </span>
 );
 
-function fmtMins(mins: number): string {
+function formatMins(mins: number): string {
+  if (!Number.isFinite(mins) || mins <= 0) return "—";
   if (mins < 60) return `${Math.round(mins)} min`;
   const h = Math.floor(mins / 60);
   const m = Math.round(mins % 60);
