@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeEstimate, DEFAULT_COST_INPUTS } from "@/components/CostEstimator";
+import { sliceStlBuffer } from "@/lib/stlSlicer";
 
 describe("example", () => {
   it("should pass", () => {
@@ -51,5 +52,102 @@ describe("example", () => {
     expect(inchSourceEstimate.amountCents).toBeGreaterThan(mmEstimate.amountCents);
     expect(inchSourceEstimate.weightG).toBeGreaterThan(mmEstimate.weightG * 1000);
     expect(inchSourceEstimate.bbox.x).toBeCloseTo(mmEstimate.bbox.x * 25.4, 5);
+  });
+
+  it("calculates realistic grams from actual model volume", () => {
+    const asciiStl = new TextEncoder().encode(`solid cube
+facet normal 0 0 -1
+ outer loop
+  vertex 0 0 0
+  vertex 10 10 0
+  vertex 10 0 0
+ endloop
+endfacet
+facet normal 0 0 -1
+ outer loop
+  vertex 0 0 0
+  vertex 0 10 0
+  vertex 10 10 0
+ endloop
+endfacet
+facet normal 0 0 1
+ outer loop
+  vertex 0 0 10
+  vertex 10 0 10
+  vertex 10 10 10
+ endloop
+endfacet
+facet normal 0 0 1
+ outer loop
+  vertex 0 0 10
+  vertex 10 10 10
+  vertex 0 10 10
+ endloop
+endfacet
+facet normal 0 -1 0
+ outer loop
+  vertex 0 0 0
+  vertex 10 0 0
+  vertex 10 0 10
+ endloop
+endfacet
+facet normal 0 -1 0
+ outer loop
+  vertex 0 0 0
+  vertex 10 0 10
+  vertex 0 0 10
+ endloop
+endfacet
+facet normal 0 1 0
+ outer loop
+  vertex 0 10 0
+  vertex 10 10 10
+  vertex 10 10 0
+ endloop
+endfacet
+facet normal 0 1 0
+ outer loop
+  vertex 0 10 0
+  vertex 0 10 10
+  vertex 10 10 10
+ endloop
+endfacet
+facet normal -1 0 0
+ outer loop
+  vertex 0 0 0
+  vertex 0 0 10
+  vertex 0 10 10
+ endloop
+endfacet
+facet normal -1 0 0
+ outer loop
+  vertex 0 0 0
+  vertex 0 10 10
+  vertex 0 10 0
+ endloop
+endfacet
+facet normal 1 0 0
+ outer loop
+  vertex 10 0 0
+  vertex 10 10 10
+  vertex 10 0 10
+ endloop
+endfacet
+facet normal 1 0 0
+ outer loop
+  vertex 10 0 0
+  vertex 10 10 0
+  vertex 10 10 10
+ endloop
+endfacet
+endsolid cube`).buffer;
+
+    const result = sliceStlBuffer(asciiStl, { material: "PLA", infillPct: 20 });
+
+    expect(result.bbox.x).toBeCloseTo(10, 5);
+    expect(result.bbox.y).toBeCloseTo(10, 5);
+    expect(result.bbox.z).toBeCloseTo(10, 5);
+    expect(result.volumeCm3).toBeCloseTo(1, 5);
+    expect(result.weightG).toBeCloseTo(0.496, 3);
   });
 });

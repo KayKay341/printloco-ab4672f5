@@ -44,6 +44,9 @@ type CuraSliceMetadata = {
   filamentUsage?: number;
 };
 
+const MIN_WEIGHT_RATIO = 0.2;
+const MAX_WEIGHT_RATIO = 4;
+
 let curaModulePromise: Promise<{ CuraWASM: new (config: any) => any }> | null = null;
 
 /**
@@ -157,10 +160,7 @@ async function loadCuraModule() {
 function toSliceResult(base: SliceResult, metadata: CuraSliceMetadata | null | undefined, opts: SliceOptions): SliceResult {
   if (!metadata) return base;
 
-  const lengthMm = Math.max(metadata.filamentUsage ?? 0, metadata.material1Usage ?? 0, metadata.material2Usage ?? 0);
-  const density = MATERIAL_DENSITY[opts.material] ?? MATERIAL_DENSITY.PLA;
-  const diameter = opts.filamentDiameterMm ?? 1.75;
-  const weightG = lengthMm > 0 ? filamentLengthMmToWeightG(lengthMm, diameter, density) : base.weightG;
+  const weightG = resolveWeightFromMetadata(base.weightG, metadata, opts);
   const printMinutes = metadata.printTime && metadata.printTime > 0 ? metadata.printTime / 60 : base.printMinutes;
 
   return {
@@ -170,9 +170,38 @@ function toSliceResult(base: SliceResult, metadata: CuraSliceMetadata | null | u
   };
 }
 
+function resolveWeightFromMetadata(baseWeightG: number, metadata: CuraSliceMetadata, opts: SliceOptions): number {
+  const density = MATERIAL_DENSITY[opts.material] ?? MATERIAL_DENSITY.PLA;
+  const diameter = opts.filamentDiameterMm ?? 1.75;
+
+  const candidates = [
+    filamentLengthMmToWeightG(metadata.filamentUsage ?? 0, diameter, density),
+    materialVolumeMm3ToWeightG(metadata.material1Usage ?? 0, density),
+    materialVolumeMm3ToWeightG(metadata.material2Usage ?? 0, density),
+    materialVolumeMm3ToWeightG((metadata.material1Usage ?? 0) + (metadata.material2Usage ?? 0), density),
+  ].filter((v) => Number.isFinite(v) && v > 0);
+
+  if (!candidates.length || baseWeightG <= 0) return baseWeightG;
+
+  const plausible = candidates
+    .filter((candidate) => {
+      const ratio = candidate / baseWeightG;
+      return ratio >= MIN_WEIGHT_RATIO && ratio <= MAX_WEIGHT_RATIO;
+    })
+    .sort((a, b) => Math.abs(a - baseWeightG) - Math.abs(b - baseWeightG));
+
+  return plausible[0] ?? baseWeightG;
+}
+
 function filamentLengthMmToWeightG(lengthMm: number, diameterMm: number, densityGPerCm3: number): number {
+  if (!Number.isFinite(lengthMm) || lengthMm <= 0) return 0;
   const radiusMm = diameterMm / 2;
   const areaMm2 = Math.PI * radiusMm * radiusMm;
   const volumeMm3 = areaMm2 * lengthMm;
+  return (volumeMm3 / 1000) * densityGPerCm3;
+}
+
+function materialVolumeMm3ToWeightG(volumeMm3: number, densityGPerCm3: number): number {
+  if (!Number.isFinite(volumeMm3) || volumeMm3 <= 0) return 0;
   return (volumeMm3 / 1000) * densityGPerCm3;
 }
