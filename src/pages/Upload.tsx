@@ -454,7 +454,50 @@ const Upload = () => {
               />
             </label>
 
-            {/* 3D preview */}
+            {/* Build plate selector */}
+            {file && (
+              <div className="rounded-2xl border border-border bg-background/40 p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-xs uppercase tracking-wider text-muted-foreground">Build plate</Label>
+                  {baseWeightG > 0 && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                        fit.status === "fits"
+                          ? "bg-primary/10 text-primary"
+                          : fit.status === "tight"
+                          ? "bg-amber-500/15 text-amber-500"
+                          : "bg-destructive/15 text-destructive"
+                      }`}
+                      title={fit.reason}
+                    >
+                      {fit.status === "fits" ? "Fits ✓" : fit.status === "tight" ? "Tight" : "Too large"}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {BUILD_PLATES.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setPlateId(p.id)}
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                        plateId === p.id
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-muted-foreground hover:text-foreground"
+                      }`}
+                      title={`${p.brand} ${p.model} — ${p.x} × ${p.y} × ${p.z} mm`}
+                    >
+                      {p.short}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 text-[11px] text-muted-foreground">
+                  {plate.brand} {plate.model} · {plate.x} × {plate.y} × {plate.z} mm
+                </div>
+              </div>
+            )}
+
+            {/* 3D preview with build plate */}
             {file && (
               <div className="rounded-2xl border border-border bg-gradient-hero p-2">
                 <div className="relative h-72 w-full overflow-hidden rounded-xl">
@@ -467,9 +510,16 @@ const Upload = () => {
                     geometry={previewGeometry}
                     color={colorHex}
                     vertexColors={fileKind === "3mf"}
+                    plate={plate}
+                    overflow={overflow}
                     className="h-full w-full"
                   />
                 </div>
+                {overflow && baseWeightG > 0 && (
+                  <div className="mt-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">
+                    Doesn't fit on {plate.short}: {fit.reason}. Try scaling down or pick a larger plate.
+                  </div>
+                )}
               </div>
             )}
 
