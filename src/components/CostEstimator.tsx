@@ -84,24 +84,28 @@ type Props = {
 const LAYER_HEIGHTS = [0.08, 0.12, 0.16, 0.2, 0.28];
 
 export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOutput {
-  // Volume scales as (scalePct / 100)^3 — uniform scale on a 3D mesh.
-  const scaleFactor = Math.pow(Math.max(10, Math.min(500, i.scalePct)) / 100, 3);
+  // Volume scales as scale^3.
+  const userScale = Math.max(10, Math.min(500, i.scalePct)) / 100;
+  // If user says model is in inches, convert mesh from inches → mm: ×25.4 linear,
+  // ×16387.064 volumetric. We only apply this if the bbox in mm is suspicious
+  // (e.g. >2m or <2mm), OR the user explicitly toggled to inches.
+  const unitFactor = i.units === "in" ? 25.4 : 1;
+  const linearScale = userScale * unitFactor;
+  const volScale = Math.pow(linearScale, 3);
 
   // Infill model: shell stays solid, interior scales with infill density.
-  // Approximate the "shell fraction" using wall count (3 walls ≈ 25% solid).
   const shellSolidFraction = Math.min(0.5, 0.1 + i.walls * 0.05);
   const infill = Math.max(0, Math.min(100, i.infillPct)) / 100;
   const effectiveSolid = shellSolidFraction + (1 - shellSolidFraction) * infill;
-  // Compare against the slicer's baked-in 0.25 + 0.75 * 0.2 = 0.4 default.
-  const baselineSolid = 0.25 + 0.75 * 0.2;
+  const baselineSolid = 0.25 + 0.75 * 0.2; // matches sliceStlBuffer default
   const massRatio = effectiveSolid / baselineSolid;
 
-  let weightPerUnit = base.baseWeightG * scaleFactor * massRatio;
-  if (i.supports) weightPerUnit *= 1.08; // ~8% extra material
+  let weightPerUnit = base.baseWeightG * volScale * massRatio;
+  if (i.supports) weightPerUnit *= 1.08;
 
-  // Print time: scales with volume (so scale^3) and with layer-height factor.
-  const layerFactor = 0.2 / Math.max(0.04, i.layerHeightMm); // smaller layer = more time
-  let timePerUnit = base.basePrintMinutes * scaleFactor * layerFactor;
+  // Print time scales with volume and inversely with layer height.
+  const layerFactor = 0.2 / Math.max(0.04, i.layerHeightMm);
+  let timePerUnit = base.basePrintMinutes * volScale * layerFactor;
   if (i.supports) timePerUnit *= 1.12;
 
   const qty = Math.max(1, Math.min(500, Math.floor(i.quantity)));
@@ -112,19 +116,19 @@ export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOu
   const baseCost = totalWeightG * ppg;
   const supportsBump = i.supports ? Math.max(0.5, totalWeightG * 0.02) : 0;
   let total = baseCost + supportsBump;
-  if (i.rush) total *= 1.25; // 25% rush surcharge
+  if (i.rush) total *= 1.25;
 
   const amountCents = Math.max(100, Math.round(total * 100));
   const perUnitCents = Math.round(amountCents / qty);
 
-  const bboxScale = i.scalePct / 100;
-  const bbox = {
-    x: base.bboxMm.x * bboxScale,
-    y: base.bboxMm.y * bboxScale,
-    z: base.bboxMm.z * bboxScale,
+  // Bbox in MM after scale + source-unit interpretation.
+  const bboxMm = {
+    x: base.bboxMm.x * linearScale,
+    y: base.bboxMm.y * linearScale,
+    z: base.bboxMm.z * linearScale,
   };
 
-  return { weightG: totalWeightG, printMinutes: totalMinutes, amountCents, perUnitCents, bbox };
+  return { weightG: totalWeightG, printMinutes: totalMinutes, amountCents, perUnitCents, bbox: bboxMm };
 }
 
 export default function CostEstimator({ base, inputs, onChange, onResolved, hideMaterial }: Props) {
