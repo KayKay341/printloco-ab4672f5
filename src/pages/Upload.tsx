@@ -63,6 +63,7 @@ type PrinterRow = PrinterForScore & {
   accepts_3mf: boolean;
   accepts_bulk: boolean;
   min_bulk_quantity: number;
+  build_volume: string | null;
   material_prices: Record<string, number> | null;
   profiles: { full_name: string | null } | null;
   filament_colors: FilamentColorRow[];
