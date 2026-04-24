@@ -17,6 +17,8 @@ export type Mfg3mfResult = {
   /** Estimated weight per slot (grams). Sum may differ from total if some slots unused. */
   weightPerSlot: number[];
   totalWeightG: number;
+  /** Estimated print minutes parsed from embedded slicer metadata when present. */
+  printMinutes: number;
   bbox: { x: number; y: number; z: number };
   triangles: number;
 };
@@ -107,6 +109,7 @@ export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
   }
 
   const filaments = await readFilaments(zip);
+  const embeddedMeta = await readEmbeddedSliceMeta(zip, filaments);
 
   const positions: number[] = [];
   const colors: number[] = [];
@@ -209,7 +212,12 @@ export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
     const type = filaments[idx]?.type ?? "PLA";
     return cm3 * (DENSITY[type] ?? DENSITY.PLA);
   });
-  const totalWeightG = weightPerSlot.reduce((a, b) => a + b, 0);
+  const totalWeightFromGeometryG = weightPerSlot.reduce((a, b) => a + b, 0);
+  const totalWeightG = embeddedMeta.totalWeightG ?? totalWeightFromGeometryG;
+  const normalizedWeightPerSlot =
+    embeddedMeta.weightPerSlot?.length
+      ? padWeights(embeddedMeta.weightPerSlot, Math.max(embeddedMeta.weightPerSlot.length, slotVolumeMm3.length))
+      : weightPerSlot;
 
   // Pad filaments to match observed slot count if XML referenced a slot we
   // didn't read settings for.
@@ -226,8 +234,9 @@ export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
     geometry,
     hasVertexColors: true,
     filaments,
-    weightPerSlot,
+    weightPerSlot: normalizedWeightPerSlot,
     totalWeightG,
+    printMinutes: embeddedMeta.printMinutes ?? estimatePrintMinutesFromGeometry(size, totalWeightG),
     bbox: { x: size.x, y: size.y, z: size.z },
     triangles: positions.length / 9,
   };
@@ -317,6 +326,98 @@ function clampSlot(n: number, count: number): number {
   if (!Number.isFinite(n) || n < 1) return 1;
   if (count > 0 && n > count) return count;
   return Math.floor(n);
+}
+
+async function readEmbeddedSliceMeta(zip: JSZip, filaments: FilamentSlot[]): Promise<{
+  printMinutes?: number;
+  totalWeightG?: number;
+  weightPerSlot?: number[];
+}> {
+  const files = zip.file(/metadata\/plate_.*\.gcode$/i) ?? [];
+  for (const file of files) {
+    try {
+      const text = await file.async("string");
+      const meta = parseGcodeMetadata(text, filaments);
+      if (meta.printMinutes || meta.totalWeightG || meta.weightPerSlot?.length) return meta;
+    } catch {
+      // ignore invalid embedded gcode
+    }
+  }
+  return {};
+}
+
+function parseGcodeMetadata(text: string, filaments: FilamentSlot[]) {
+  const compact = text.slice(0, 20000);
+  const printMinutes =
+    parseDurationToMinutes(matchValue(compact, /(?:total estimated time|estimated printing time(?: \(normal mode\))?|model printing time)\s*[:=]\s*([^;\n\r]+)/i)) ??
+    parseDurationToMinutes(matchValue(compact, /HEADER_BLOCK_START.*?total estimated time\s*[:=]\s*([^;\n\r]+)/is));
+
+  const totalWeightG =
+    parseNumber(matchValue(compact, /filament used \[g\]\s*[:=]\s*([0-9.]+)/i)) ??
+    parseNumber(matchValue(compact, /total filament used \[g\]\s*[:=]\s*([0-9.]+)/i));
+
+  const weightPerSlot = parsePerSlotWeights(compact, filaments.length);
+  return { printMinutes, totalWeightG, weightPerSlot };
+}
+
+function parsePerSlotWeights(text: string, slotCount: number): number[] {
+  const out: number[] = [];
+  const patterns = [
+    /filament used \[g\]\s*(?:\(tool\s*(\d+)\)|\[t(\d+)\]|\[(\d+)\])?\s*[:=]\s*([0-9.]+)/gi,
+    /total filament used \[g\]\s*(?:\(tool\s*(\d+)\)|\[t(\d+)\]|\[(\d+)\])?\s*[:=]\s*([0-9.]+)/gi,
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text))) {
+      const rawIndex = match[1] ?? match[2] ?? match[3];
+      const value = Number(match[4]);
+      if (!Number.isFinite(value)) continue;
+      const idx = rawIndex != null ? Math.max(0, Number(rawIndex)) : out.length;
+      out[idx] = value;
+    }
+  }
+
+  if (!out.length) return [];
+  return padWeights(out, Math.max(slotCount, out.length));
+}
+
+function padWeights(weights: number[], len: number): number[] {
+  const out = Array.from({ length: len }, (_, i) => weights[i] ?? 0);
+  return out;
+}
+
+function matchValue(text: string, re: RegExp): string | undefined {
+  return re.exec(text)?.[1]?.trim();
+}
+
+function parseNumber(raw?: string): number | undefined {
+  if (!raw) return undefined;
+  const n = Number(raw.replace(/,/g, "").trim());
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function parseDurationToMinutes(raw?: string): number | undefined {
+  if (!raw) return undefined;
+  const s = raw.trim().toLowerCase();
+  let minutes = 0;
+  const day = /([0-9.]+)\s*d/.exec(s);
+  const hour = /([0-9.]+)\s*h/.exec(s);
+  const minute = /([0-9.]+)\s*m/.exec(s);
+  const second = /([0-9.]+)\s*s/.exec(s);
+  if (day) minutes += Number(day[1]) * 24 * 60;
+  if (hour) minutes += Number(hour[1]) * 60;
+  if (minute) minutes += Number(minute[1]);
+  if (second) minutes += Number(second[1]) / 60;
+  if (minutes > 0) return minutes;
+  const numeric = Number(s);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : undefined;
+}
+
+function estimatePrintMinutesFromGeometry(size: THREE.Vector3, weightG: number): number {
+  const volumeDriven = (weightG / (DENSITY.PLA ?? 1.24)) * 1000 / 7 / 60;
+  const travelFloor = (size.x + size.y + size.z) * 0.18;
+  return Math.max(5, volumeDriven + travelFloor + 2);
 }
 
 /**

@@ -30,6 +30,22 @@ export type SliceResult = {
   triangles: number;
 };
 
+type SliceOptions = {
+  material: string;
+  infillPct: number;
+  layerHeightMm?: number;
+  filamentDiameterMm?: number;
+};
+
+type CuraSliceMetadata = {
+  printTime?: number;
+  material1Usage?: number;
+  material2Usage?: number;
+  filamentUsage?: number;
+};
+
+let curaModulePromise: Promise<{ CuraWASM: new (config: any) => any }> | null = null;
+
 /**
  * Compute signed volume of a triangle mesh.
  * Sum of signed tetrahedron volumes from origin -> triangle vertices.
@@ -94,4 +110,69 @@ export function sliceStlBuffer(buf: ArrayBuffer, opts: {
     bbox: { x: size.x, y: size.y, z: size.z },
     triangles: (geometry.getAttribute("position").count) / 3,
   };
+}
+
+/**
+ * Higher-accuracy path: use Cura WASM when available for print time + filament
+ * length, then convert the returned filament length into grams. Falls back to
+ * geometry-based estimation if the slicer is unavailable or errors.
+ */
+export async function sliceStlBufferAccurate(buf: ArrayBuffer, opts: SliceOptions): Promise<SliceResult> {
+  const fallback = sliceStlBuffer(buf, opts);
+
+  try {
+    const { CuraWASM } = await loadCuraModule();
+    const slicer = new CuraWASM({
+      transfer: false,
+      verbose: false,
+      overrides: [
+        { key: "infill_sparse_density", value: String(Math.max(0, Math.min(100, opts.infillPct))) },
+        { key: "layer_height", value: String(Math.max(0.04, opts.layerHeightMm ?? 0.2)) },
+      ],
+    });
+
+    try {
+      const { metadata } = await slicer.slice(buf.slice(0), "stl");
+      const sliced = toSliceResult(fallback, metadata, opts);
+      return sliced;
+    } finally {
+      try {
+        await slicer.destroy?.();
+      } catch {
+        // Best-effort cleanup only.
+      }
+    }
+  } catch {
+    return fallback;
+  }
+}
+
+async function loadCuraModule() {
+  if (!curaModulePromise) {
+    curaModulePromise = import("cura-wasm") as Promise<{ CuraWASM: new (config: any) => any }>;
+  }
+  return curaModulePromise;
+}
+
+function toSliceResult(base: SliceResult, metadata: CuraSliceMetadata | null | undefined, opts: SliceOptions): SliceResult {
+  if (!metadata) return base;
+
+  const lengthMm = Math.max(metadata.filamentUsage ?? 0, metadata.material1Usage ?? 0, metadata.material2Usage ?? 0);
+  const density = MATERIAL_DENSITY[opts.material] ?? MATERIAL_DENSITY.PLA;
+  const diameter = opts.filamentDiameterMm ?? 1.75;
+  const weightG = lengthMm > 0 ? filamentLengthMmToWeightG(lengthMm, diameter, density) : base.weightG;
+  const printMinutes = metadata.printTime && metadata.printTime > 0 ? metadata.printTime / 60 : base.printMinutes;
+
+  return {
+    ...base,
+    weightG,
+    printMinutes,
+  };
+}
+
+function filamentLengthMmToWeightG(lengthMm: number, diameterMm: number, densityGPerCm3: number): number {
+  const radiusMm = diameterMm / 2;
+  const areaMm2 = Math.PI * radiusMm * radiusMm;
+  const volumeMm3 = areaMm2 * lengthMm;
+  return (volumeMm3 / 1000) * densityGPerCm3;
 }
