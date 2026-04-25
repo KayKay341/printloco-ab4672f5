@@ -15,6 +15,7 @@ import {
   Upload as UploadIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import PrinterMatches from "@/components/PrinterMatches";
 import SEO from "@/components/SEO";
 import Logo from "@/components/site/Logo";
 import StlPreview from "@/components/StlPreview";
