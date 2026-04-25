@@ -211,9 +211,13 @@ const Upload = () => {
         }));
 
         if (parsed.totalWeightG > 0) {
-          toast.success(`3MF loaded · ${parsed.totalWeightG.toFixed(1)}g (from embedded G-code)`);
+          if (parsed.weightSource === "embedded-gcode") {
+            toast.success(`3MF loaded · ${parsed.totalWeightG.toFixed(1)}g (from embedded G-code)`);
+          } else {
+            toast.success(`3MF loaded · ${parsed.totalWeightG.toFixed(1)}g (fast estimate)`);
+          }
         } else {
-          toast.info("3MF loaded — re-slicing in background to compute weight…");
+          toast.warning("3MF loaded — could not estimate weight. Set it manually.");
         }
       } catch (err: any) {
         toast.error(`Could not parse 3MF: ${err.message}`);
@@ -223,75 +227,6 @@ const Upload = () => {
       } finally {
         setParsing(false);
         setUploading(false);
-      }
-
-      // Background re-slice (only if no weight was read from embedded G-code).
-      if (parsed && parsed.totalWeightG <= 0) {
-        const captured = parsed;
-        setSlicing(true);
-        setSliceProgress(2);
-        setSliceStage("Preparing geometry…");
-
-        // Animated progress: ramp to ~90% over ~30s so users see motion.
-        const startedAt = Date.now();
-        const progressTimer = window.setInterval(() => {
-          const elapsed = (Date.now() - startedAt) / 1000;
-          // asymptotic curve toward 90
-          const pct = Math.min(90, 5 + 85 * (1 - Math.exp(-elapsed / 12)));
-          setSliceProgress(pct);
-          if (elapsed > 2 && elapsed < 8) setSliceStage("Slicing layers…");
-          else if (elapsed >= 8 && elapsed < 20) setSliceStage("Computing extrusion…");
-          else if (elapsed >= 20) setSliceStage("Finalizing weight…");
-        }, 400);
-
-        // Watchdog: if slicing takes longer than 90s, bail out so it doesn't spin forever.
-        const watchdog = window.setTimeout(() => {
-          window.clearInterval(progressTimer);
-          setSlicing(false);
-          setSliceProgress(0);
-          setSliceStage("");
-          toast.error("Slicer timed out after 90s. Try a smaller model or set weight manually.");
-        }, 90_000);
-
-        (async () => {
-          try {
-            const sliceBuf = geometryToBinaryStl(captured.geometry);
-            const sliceResult = await sliceStlBufferAccurate(sliceBuf, {
-              material: captured.sliceSettings.material,
-              infillPct: captured.sliceSettings.infillPct,
-              layerHeightMm: captured.sliceSettings.layerHeightMm,
-              walls: captured.sliceSettings.walls,
-              supports: captured.sliceSettings.supports,
-              filamentDiameterMm: captured.sliceSettings.filamentDiameterMm,
-              materialDensityGPerCm3: captured.sliceSettings.materialDensityGPerCm3,
-              sourceUnits: "mm",
-              scale: 1,
-              plate: plateModel,
-            });
-            window.clearTimeout(watchdog);
-            window.clearInterval(progressTimer);
-            setSliceProgress(100);
-            setSliceStage("Done");
-            if (sliceResult.weightG > 0) {
-              setMfg((cur) => cur === captured ? {
-                ...cur,
-                totalWeightG: sliceResult.weightG,
-                printMinutes: sliceResult.printMinutes || cur.printMinutes,
-              } : cur);
-              toast.success(`Slice complete · ${sliceResult.weightG.toFixed(1)}g`);
-            } else {
-              toast.error("Slicer could not compute weight for this 3MF.");
-            }
-          } catch (err: any) {
-            window.clearTimeout(watchdog);
-            window.clearInterval(progressTimer);
-            toast.error(`Slice failed: ${err.message ?? "unknown error"}`);
-          } finally {
-            setSlicing(false);
-            // brief delay so 100% is visible
-            window.setTimeout(() => { setSliceProgress(0); setSliceStage(""); }, 600);
-          }
-        })();
       }
       return;
     }
