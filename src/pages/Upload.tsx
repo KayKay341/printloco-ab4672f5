@@ -969,8 +969,8 @@ const Upload = () => {
                   slicing={slicing}
                 />
                 <div className="flex gap-2">
-                  <Button variant="hero" onClick={handleSaveQuote} disabled={submitting || isStale}>
-                    {submitting ? "Saving…" : "Save quote"}
+                  <Button variant="hero" onClick={handleSaveQuote} disabled={submitting || isStale || slicing || parsing}>
+                    {slicing ? "Slicing…" : submitting ? "Saving…" : "Save quote"}
                   </Button>
                   <Button variant="ghost" onClick={() => navigate("/printers")}>Browse all printers</Button>
                 </div>
