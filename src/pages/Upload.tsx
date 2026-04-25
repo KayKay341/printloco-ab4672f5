@@ -328,6 +328,7 @@ const Upload = () => {
       toast.error(err.message ?? "Could not load STL");
     } finally {
       setParsing(false);
+      setUploading(false);
     }
   };
 
