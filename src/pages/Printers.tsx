@@ -104,7 +104,7 @@ const Printers = () => {
               profiles: { full_name: "You" },
               filament_colors: [],
             } as unknown as PrinterListing));
-            setAll([...userDemo, ...real, ...(getSamplePrinters(24) as unknown as PrinterListing[])]);
+            setAll([...userDemo, ...real, ...(getSamplePrinters(60) as unknown as PrinterListing[])]);
           });
         } else {
           setAll(real);

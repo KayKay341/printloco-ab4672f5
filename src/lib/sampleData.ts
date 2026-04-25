@@ -108,7 +108,7 @@ export type SamplePrinter = {
 
 let cached: SamplePrinter[] | null = null;
 
-export const getSamplePrinters = (count = 24): SamplePrinter[] => {
+export const getSamplePrinters = (count = 60): SamplePrinter[] => {
   if (cached) return cached;
   // Reset seed so first generation is deterministic per session
   seed = 1337;
