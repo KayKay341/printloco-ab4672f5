@@ -657,6 +657,17 @@ async function loadObj(file: File): Promise<THREE.BufferGeometry> {
   return geometry;
 }
 
+async function load3mf(file: File): Promise<THREE.BufferGeometry> {
+  const buffer = await file.arrayBuffer();
+  const result = await parse3mf(buffer);
+  const geometry = result.geometry;
+  if (!geometry.getAttribute("position") || geometry.getAttribute("position").count === 0) {
+    throw new Error("3MF contains no mesh geometry.");
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function downloadText(fileName: string, text: string, mime: string) {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
