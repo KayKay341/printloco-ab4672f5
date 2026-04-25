@@ -783,10 +783,21 @@ const Upload = () => {
               <div className="rounded-2xl border border-border bg-gradient-hero p-2">
                 <div className="relative h-80 w-full overflow-hidden rounded-xl">
                   {(parsing || slicing) && (
-                    <div className="absolute inset-0 z-10 grid place-items-center bg-background/60 backdrop-blur-sm">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                        {slicing ? "Slicing plate…" : "Loading…"}
+                    <div className="absolute inset-0 z-10 grid place-items-center bg-background/70 backdrop-blur-sm">
+                      <div className="w-72 max-w-[90%] space-y-3 rounded-2xl border border-border bg-card/90 p-4 shadow-lg">
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                          {slicing ? "Slicing in browser…" : "Loading model…"}
+                        </div>
+                        {slicing && (
+                          <>
+                            <Progress value={sliceProgress} className="h-2" />
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>{sliceStage || "Working…"}</span>
+                              <span className="tabular-nums">{Math.round(sliceProgress)}%</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
