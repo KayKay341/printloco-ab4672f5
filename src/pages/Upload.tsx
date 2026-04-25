@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { parse3mf } from "@/lib/threeMfParser";
 import {
   DEFAULT_SLICER_SETTINGS,
   MATERIAL_DEFAULTS,
@@ -47,7 +48,7 @@ import {
 
 type ModelFile = {
   name: string;
-  extension: "stl" | "obj";
+  extension: "stl" | "obj" | "3mf";
   geometry: THREE.BufferGeometry;
 };
 
@@ -127,8 +128,8 @@ const Upload = () => {
 
   const handleFile = async (file: File) => {
     const ext = file.name.toLowerCase().split(".").pop();
-    if (ext !== "stl" && ext !== "obj") {
-      toast.error("Please upload an STL or OBJ file.");
+    if (ext !== "stl" && ext !== "obj" && ext !== "3mf") {
+      toast.error("Please upload an STL, OBJ, or 3MF file.");
       return;
     }
     if (file.size > 50 * 1024 * 1024) {
@@ -139,8 +140,9 @@ const Upload = () => {
     setProcessing(true);
     toast.info(`Received ${file.name} — loading preview…`);
     try {
-      const geometry = ext === "stl" ? await loadStl(file) : await loadObj(file);
-      setModel({ name: file.name, extension: ext, geometry });
+      const geometry =
+        ext === "stl" ? await loadStl(file) : ext === "obj" ? await loadObj(file) : await load3mf(file);
+      setModel({ name: file.name, extension: ext as "stl" | "obj" | "3mf", geometry });
       setRotation({ x: 0, y: 0, z: 0 });
       toast.success(`${file.name} loaded`);
     } catch (error: any) {
@@ -483,7 +485,7 @@ const UploadPanel = ({
     <input
       ref={inputRef}
       type="file"
-      accept=".stl,.obj,model/stl,text/plain"
+      accept=".stl,.obj,.3mf,model/stl,text/plain,model/3mf"
       className="sr-only"
       onChange={(event) => {
         const file = event.target.files?.[0];
@@ -498,7 +500,7 @@ const UploadPanel = ({
     >
       <UploadIcon className="h-9 w-9 text-slicer-cyan" />
       <span className="mt-3 text-lg font-bold text-slicer-foreground">Drag 3D file here or click to upload</span>
-      <span className="mt-1 text-sm text-slicer-muted">Accepts STL and OBJ files</span>
+      <span className="mt-1 text-sm text-slicer-muted">Accepts STL, OBJ, and 3MF files</span>
     </button>
     {model && (
       <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-slicer-border bg-slicer-panel-strong p-3">
@@ -651,6 +653,17 @@ async function loadObj(file: File): Promise<THREE.BufferGeometry> {
   if (positions.length === 0) throw new Error("OBJ contains no mesh geometry.");
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+async function load3mf(file: File): Promise<THREE.BufferGeometry> {
+  const buffer = await file.arrayBuffer();
+  const result = await parse3mf(buffer);
+  const geometry = result.geometry;
+  if (!geometry.getAttribute("position") || geometry.getAttribute("position").count === 0) {
+    throw new Error("3MF contains no mesh geometry.");
+  }
   geometry.computeVertexNormals();
   return geometry;
 }
