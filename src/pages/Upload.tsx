@@ -29,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { parse3mf } from "@/lib/threeMfParser";
 import {
   DEFAULT_SLICER_SETTINGS,
   MATERIAL_DEFAULTS,
