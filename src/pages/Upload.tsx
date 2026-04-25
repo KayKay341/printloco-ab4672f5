@@ -732,6 +732,32 @@ const Upload = () => {
               )}
             </div>
 
+            {/* Upload / slice status banner — always visible while work is happening */}
+            {(uploading || parsing || slicing) && (
+              <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {uploading
+                    ? `Received ${uploadFileName ?? "file"} — uploading…`
+                    : parsing
+                      ? "Parsing model…"
+                      : "Slicing in browser…"}
+                </div>
+                {slicing && (
+                  <div className="mt-2 space-y-1">
+                    <Progress value={sliceProgress} className="h-1.5" />
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>{sliceStage || "Working…"}</span>
+                      <span className="tabular-nums">{Math.round(sliceProgress)}%</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Checkout will unlock automatically when the slice finishes.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Plate tabs (only show in STL workflow) */}
             {!mfg && (
               <div className="space-y-3">
