@@ -48,7 +48,7 @@ import {
 
 type ModelFile = {
   name: string;
-  extension: "stl" | "obj";
+  extension: "stl" | "obj" | "3mf";
   geometry: THREE.BufferGeometry;
 };
 
