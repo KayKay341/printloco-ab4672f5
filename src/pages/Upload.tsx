@@ -414,6 +414,12 @@ const Upload = () => {
             <LayerPreview layers={stats?.layers ?? 0} layerHeight={settings.layerHeight} />
           </div>
 
+          <PrinterMatches
+            material={settings.material}
+            weightGrams={stats?.weightG ?? 0}
+            is3mf={model?.extension === "3mf"}
+          />
+
           {warnings.length > 0 && (
             <div className="rounded-lg border border-slicer-warning/40 bg-slicer-warning/10 p-4 text-sm text-slicer-foreground">
               <div className="mb-2 flex items-center gap-2 font-bold text-slicer-warning">
