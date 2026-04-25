@@ -8,6 +8,7 @@ import Footer from "@/components/site/Footer";
 import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Upload as UploadIcon,
   FileBox,
@@ -98,6 +99,10 @@ const Upload = () => {
   const [mfgFile, setMfgFile] = useState<File | null>(null);
   const [originalSlots, setOriginalSlots] = useState<FilamentSlot[]>([]);
   const [parsing, setParsing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null);
+  const [sliceProgress, setSliceProgress] = useState(0);
+  const [sliceStage, setSliceStage] = useState<string>("");
 
   // Material / color (STL path)
   const [material, setMaterial] = useState("PLA");
@@ -179,6 +184,11 @@ const Upload = () => {
     }
     setSavedStlId(null);
 
+    // Immediate "received / uploading" feedback so the user always sees something.
+    setUploading(true);
+    setUploadFileName(file.name);
+    toast.info(`Received ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB) — preparing…`);
+
     if (ext === "3mf") {
       setParsing(true);
       let parsed: Mfg3mfResult | null = null;
@@ -208,15 +218,41 @@ const Upload = () => {
       } catch (err: any) {
         toast.error(`Could not parse 3MF: ${err.message}`);
         setParsing(false);
+        setUploading(false);
         return;
       } finally {
         setParsing(false);
+        setUploading(false);
       }
 
       // Background re-slice (only if no weight was read from embedded G-code).
       if (parsed && parsed.totalWeightG <= 0) {
         const captured = parsed;
         setSlicing(true);
+        setSliceProgress(2);
+        setSliceStage("Preparing geometry…");
+
+        // Animated progress: ramp to ~90% over ~30s so users see motion.
+        const startedAt = Date.now();
+        const progressTimer = window.setInterval(() => {
+          const elapsed = (Date.now() - startedAt) / 1000;
+          // asymptotic curve toward 90
+          const pct = Math.min(90, 5 + 85 * (1 - Math.exp(-elapsed / 12)));
+          setSliceProgress(pct);
+          if (elapsed > 2 && elapsed < 8) setSliceStage("Slicing layers…");
+          else if (elapsed >= 8 && elapsed < 20) setSliceStage("Computing extrusion…");
+          else if (elapsed >= 20) setSliceStage("Finalizing weight…");
+        }, 400);
+
+        // Watchdog: if slicing takes longer than 90s, bail out so it doesn't spin forever.
+        const watchdog = window.setTimeout(() => {
+          window.clearInterval(progressTimer);
+          setSlicing(false);
+          setSliceProgress(0);
+          setSliceStage("");
+          toast.error("Slicer timed out after 90s. Try a smaller model or set weight manually.");
+        }, 90_000);
+
         (async () => {
           try {
             const sliceBuf = geometryToBinaryStl(captured.geometry);
@@ -232,6 +268,10 @@ const Upload = () => {
               scale: 1,
               plate: plateModel,
             });
+            window.clearTimeout(watchdog);
+            window.clearInterval(progressTimer);
+            setSliceProgress(100);
+            setSliceStage("Done");
             if (sliceResult.weightG > 0) {
               setMfg((cur) => cur === captured ? {
                 ...cur,
@@ -243,9 +283,13 @@ const Upload = () => {
               toast.error("Slicer could not compute weight for this 3MF.");
             }
           } catch (err: any) {
+            window.clearTimeout(watchdog);
+            window.clearInterval(progressTimer);
             toast.error(`Slice failed: ${err.message ?? "unknown error"}`);
           } finally {
             setSlicing(false);
+            // brief delay so 100% is visible
+            window.setTimeout(() => { setSliceProgress(0); setSliceStage(""); }, 600);
           }
         })();
       }
@@ -285,6 +329,7 @@ const Upload = () => {
       toast.error(err.message ?? "Could not load STL");
     } finally {
       setParsing(false);
+      setUploading(false);
     }
   };
 
@@ -687,6 +732,32 @@ const Upload = () => {
               )}
             </div>
 
+            {/* Upload / slice status banner — always visible while work is happening */}
+            {(uploading || parsing || slicing) && (
+              <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {uploading
+                    ? `Received ${uploadFileName ?? "file"} — uploading…`
+                    : parsing
+                      ? "Parsing model…"
+                      : "Slicing in browser…"}
+                </div>
+                {slicing && (
+                  <div className="mt-2 space-y-1">
+                    <Progress value={sliceProgress} className="h-1.5" />
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>{sliceStage || "Working…"}</span>
+                      <span className="tabular-nums">{Math.round(sliceProgress)}%</span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">
+                      Checkout will unlock automatically when the slice finishes.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Plate tabs (only show in STL workflow) */}
             {!mfg && (
               <div className="space-y-3">
@@ -739,10 +810,21 @@ const Upload = () => {
               <div className="rounded-2xl border border-border bg-gradient-hero p-2">
                 <div className="relative h-80 w-full overflow-hidden rounded-xl">
                   {(parsing || slicing) && (
-                    <div className="absolute inset-0 z-10 grid place-items-center bg-background/60 backdrop-blur-sm">
-                      <div className="flex items-center gap-2 text-sm font-medium">
-                        <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                        {slicing ? "Slicing plate…" : "Loading…"}
+                    <div className="absolute inset-0 z-10 grid place-items-center bg-background/70 backdrop-blur-sm">
+                      <div className="w-72 max-w-[90%] space-y-3 rounded-2xl border border-border bg-card/90 p-4 shadow-lg">
+                        <div className="flex items-center gap-2 text-sm font-semibold">
+                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                          {slicing ? "Slicing in browser…" : "Loading model…"}
+                        </div>
+                        {slicing && (
+                          <>
+                            <Progress value={sliceProgress} className="h-2" />
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>{sliceStage || "Working…"}</span>
+                              <span className="tabular-nums">{Math.round(sliceProgress)}%</span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
@@ -913,8 +995,8 @@ const Upload = () => {
                   slicing={slicing}
                 />
                 <div className="flex gap-2">
-                  <Button variant="hero" onClick={handleSaveQuote} disabled={submitting || isStale}>
-                    {submitting ? "Saving…" : "Save quote"}
+                  <Button variant="hero" onClick={handleSaveQuote} disabled={submitting || isStale || slicing || parsing}>
+                    {slicing ? "Slicing…" : submitting ? "Saving…" : "Save quote"}
                   </Button>
                   <Button variant="ghost" onClick={() => navigate("/printers")}>Browse all printers</Button>
                 </div>
@@ -983,8 +1065,8 @@ const Upload = () => {
                               {m.score}% match
                             </div>
                             <div className="mt-3 flex flex-col gap-1.5">
-                              <Button size="sm" variant="hero" onClick={() => handleBook(m)}>
-                                <CreditCard className="h-3.5 w-3.5" /> Book
+                              <Button size="sm" variant="hero" onClick={() => handleBook(m)} disabled={slicing || parsing || isStale}>
+                                <CreditCard className="h-3.5 w-3.5" /> {slicing ? "Slicing…" : "Book"}
                               </Button>
                               {m.accepts_bulk && (
                                 <Button size="sm" variant="ghost" onClick={() => openBulk(m)}>
