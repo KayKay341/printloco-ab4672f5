@@ -1,1046 +1,715 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
-import { useDemoMode } from "@/hooks/useDemoMode";
-import { supabase } from "@/integrations/supabase/client";
-import Navbar from "@/components/site/Navbar";
-import Footer from "@/components/site/Footer";
-import SEO from "@/components/SEO";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
+import * as THREE from "three";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import {
-  Upload as UploadIcon,
+  AlertTriangle,
+  Copy,
+  Download,
   FileBox,
-  MapPin,
-  Sparkles,
-  Loader2,
-  CreditCard,
-  Layers,
-  Package,
-  Palette,
-  Play,
+  Link as LinkIcon,
+  RotateCcw,
+  RotateCw,
+  Save,
+  Trash2,
+  Upload as UploadIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
-import * as THREE from "three";
+import SEO from "@/components/SEO";
+import Logo from "@/components/site/Logo";
+import StlPreview from "@/components/StlPreview";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import {
-  MATERIAL_BASE_PRICE,
-  sliceStlBufferAccurate,
-  type SliceResult,
-} from "@/lib/stlSlicer";
-import { parse3mf, recolorBySlot, type FilamentSlot, type Mfg3mfResult } from "@/lib/threeMfParser";
-import StlPreview, { type PreviewPart } from "@/components/StlPreview";
-import ColorPicker from "@/components/ColorPicker";
-import PrinterMap from "@/components/PrinterMap";
-import CheckoutDialog from "@/components/CheckoutDialog";
-import BulkQuoteDialog from "@/components/BulkQuoteDialog";
-import CostEstimator, { DEFAULT_COST_INPUTS, type CostInputs, type EstimatorOutput } from "@/components/CostEstimator";
-import { scorePrinter, type PrinterForScore, type ScoredPrinter } from "@/lib/printerScore";
-import { BUILD_PLATES, DEFAULT_PLATE_ID, getPlate, checkFit, parseBuildVolume } from "@/lib/buildPlates";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
-  cryptoId,
-  findCollisions,
-  IDENTITY_TRANSFORM,
-  makePlate,
-  plateOverflow,
-  previewGeometry,
-  transformedBbox,
-  type PartState,
-  type PartTransform,
-  type PlateState,
-} from "@/lib/sliceJob";
-import { bakeStl, geometryToBinaryStl, mergeBinaryStls } from "@/lib/stlTransform";
-import PartTransformPanel from "@/components/PartTransformPanel";
-import PlateTabs from "@/components/PlateTabs";
+  DEFAULT_SLICER_SETTINGS,
+  MATERIAL_DEFAULTS,
+  PRESETS,
+  calculateSlicerStats,
+  formatDuration,
+  generateBasicGcode,
+  geometryToModelInfo,
+  safeBaseName,
+  settingsToText,
+  transformGeometryForSlicer,
+  type ModelInfo,
+  type SlicerSettings,
+  type SlicerStats,
+} from "@/lib/slicerEstimator";
 
-const MATERIALS = ["PLA", "PETG", "ABS", "TPU", "Nylon", "Resin"];
-
-type SourceMode = "file" | "url";
-
-type FilamentColorRow = {
-  material: string;
-  color_name: string;
-  hex_code: string;
-  in_stock: boolean;
-  surcharge_per_gram?: number;
+type ModelFile = {
+  name: string;
+  extension: "stl" | "obj";
+  geometry: THREE.BufferGeometry;
 };
 
-type PrinterRow = PrinterForScore & {
-  brand: string;
-  model: string;
-  neighborhood: string | null;
-  city: string | null;
-  bio: string | null;
-  owner_id: string;
-  has_ams: boolean;
-  ams_slot_count: number;
-  accepts_3mf: boolean;
-  accepts_bulk: boolean;
-  min_bulk_quantity: number;
-  build_volume: string | null;
-  material_prices: Record<string, number> | null;
-  profiles: { full_name: string | null } | null;
-  filament_colors: FilamentColorRow[];
+type SavedProfile = {
+  id: string;
+  name: string;
+  settings: SlicerSettings;
 };
+
+const SETTINGS_KEY = "printloco-slicer-settings";
+const HISTORY_KEY = "printloco-slicer-history";
+const PROFILES_KEY = "printloco-slicer-profiles";
 
 const Upload = () => {
-  const { user, loading } = useAuth();
-  const { isDemo } = useDemoMode();
-  const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [model, setModel] = useState<ModelFile | null>(null);
+  const [settings, setSettings] = useState<SlicerSettings>(() => loadSettings());
+  const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
+  const [processing, setProcessing] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [profiles, setProfiles] = useState<SavedProfile[]>(() => loadProfiles());
+  const [profileName, setProfileName] = useState("");
+  const [history, setHistory] = useState<SlicerSettings[]>(() => loadHistory());
 
-  // Source / file UI
-  const [sourceMode, setSourceMode] = useState<SourceMode>("file");
-  const [urlInput, setUrlInput] = useState("");
-  const [urlLoading, setUrlLoading] = useState(false);
-
-  // 3MF (single-plate, single-part path)
-  const [mfg, setMfg] = useState<Mfg3mfResult | null>(null);
-  const [mfgFile, setMfgFile] = useState<File | null>(null);
-  const [originalSlots, setOriginalSlots] = useState<FilamentSlot[]>([]);
-  const [parsing, setParsing] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadFileName, setUploadFileName] = useState<string | null>(null);
-  const [sliceProgress, setSliceProgress] = useState(0);
-  const [sliceStage, setSliceStage] = useState<string>("");
-
-  // Material / color (STL path)
-  const [material, setMaterial] = useState("PLA");
-  const [colorName, setColorName] = useState<string | null>(null);
-  const [colorHex, setColorHex] = useState<string>("#9333EA");
-
-  // Printers
-  const [printers, setPrinters] = useState<PrinterRow[]>([]);
-
-  // Plates / parts (STL path)
-  const [plates, setPlates] = useState<PlateState[]>(() => [makePlate(DEFAULT_PLATE_ID)]);
-  const [activePlateId, setActivePlateId] = useState<string>(plates[0].id);
-  const [selectedPartId, setSelectedPartId] = useState<string | null>(null);
-  const [slicing, setSlicing] = useState(false);
-
-  // Cost inputs (settings panel — DOES NOT auto-slice)
-  const [costInputs, setCostInputs] = useState<CostInputs>({ ...DEFAULT_COST_INPUTS, material: "PLA" });
-  const [estimate, setEstimate] = useState<EstimatorOutput | null>(null);
-
-  // Submit / checkout
-  const [submitting, setSubmitting] = useState(false);
-  const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [checkoutPayload, setCheckoutPayload] = useState<any>(null);
-  const [savedStlId, setSavedStlId] = useState<string | null>(null);
-
-  // Bulk
-  const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkPrinter, setBulkPrinter] = useState<PrinterRow | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { setCostInputs((c) => ({ ...c, material })); }, [material]);
-
-  // Fetch printers once
   useEffect(() => {
-    supabase
-      .from("printers")
-      .select("id, owner_id, brand, model, materials, price_per_gram, material_prices, neighborhood, city, bio, latitude, longitude, has_ams, ams_slot_count, accepts_3mf, accepts_bulk, min_bulk_quantity, build_volume, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock, surcharge_per_gram)")
-      .eq("is_active", true)
-      .then(({ data, error }) => {
-        if (error) toast.error(error.message);
-        else setPrinters((data as unknown as PrinterRow[]) ?? []);
-      });
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    setHistory((prev) => {
+      const next = [settings, ...prev.filter((s) => JSON.stringify(s) !== JSON.stringify(settings))].slice(0, 5);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [settings]);
+
+  useEffect(() => {
+    localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+  }, [profiles]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shared = params.get("settings");
+    if (!shared) return;
+    try {
+      const decoded = JSON.parse(atob(shared)) as SlicerSettings;
+      setSettings(sanitizeSettings(decoded));
+      toast.success("Shared slicer settings loaded");
+    } catch {
+      toast.error("Could not load shared settings");
+    }
   }, []);
 
-  // ----- Active plate helpers -----
-  const activePlate: PlateState = useMemo(
-    () => plates.find((p) => p.id === activePlateId) ?? plates[0],
-    [plates, activePlateId],
-  );
-  const plateModel = useMemo(() => getPlate(activePlate.plateId), [activePlate.plateId]);
+  const previewGeometry = useMemo(() => {
+    if (!model) return null;
+    return transformGeometryForSlicer(model.geometry, rotation);
+  }, [model, rotation]);
 
-  const updateActivePlate = (updater: (p: PlateState) => PlateState, markDirty = true) => {
-    setPlates((prev) => prev.map((p) => p.id === activePlateId ? updater({ ...p, dirty: markDirty ? true : p.dirty }) : p));
-  };
+  const modelInfo: ModelInfo | null = useMemo(() => {
+    if (!previewGeometry) return null;
+    return geometryToModelInfo(previewGeometry);
+  }, [previewGeometry]);
 
-  const updatePart = (partId: string, patch: Partial<PartTransform>) => {
-    updateActivePlate((p) => ({
-      ...p,
-      parts: p.parts.map((part) => part.id === partId ? { ...part, transform: { ...part.transform, ...patch } } : part),
-    }));
-  };
-
-  const selectedPart = useMemo(
-    () => activePlate.parts.find((p) => p.id === selectedPartId) ?? null,
-    [activePlate.parts, selectedPartId],
+  const stats: SlicerStats | null = useMemo(
+    () => calculateSlicerStats(modelInfo, settings),
+    [modelInfo, settings],
   );
 
-  // ----- File input → load as STL part(s) or 3MF -----
+  const warnings = useMemo(() => {
+    const list: string[] = [];
+    if (!stats) return list;
+    if (stats.printMinutes > 480) list.push("This print is estimated over 8 hours.");
+    if (settings.infill < 8) list.push("Very low infill can make parts fragile.");
+    if (settings.speed > 85 && settings.layerHeight < 0.18) list.push("High speed with thin layers may reduce detail.");
+    if (stats.dimensions.width > 250 || stats.dimensions.depth > 250 || stats.dimensions.height > 250) {
+      list.push("Large model: confirm it fits your printer build volume.");
+    }
+    return list;
+  }, [settings, stats]);
+
   const handleFile = async (file: File) => {
     const ext = file.name.toLowerCase().split(".").pop();
-    if (ext !== "stl" && ext !== "3mf") {
-      toast.error("Please upload a .stl or .3mf file");
+    if (ext !== "stl" && ext !== "obj") {
+      toast.error("Please upload an STL or OBJ file.");
       return;
     }
     if (file.size > 50 * 1024 * 1024) {
-      toast.error("File is too large (50MB max)");
-      return;
-    }
-    setSavedStlId(null);
-
-    // Immediate "received / uploading" feedback so the user always sees something.
-    setUploading(true);
-    setUploadFileName(file.name);
-    toast.info(`Received ${file.name} (${(file.size / 1024 / 1024).toFixed(1)} MB) — preparing…`);
-
-    if (ext === "3mf") {
-      setParsing(true);
-      let parsed: Mfg3mfResult | null = null;
-      try {
-        const buf = await file.arrayBuffer();
-        parsed = await parse3mf(buf);
-
-        // Show the model in the preview IMMEDIATELY — don't wait for the slicer.
-        setMfg(parsed);
-        setMfgFile(file);
-        setOriginalSlots(parsed.filaments.map((f) => ({ ...f })));
-        setMaterial(parsed.sliceSettings.material);
-        setCostInputs((prev) => ({
-          ...prev,
-          material: parsed!.sliceSettings.material,
-          infillPct: parsed!.sliceSettings.infillPct,
-          layerHeightMm: parsed!.sliceSettings.layerHeightMm,
-          walls: parsed!.sliceSettings.walls,
-          supports: parsed!.sliceSettings.supports,
-        }));
-
-        if (parsed.totalWeightG > 0) {
-          if (parsed.weightSource === "embedded-gcode") {
-            toast.success(`3MF loaded · ${parsed.totalWeightG.toFixed(1)}g (from embedded G-code)`);
-          } else {
-            toast.success(`3MF loaded · ${parsed.totalWeightG.toFixed(1)}g (fast estimate)`);
-          }
-        } else {
-          toast.warning("3MF loaded — could not estimate weight. Set it manually.");
-        }
-      } catch (err: any) {
-        toast.error(`Could not parse 3MF: ${err.message}`);
-        setParsing(false);
-        setUploading(false);
-        return;
-      } finally {
-        setParsing(false);
-        setUploading(false);
-      }
+      toast.error("File is too large. Please use a file under 50MB.");
       return;
     }
 
-    // STL → add as a part to the active plate
-    setMfg(null);
-    setMfgFile(null);
+    setProcessing(true);
+    toast.info(`Received ${file.name} — loading preview…`);
     try {
-      setParsing(true);
-      const buf = await file.arrayBuffer();
-      const loader = new STLLoader();
-      const geom = loader.parse(buf);
-      geom.computeBoundingBox();
-      const sz = new THREE.Vector3();
-      geom.boundingBox!.getSize(sz);
-
-      // Heuristic inch detection: very small "mm" bbox
-      const sourceUnits: "mm" | "in" = (Math.max(sz.x, sz.y, sz.z) > 0 && Math.max(sz.x, sz.y, sz.z) < 8) ? "in" : "mm";
-
-      const part: PartState = {
-        id: cryptoId(),
-        fileName: file.name,
-        kind: "stl",
-        buffer: buf,
-        geometry: geom,
-        baseBboxMm: { x: sz.x * (sourceUnits === "in" ? 25.4 : 1), y: sz.y * (sourceUnits === "in" ? 25.4 : 1), z: sz.z * (sourceUnits === "in" ? 25.4 : 1) },
-        transform: { ...IDENTITY_TRANSFORM, scale: sourceUnits === "in" ? 25.4 : 1 },
-        color: colorHex,
-        sourceUnits,
-      };
-      updateActivePlate((p) => ({ ...p, parts: [...p.parts, part] }));
-      setSelectedPartId(part.id);
-      if (sourceUnits === "in") toast.info("Detected inch-based STL — auto-scaled to mm.");
-    } catch (err: any) {
-      toast.error(err.message ?? "Could not load STL");
+      const geometry = ext === "stl" ? await loadStl(file) : await loadObj(file);
+      setModel({ name: file.name, extension: ext, geometry });
+      setRotation({ x: 0, y: 0, z: 0 });
+      toast.success(`${file.name} loaded`);
+    } catch (error: any) {
+      toast.error(error?.message ?? "Could not load that model.");
     } finally {
-      setParsing(false);
-      setUploading(false);
+      setProcessing(false);
+      if (inputRef.current) inputRef.current.value = "";
     }
   };
 
-  const handleFetchUrl = async () => {
-    const trimmed = urlInput.trim();
-    if (!trimmed) {
-      toast.error("Paste a URL to a .stl or .3mf file");
+  const updateSetting = <K extends keyof SlicerSettings>(key: K, value: SlicerSettings[K]) => {
+    setSettings((current) => ({ ...current, [key]: value }));
+  };
+
+  const applyPreset = (preset: (typeof PRESETS)[number]) => {
+    setSettings((current) => ({ ...current, ...preset.settings }));
+    toast.success(`${preset.name} profile applied`);
+  };
+
+  const saveProfile = () => {
+    const name = profileName.trim();
+    if (!name) {
+      toast.error("Name the profile first.");
       return;
     }
-    setUrlLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("fetch-model", { body: { url: trimmed } });
-      if (error || !data?.base64) throw new Error(error?.message ?? data?.error ?? "Could not fetch model");
-      const bin = atob(data.base64);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const blob = new Blob([bytes], { type: data.contentType });
-      const f = new File([blob], data.fileName, { type: data.contentType });
-      await handleFile(f);
-      toast.success("Model loaded from URL");
-    } catch (err: any) {
-      toast.error(err.message ?? "Could not fetch URL");
-    } finally {
-      setUrlLoading(false);
-    }
+    setProfiles((prev) => [{ id: crypto.randomUUID(), name, settings }, ...prev].slice(0, 12));
+    setProfileName("");
+    toast.success("Profile saved");
   };
 
-  // ----- Part actions -----
-  const duplicatePart = (id: string) => {
-    const src = activePlate.parts.find((p) => p.id === id);
-    if (!src) return;
-    const copy: PartState = {
-      ...src,
-      id: cryptoId(),
-      transform: { ...src.transform, tx: src.transform.tx + 30, ty: src.transform.ty + 30 },
-    };
-    updateActivePlate((p) => ({ ...p, parts: [...p.parts, copy] }));
-    setSelectedPartId(copy.id);
-  };
-  const deletePart = (id: string) => {
-    updateActivePlate((p) => ({ ...p, parts: p.parts.filter((q) => q.id !== id) }));
-    if (selectedPartId === id) setSelectedPartId(null);
-  };
-  const centerPart = (id: string) => updatePart(id, { tx: 0, ty: 0 });
-  const layFlat = (id: string) => updatePart(id, { rotX: 0, rotY: 0 });
-
-  // ----- Plate actions -----
-  const addPlate = () => {
-    const p = makePlate(activePlate.plateId);
-    setPlates((prev) => [...prev, p]);
-    setActivePlateId(p.id);
-    setSelectedPartId(null);
-  };
-  const removePlate = (id: string) => {
-    setPlates((prev) => {
-      const next = prev.filter((p) => p.id !== id);
-      if (next.length === 0) return [makePlate(DEFAULT_PLATE_ID)];
-      return next;
-    });
-    if (activePlateId === id) {
-      const next = plates.find((p) => p.id !== id);
-      if (next) setActivePlateId(next.id);
-    }
-  };
-  const setActivePlateModel = (plateId: string) => {
-    updateActivePlate((p) => ({ ...p, plateId }));
+  const clearFile = () => {
+    setModel(null);
+    setRotation({ x: 0, y: 0, z: 0 });
   };
 
-  // Mark dirty when slice settings change (material, infill, etc.)
-  const settingsKey = `${material}|${costInputs.infillPct}|${costInputs.layerHeightMm}|${costInputs.walls}|${costInputs.supports}|${costInputs.scalePct}|${plateModel.x}x${plateModel.y}x${plateModel.z}`;
-  const lastSettingsKey = useRef(settingsKey);
-  useEffect(() => {
-    if (lastSettingsKey.current !== settingsKey) {
-      lastSettingsKey.current = settingsKey;
-      setPlates((prev) => prev.map((p) => p.id === activePlateId ? { ...p, dirty: true } : p));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settingsKey]);
-
-  // ----- Preview parts (transformed geometries) -----
-  const collisions = useMemo(() => findCollisions(activePlate.parts), [activePlate.parts]);
-  const overflow = useMemo(() => plateOverflow(activePlate.parts, plateModel), [activePlate.parts, plateModel]);
-
-  const previewParts: PreviewPart[] = useMemo(
-    () => activePlate.parts.map((p) => ({
-      id: p.id,
-      geometry: previewGeometry(p),
-      color: p.color,
-      selected: p.id === selectedPartId,
-      collides: collisions.has(p.id),
-    })),
-    [activePlate.parts, selectedPartId, collisions],
-  );
-
-  // Handler: drag a part on plate
-  const handleDragMove = (partId: string, dx: number, dy: number) => {
-    const p = activePlate.parts.find((pp) => pp.id === partId);
-    if (!p) return;
-    updatePart(partId, { tx: p.transform.tx + dx, ty: p.transform.ty + dy });
-  };
-
-  // ----- Slice plate (manual) -----
-  const handleSlicePlate = async () => {
-    if (activePlate.parts.length === 0) {
-      toast.error("Add a part to the plate first.");
+  const downloadGcode = () => {
+    if (!model || !stats) {
+      toast.error("Upload a model first.");
       return;
     }
-    setSlicing(true);
-    try {
-      // Bake each part: per-part-scale (transform.scale already includes inch→mm) + rotation, lay-flat, then translate.
-      const baked: ArrayBuffer[] = [];
-      for (const p of activePlate.parts) {
-        const bb = transformedBbox(p);
-        // We rotate + scale + drop-to-floor then translate. But previewGeometry already
-        // encodes lay-flat + translate; for the bake we recompute from the original
-        // buffer to avoid double-applying.
-        const out = bakeStl(p.buffer, {
-          preScale: p.transform.scale,
-          rotXDeg: p.transform.rotX,
-          rotYDeg: p.transform.rotY,
-          rotZDeg: p.transform.rotZ,
-          layFlatToPlate: true,
-          translate: [p.transform.tx, p.transform.ty, 0],
-        });
-        // bb computed but not strictly needed — could be used to flag oversize before slicing
-        void bb;
-        baked.push(out);
-      }
-      const merged = mergeBinaryStls(baked);
-
-      // Apply user-level scale slider on top of per-part scale (kept for global "make whole plate bigger")
-      const userScale = costInputs.scalePct / 100;
-      const sliceBuf = userScale === 1 ? merged : bakeStl(merged, { preScale: userScale });
-
-      const result = await sliceStlBufferAccurate(sliceBuf, {
-        material,
-        infillPct: costInputs.infillPct,
-        layerHeightMm: costInputs.layerHeightMm,
-        walls: costInputs.walls,
-        supports: costInputs.supports,
-        sourceUnits: "mm",          // already baked into mm
-        scale: 1,                   // already applied
-        plate: plateModel,
-      });
-
-      if (result.weightG <= 0) {
-        toast.error("Slicer returned no material usage. Try repairing the STL or changing settings.");
-      } else {
-        toast.success(`Plate sliced: ${result.weightG.toFixed(1)}g · ${formatMins(result.printMinutes)}`);
-      }
-
-      setPlates((prev) => prev.map((p) =>
-        p.id === activePlateId ? { ...p, lastSlice: result, dirty: false } : p,
-      ));
-    } catch (err: any) {
-      toast.error(err.message ?? "Slice failed");
-    } finally {
-      setSlicing(false);
-    }
+    downloadText(`${safeBaseName(model.name)}.gcode`, generateBasicGcode(model.name, settings, stats), "text/plain");
+    toast.success("GCODE downloaded");
   };
 
-  // ----- Quote inputs -----
-  const baseWeightG = useMemo(() => {
-    if (mfg) return mfg.totalWeightG;
-    return activePlate.lastSlice?.weightG ?? 0;
-  }, [mfg, activePlate.lastSlice]);
-  const baseBboxMm = useMemo(() => {
-    if (mfg) return mfg.bbox;
-    return activePlate.lastSlice?.bbox ?? { x: 0, y: 0, z: 0 };
-  }, [mfg, activePlate.lastSlice]);
-  const basePrintMinutes = useMemo(() => {
-    if (mfg) return mfg.printMinutes;
-    return activePlate.lastSlice?.printMinutes ?? 0;
-  }, [mfg, activePlate.lastSlice]);
-
-  const totalWeightG = estimate?.weightG ?? baseWeightG;
-  const baseQuote = estimate ? estimate.amountCents / 100 : baseWeightG * (MATERIAL_BASE_PRICE[material] ?? 0.2);
-  const isStale = activePlate.dirty && activePlate.parts.length > 0 && !mfg;
-  const hasAccurateQuote = mfg ? mfg.totalWeightG > 0 : activePlate.lastSlice?.weightG ? activePlate.lastSlice.weightG > 0 : false;
-
-  // Printer matches
-  const matches: (PrinterRow & ScoredPrinter & { fitsPlate: boolean })[] = useMemo(() => {
-    if (totalWeightG <= 0 || isStale) return [];
-    const refBbox = mfg ? mfg.bbox : baseBboxMm;
-    return printers
-      .map((p) => {
-        const score = scorePrinter(p, { weightG: totalWeightG, material, colorName });
-        const bv = parseBuildVolume(p.build_volume);
-        const fitsPlate = bv ? checkFit(refBbox, { x: bv.x, y: bv.y, z: bv.z } as any).status !== "too-large" : true;
-        return { ...p, ...score, fitsPlate };
-      })
-      .filter((p) => p.fitsPlate)
-      .filter((p) => {
-        if (!mfg) return true;
-        const slotsNeeded = mfg.filaments.length;
-        return p.has_ams && p.accepts_3mf && p.ams_slot_count >= slotsNeeded;
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 8);
-  }, [printers, totalWeightG, material, colorName, mfg, baseBboxMm, isStale]);
-
-  const mapPins = useMemo(
-    () => matches
-      .filter((m) => m.latitude != null && m.longitude != null)
-      .map((m) => ({
-        id: m.id, lng: m.longitude!, lat: m.latitude!,
-        label: `${m.brand} ${m.model} · $${m.totalPrice.toFixed(2)}`,
-        color: m.matchedHex ?? colorHex,
-      })),
-    [matches, colorHex],
-  );
-
-  if (loading) return <div className="container py-24">Loading…</div>;
-
-  // 3MF: reassign one slot's color
-  const reassignSlot = (slotIdx: number, hex: string) => {
-    if (!mfg) return;
-    const before = mfg.filaments.map((f) => ({ ...f }));
-    const after = mfg.filaments.map((f, i) => (i === slotIdx ? { ...f, hex } : f));
-    recolorBySlot(mfg.geometry, before, after);
-    setMfg({ ...mfg, filaments: after });
+  const copySettings = async () => {
+    await navigator.clipboard.writeText(settingsToText(settings, stats, model?.name ?? null));
+    toast.success("Settings copied");
   };
 
-  const ensureFileSaved = async (): Promise<string | null> => {
-    if (!user) return null;
-    // For STL, save the merged plate buffer; for 3MF, save the original 3MF.
-    let file: File | null = null;
-    if (mfg && mfgFile) {
-      file = mfgFile;
-    } else if (activePlate.parts.length > 0) {
-      const baked: ArrayBuffer[] = activePlate.parts.map((p) => bakeStl(p.buffer, {
-        preScale: p.transform.scale,
-        rotXDeg: p.transform.rotX, rotYDeg: p.transform.rotY, rotZDeg: p.transform.rotZ,
-        layFlatToPlate: true,
-        translate: [p.transform.tx, p.transform.ty, 0],
-      }));
-      const merged = mergeBinaryStls(baked);
-      const name = activePlate.parts.length === 1 ? activePlate.parts[0].fileName : `plate-${plates.findIndex((pp) => pp.id === activePlateId) + 1}.stl`;
-      file = new File([merged], name, { type: "model/stl" });
-    }
-    if (!file) return null;
-    if (savedStlId) return savedStlId;
-
-    const path = `${user.id}/${Date.now()}-${file.name}`;
-    const contentType = mfg ? "model/3mf" : "model/stl";
-    const { error: upErr } = await supabase.storage
-      .from("stl-files")
-      .upload(path, file, { contentType, upsert: false });
-    if (upErr) throw upErr;
-
-    const { data, error: insErr } = await supabase
-      .from("stl_files")
-      .insert({
-        user_id: user.id,
-        file_name: file.name,
-        file_path: path,
-        file_size: file.size,
-        material,
-        estimated_weight: Math.round(totalWeightG * 10) / 10,
-        estimated_price: Number(baseQuote.toFixed(2)),
-      })
-      .select("id")
-      .single();
-    if (insErr) throw insErr;
-    setSavedStlId(data.id);
-    return data.id;
+  const shareSettings = async () => {
+    const encoded = btoa(JSON.stringify(settings));
+    const url = `${window.location.origin}${window.location.pathname}?settings=${encodeURIComponent(encoded)}`;
+    await navigator.clipboard.writeText(url);
+    toast.success("Share link copied");
   };
 
-  const handleSaveQuote = async () => {
-    if (totalWeightG <= 0) {
-      toast.error("Slice the plate first.");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await ensureFileSaved();
-      toast.success("Quote saved!");
-      navigate("/dashboard");
-    } catch (err: any) {
-      toast.error(err.message ?? "Upload failed");
-    } finally {
-      setSubmitting(false);
-    }
+  const downloadJson = () => {
+    downloadText("printloco-settings.json", JSON.stringify({ file: model?.name ?? null, settings, stats }, null, 2), "application/json");
   };
 
-  const handleBook = async (m: PrinterRow & ScoredPrinter) => {
-    if (totalWeightG <= 0 || !user) {
-      toast.error("Slice the plate first.");
-      return;
-    }
-    try {
-      const stlId = await ensureFileSaved();
-      const amountCents = Math.max(100, Math.round(m.totalPrice * 100));
-      const noteParts: string[] = [`${totalWeightG.toFixed(1)}g`];
-      if (mfg) {
-        noteParts.push(`${mfg.filaments.length} colors`);
-        mfg.filaments.forEach((f, i) => noteParts.push(`Slot ${i + 1}: ${f.type} ${f.hex}`));
-      } else if (activePlate.parts.length > 1) {
-        noteParts.push(`${activePlate.parts.length} parts`);
-      }
-      setCheckoutPayload({
-        printerId: m.id,
-        stlFileId: stlId,
-        makerId: m.owner_id,
-        material,
-        quantity: 1,
-        amountCents,
-        colorName: colorName ?? undefined,
-        notes: noteParts.join(" · "),
-        customerId: user.id,
-        customerEmail: user.email ?? undefined,
-      });
-      setCheckoutOpen(true);
-    } catch (err: any) {
-      toast.error(err.message ?? "Could not start checkout");
-    }
+  const downloadTxt = () => {
+    downloadText("printloco-settings.txt", settingsToText(settings, stats, model?.name ?? null), "text/plain");
   };
-
-  const openBulk = (m: PrinterRow) => { setBulkPrinter(m); setBulkOpen(true); };
-
-  const hasAnyPart = activePlate.parts.length > 0 || !!mfg;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-slicer-background text-slicer-foreground">
       <SEO
-        title="In-browser slicer for STL & 3MF — instant 3D print quotes | PrintLoco"
-        description="Drop STL/3MF files onto a virtual build plate, rotate and arrange them, slice in your browser, and book a local maker — all without installing software."
+        title="PrintLoco 3D Slicer — STL & OBJ GCODE Tool"
+        description="Upload STL or OBJ files, preview models, tune slicer settings, estimate layers, time, weight, and download GCODE."
         path="/upload"
       />
-      <Navbar />
-      <main className="container max-w-6xl py-12">
-        <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">In-browser slicer</div>
-        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
-          Arrange, slice, match — <span className="italic text-primary">all in your browser</span>
-        </h1>
-        <p className="mt-2 text-muted-foreground">
-          Drop one or more STLs onto a build plate, rotate and lay-flat, then press <strong>Slice plate</strong>.
-        </p>
-
-        <div className="mt-10 grid gap-8 lg:grid-cols-[1.1fr_1fr]">
-          {/* LEFT: workspace */}
-          <section className="space-y-6 rounded-3xl border border-border bg-card p-6 shadow-soft">
-            {/* Upload box */}
+      <header className="border-b border-slicer-border bg-slicer-panel/90">
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
+          <div className="flex items-center gap-4">
+            <Logo className="text-slicer-foreground [&_span_span:last-child]:text-slicer-green" />
+            <div className="hidden h-8 w-px bg-slicer-border sm:block" />
             <div>
-              <div className="mb-3 inline-flex rounded-full border border-border bg-background p-0.5 text-xs">
-                {(["file", "url"] as const).map((m) => (
+              <h1 className="font-sans text-xl font-bold tracking-normal text-slicer-foreground sm:text-2xl">
+                PrintLoco 3D Slicer
+              </h1>
+              <p className="text-xs text-slicer-muted">Fast STL/OBJ preview, live estimates, and GCODE export</p>
+            </div>
+          </div>
+          <Button
+            variant="soft"
+            onClick={() => inputRef.current?.click()}
+            className="min-h-11 border-slicer-cyan/40 bg-slicer-panel-strong text-slicer-cyan hover:border-slicer-cyan"
+          >
+            <UploadIcon className="h-4 w-4" /> Upload
+          </Button>
+        </div>
+      </header>
+
+      <main className="mx-auto grid max-w-[1600px] gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(360px,40%)_minmax(0,60%)]">
+        <aside className="space-y-4 lg:order-1">
+          <UploadPanel
+            model={model}
+            processing={processing}
+            dragging={dragging}
+            onDragState={setDragging}
+            onFile={handleFile}
+            onClear={clearFile}
+            inputRef={inputRef}
+          />
+
+          <section className="rounded-lg border border-slicer-border bg-slicer-panel p-4 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">Slicer Settings</h2>
+                <p className="text-xs text-slicer-muted">Adjust values and watch estimates update instantly.</p>
+              </div>
+              <Select
+                value={settings.material}
+                onValueChange={(value: SlicerSettings["material"]) => {
+                  setSettings((current) => ({ ...current, material: value, nozzleTemp: MATERIAL_DEFAULTS[value] }));
+                }}
+              >
+                <SelectTrigger className="min-h-11 w-28 border-slicer-border bg-slicer-panel-strong text-slicer-foreground">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="PLA">PLA</SelectItem>
+                  <SelectItem value="ABS">ABS</SelectItem>
+                  <SelectItem value="PETG">PETG</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-5">
+              <SettingSlider
+                label="Layer Height"
+                help="Thinner layers make more detail but take longer."
+                value={settings.layerHeight}
+                min={0.1}
+                max={0.4}
+                step={0.01}
+                suffix="mm"
+                decimals={2}
+                onChange={(value) => updateSetting("layerHeight", value)}
+              />
+              <SettingSlider
+                label="Infill"
+                help="How solid the inside is — more is stronger but heavier."
+                value={settings.infill}
+                min={0}
+                max={100}
+                step={1}
+                suffix="%"
+                onChange={(value) => updateSetting("infill", value)}
+              />
+              <SettingSlider
+                label="Nozzle Temperature"
+                help="Hotend temperature for the selected plastic."
+                value={settings.nozzleTemp}
+                min={190}
+                max={250}
+                step={1}
+                suffix="°C"
+                onChange={(value) => updateSetting("nozzleTemp", value)}
+              />
+              <SettingSlider
+                label="Print Speed"
+                help="Faster prints finish sooner but can be less precise."
+                value={settings.speed}
+                min={10}
+                max={100}
+                step={1}
+                suffix=" mm/s"
+                onChange={(value) => updateSetting("speed", value)}
+              />
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slicer-border bg-slicer-panel p-4">
+            <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">Preset Profiles</h2>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {PRESETS.map((preset) => (
+                <button
+                  key={preset.name}
+                  type="button"
+                  onClick={() => applyPreset(preset)}
+                  className="min-h-11 rounded-md border border-slicer-border bg-slicer-panel-strong p-3 text-left transition hover:border-slicer-green hover:bg-slicer-green/10"
+                >
+                  <div className="text-sm font-bold text-slicer-foreground">{preset.name}</div>
+                  <div className="text-xs text-slicer-muted">{preset.description}</div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Input
+                value={profileName}
+                onChange={(event) => setProfileName(event.target.value)}
+                placeholder="Custom profile name"
+                className="min-h-11 border-slicer-border bg-slicer-panel-strong text-slicer-foreground placeholder:text-slicer-muted"
+              />
+              <Button onClick={saveProfile} className="min-h-11 bg-slicer-green text-slicer-background hover:bg-slicer-green/90">
+                <Save className="h-4 w-4" /> Save
+              </Button>
+            </div>
+            {profiles.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {profiles.map((profile) => (
                   <button
-                    key={m}
+                    key={profile.id}
                     type="button"
-                    onClick={() => setSourceMode(m)}
-                    className={`rounded-full px-3 py-1 font-semibold transition-colors ${
-                      sourceMode === m ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                    }`}
+                    onClick={() => setSettings(profile.settings)}
+                    className="flex min-h-11 w-full items-center justify-between rounded-md border border-slicer-border px-3 text-sm text-slicer-foreground hover:border-slicer-cyan"
                   >
-                    {m === "file" ? "File" : "From URL"}
+                    <span>{profile.name}</span>
+                    <span className="text-xs text-slicer-muted">{profile.settings.layerHeight}mm · {profile.settings.infill}%</span>
                   </button>
                 ))}
               </div>
+            )}
+            {history.length > 1 && (
+              <Button
+                variant="ghost"
+                onClick={() => setSettings(history[1])}
+                className="mt-3 min-h-11 text-slicer-cyan hover:bg-slicer-cyan/10"
+              >
+                Load Previous Settings
+              </Button>
+            )}
+          </section>
+        </aside>
 
-              {sourceMode === "file" ? (
-                <label
-                  htmlFor="stl"
-                  className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
-                    hasAnyPart ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/30"
-                  }`}
-                >
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary/10 text-primary">
-                    {hasAnyPart ? <FileBox className="h-6 w-6" /> : <UploadIcon className="h-6 w-6" />}
-                  </div>
-                  <div className="font-display text-base font-semibold">
-                    {hasAnyPart ? "Drop another file to add to the plate" : "Click to upload an STL or .3mf"}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground">Max 50MB</div>
-                  <input
-                    id="stl"
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".stl,.3mf,model/stl,model/3mf"
-                    className="sr-only"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0] ?? null;
-                      if (f) handleFile(f);
-                      if (fileInputRef.current) fileInputRef.current.value = "";
-                    }}
-                  />
-                </label>
+        <section className="space-y-4 lg:order-2">
+          <div className="rounded-lg border border-slicer-border bg-slicer-panel p-3 shadow-2xl">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">3D Model Preview</h2>
+                <p className="text-xs text-slicer-muted">Drag to rotate · mouse wheel to zoom · touch gestures supported</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <RotateButton axis="x" direction={-90} onClick={() => setRotation((r) => ({ ...r, x: r.x - 90 }))} />
+                <RotateButton axis="x" direction={90} onClick={() => setRotation((r) => ({ ...r, x: r.x + 90 }))} />
+                <RotateButton axis="y" direction={90} onClick={() => setRotation((r) => ({ ...r, y: r.y + 90 }))} />
+                <RotateButton axis="z" direction={90} onClick={() => setRotation((r) => ({ ...r, z: r.z + 90 }))} />
+              </div>
+            </div>
+            <div className="relative h-[420px] overflow-hidden rounded-md border border-slicer-border bg-slicer-background sm:h-[520px] lg:h-[610px]">
+              {previewGeometry ? (
+                <StlPreview geometry={previewGeometry} color="hsl(var(--slicer-cyan))" plate={{ x: 260, y: 260, z: 260 }} className="h-full w-full" />
               ) : (
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    value={urlInput}
-                    onChange={(e) => setUrlInput(e.target.value)}
-                    placeholder="https://example.com/model.stl"
-                    className="flex h-10 w-full rounded-xl border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  />
-                  <Button onClick={handleFetchUrl} disabled={urlLoading}>
-                    {urlLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Fetch"}
-                  </Button>
+                <div className="grid h-full place-items-center p-8 text-center">
+                  <div>
+                    <div className="mx-auto grid h-20 w-20 place-items-center rounded-lg border border-slicer-cyan/40 bg-slicer-cyan/10 text-slicer-cyan">
+                      <FileBox className="h-10 w-10" />
+                    </div>
+                    <div className="mt-5 text-2xl font-bold text-slicer-foreground">No model loaded</div>
+                    <p className="mt-2 max-w-md text-sm text-slicer-muted">Upload an STL or OBJ file to inspect dimensions, tune slicer settings, and download GCODE.</p>
+                  </div>
+                </div>
+              )}
+              {processing && (
+                <div className="absolute inset-0 grid place-items-center bg-slicer-background/80 backdrop-blur-sm">
+                  <div className="rounded-lg border border-slicer-cyan/40 bg-slicer-panel p-5 text-center shadow-2xl">
+                    <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-slicer-cyan border-t-transparent" />
+                    <div className="mt-3 font-bold text-slicer-cyan">Loading model…</div>
+                  </div>
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Upload / slice status banner — always visible while work is happening */}
-            {(uploading || parsing || slicing) && (
-              <div className="rounded-2xl border border-primary/30 bg-primary/5 p-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {uploading
-                    ? `Received ${uploadFileName ?? "file"} — uploading…`
-                    : parsing
-                      ? "Parsing model…"
-                      : "Slicing in browser…"}
-                </div>
-                {slicing && (
-                  <div className="mt-2 space-y-1">
-                    <Progress value={sliceProgress} className="h-1.5" />
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>{sliceStage || "Working…"}</span>
-                      <span className="tabular-nums">{Math.round(sliceProgress)}%</span>
-                    </div>
-                    <div className="text-[11px] text-muted-foreground">
-                      Checkout will unlock automatically when the slice finishes.
-                    </div>
-                  </div>
-                )}
+          <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
+            <StatsBox stats={stats} />
+            <LayerPreview layers={stats?.layers ?? 0} layerHeight={settings.layerHeight} />
+          </div>
+
+          {warnings.length > 0 && (
+            <div className="rounded-lg border border-slicer-warning/40 bg-slicer-warning/10 p-4 text-sm text-slicer-foreground">
+              <div className="mb-2 flex items-center gap-2 font-bold text-slicer-warning">
+                <AlertTriangle className="h-4 w-4" /> Safety Warnings
               </div>
-            )}
+              <ul className="space-y-1">
+                {warnings.map((warning) => <li key={warning}>• {warning}</li>)}
+              </ul>
+            </div>
+          )}
 
-            {/* Plate tabs (only show in STL workflow) */}
-            {!mfg && (
-              <div className="space-y-3">
-                <PlateTabs
-                  plates={plates}
-                  activeId={activePlateId}
-                  onSelect={(id) => { setActivePlateId(id); setSelectedPartId(null); }}
-                  onAdd={addPlate}
-                  onRemove={removePlate}
-                />
-
-                {/* Plate model selector */}
-                <div className="rounded-2xl border border-border bg-background/40 p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label className="text-xs uppercase tracking-wider text-muted-foreground">Build plate</Label>
-                    {activePlate.parts.length > 0 && (
-                      <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        overflow ? "bg-destructive/15 text-destructive" : "bg-primary/10 text-primary"
-                      }`}>
-                        {overflow ? "Off plate" : "Fits"}
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {BUILD_PLATES.map((p) => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        onClick={() => setActivePlateModel(p.id)}
-                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
-                          activePlate.plateId === p.id
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background text-muted-foreground hover:text-foreground"
-                        }`}
-                        title={`${p.brand} ${p.model} — ${p.x} × ${p.y} × ${p.z} mm`}
-                      >
-                        {p.short}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-2 text-[11px] text-muted-foreground">
-                    {plateModel.brand} {plateModel.model} · {plateModel.x} × {plateModel.y} × {plateModel.z} mm
-                  </div>
-                </div>
+          <section className="rounded-lg border border-slicer-border bg-slicer-panel p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">Download & Share</h2>
+                <p className="text-xs text-slicer-muted">Export printer instructions or back up the current settings.</p>
               </div>
-            )}
-
-            {/* 3D preview */}
-            {(hasAnyPart) && (
-              <div className="rounded-2xl border border-border bg-gradient-hero p-2">
-                <div className="relative h-80 w-full overflow-hidden rounded-xl">
-                  {(parsing || slicing) && (
-                    <div className="absolute inset-0 z-10 grid place-items-center bg-background/70 backdrop-blur-sm">
-                      <div className="w-72 max-w-[90%] space-y-3 rounded-2xl border border-border bg-card/90 p-4 shadow-lg">
-                        <div className="flex items-center gap-2 text-sm font-semibold">
-                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                          {slicing ? "Slicing in browser…" : "Loading model…"}
-                        </div>
-                        {slicing && (
-                          <>
-                            <Progress value={sliceProgress} className="h-2" />
-                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                              <span>{sliceStage || "Working…"}</span>
-                              <span className="tabular-nums">{Math.round(sliceProgress)}%</span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {mfg ? (
-                    <StlPreview
-                      geometry={mfg.geometry}
-                      color={colorHex}
-                      vertexColors
-                      plate={plateModel}
-                      className="h-full w-full"
-                    />
-                  ) : (
-                    <StlPreview
-                      parts={previewParts}
-                      plate={plateModel}
-                      overflow={overflow}
-                      onSelect={setSelectedPartId}
-                      onDragMove={handleDragMove}
-                      className="h-full w-full"
-                    />
-                  )}
-                </div>
-                {!mfg && activePlate.parts.length > 0 && (
-                  <div className="mt-2 flex items-center justify-between gap-2 px-1 text-[11px] text-muted-foreground">
-                    <span>Click a part to select · drag to move · use the panel below to rotate</span>
-                    <Button size="sm" variant="hero" onClick={handleSlicePlate} disabled={slicing}>
-                      <Play className="mr-1 h-3.5 w-3.5" />
-                      {slicing ? "Slicing…" : "Slice plate"}
-                    </Button>
-                  </div>
-                )}
-                {overflow && !mfg && (
-                  <div className="mt-2 rounded-xl bg-destructive/10 p-3 text-xs text-destructive">
-                    One or more parts overflow {plateModel.short}. Move/scale them or pick a larger plate.
-                  </div>
-                )}
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={downloadGcode} disabled={!stats} className="min-h-11 bg-slicer-cyan text-slicer-background hover:bg-slicer-cyan/90">
+                  <Download className="h-4 w-4" /> Download GCODE
+                </Button>
+                <Button onClick={copySettings} variant="soft" className="min-h-11 border-slicer-border bg-slicer-panel-strong text-slicer-foreground">
+                  <Copy className="h-4 w-4" /> Copy Settings
+                </Button>
+                <Button onClick={shareSettings} variant="soft" className="min-h-11 border-slicer-border bg-slicer-panel-strong text-slicer-green">
+                  <LinkIcon className="h-4 w-4" /> Share Settings
+                </Button>
+                <Button onClick={downloadJson} variant="ghost" className="min-h-11 text-slicer-muted hover:bg-slicer-panel-strong">JSON</Button>
+                <Button onClick={downloadTxt} variant="ghost" className="min-h-11 text-slicer-muted hover:bg-slicer-panel-strong">TXT</Button>
               </div>
-            )}
-
-            {/* Per-part transform panel */}
-            {!mfg && activePlate.parts.length > 0 && (
-              <PartTransformPanel
-                part={selectedPart ?? activePlate.parts[0]}
-                onChange={(patch) => updatePart((selectedPart ?? activePlate.parts[0]).id, patch)}
-                onDuplicate={() => duplicatePart((selectedPart ?? activePlate.parts[0]).id)}
-                onDelete={() => deletePart((selectedPart ?? activePlate.parts[0]).id)}
-                onCenter={() => centerPart((selectedPart ?? activePlate.parts[0]).id)}
-                onLayFlat={() => layFlat((selectedPart ?? activePlate.parts[0]).id)}
-                plate={{ x: plateModel.x, y: plateModel.y }}
-              />
-            )}
-
-            {/* Parts list */}
-            {!mfg && activePlate.parts.length > 1 && (
-              <div className="rounded-2xl border border-border bg-background/40 p-3">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  Parts on this plate ({activePlate.parts.length})
-                </div>
-                <ul className="space-y-1">
-                  {activePlate.parts.map((p) => (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPartId(p.id)}
-                        className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors ${
-                          selectedPartId === p.id ? "bg-primary/10 text-foreground" : "text-muted-foreground hover:bg-background"
-                        }`}
-                      >
-                        <span className="truncate">{p.fileName}</span>
-                        <span className="text-[10px] tabular-nums opacity-70">
-                          {Math.round(p.transform.tx)}, {Math.round(p.transform.ty)} mm
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* 3MF: multi-color slot list */}
-            {mfg && (
-              <div className="rounded-2xl border border-border bg-background/40 p-4">
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <Layers className="h-3.5 w-3.5 text-primary" />
-                  Multi-color print · {mfg.filaments.length} slots
-                </div>
-                <div className="mt-3 space-y-2">
-                  {mfg.filaments.map((f, i) => (
-                    <div key={i} className="flex items-center justify-between gap-3 rounded-xl bg-card p-2">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-lg border border-border" style={{ backgroundColor: f.hex }} />
-                        <div>
-                          <div className="text-sm font-semibold">Slot {i + 1} · {f.type}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {mfg.weightPerSlot[i]?.toFixed(1) ?? "0.0"}g
-                          </div>
-                        </div>
-                      </div>
-                      <input
-                        type="color"
-                        value={f.hex}
-                        onChange={(e) => reassignSlot(i, e.target.value)}
-                        className="h-9 w-12 cursor-pointer rounded-lg border border-border bg-transparent"
-                        aria-label={`Slot ${i + 1} color`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* STL: material + color */}
-            {!mfg && (
-              <>
-                <div>
-                  <Label>Material</Label>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {MATERIALS.map((m) => (
-                      <button
-                        type="button"
-                        key={m}
-                        onClick={() => setMaterial(m)}
-                        className={`rounded-full border px-4 py-1.5 text-sm font-medium transition-all ${
-                          material === m
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-border bg-background hover:border-foreground/30"
-                        }`}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Palette className="h-4 w-4 text-primary" />
-                    <Label>Color</Label>
-                  </div>
-                  <div className="mt-2">
-                    <ColorPicker
-                      value={colorName}
-                      onChange={(name, hex) => { setColorName(name); setColorHex(hex); }}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
+            </div>
           </section>
-
-          {/* RIGHT: quote + matches */}
-          <section className="space-y-6">
-            {hasAnyPart && ((mfg && hasAccurateQuote) || activePlate.lastSlice) ? (
-              <>
-                <CostEstimator
-                  base={{
-                    weightG: baseWeightG,
-                    printMinutes: basePrintMinutes,
-                    bboxMm: baseBboxMm,
-                    triangles: mfg?.triangles ?? activePlate.lastSlice?.triangles,
-                  }}
-                  inputs={costInputs}
-                  onChange={setCostInputs}
-                  onResolved={setEstimate}
-                  hideMaterial={!!mfg}
-                  dirty={isStale}
-                  onSlice={handleSlicePlate}
-                  slicing={slicing}
-                />
-                <div className="flex gap-2">
-                  <Button variant="hero" onClick={handleSaveQuote} disabled={submitting || isStale || slicing || parsing}>
-                    {slicing ? "Slicing…" : submitting ? "Saving…" : "Save quote"}
-                  </Button>
-                  <Button variant="ghost" onClick={() => navigate("/printers")}>Browse all printers</Button>
-                </div>
-              </>
-            ) : (
-              <div className="rounded-3xl border border-dashed border-border bg-card/50 p-10 text-center">
-                <Sparkles className="mx-auto h-8 w-8 text-primary" />
-                <div className="mt-3 font-display text-lg font-semibold">
-                  {hasAnyPart ? "Press \"Slice plate\" to compute the quote" : "Drop a model to start"}
-                </div>
-                <div className="mt-1 text-sm text-muted-foreground">
-                  {hasAnyPart
-                    ? "Settings only update the quote when you slice — just like a desktop slicer."
-                    : "We slice locally — nothing leaves your browser until you save."}
-                </div>
-                {hasAnyPart && !mfg && (
-                  <Button className="mt-4" variant="hero" onClick={handleSlicePlate} disabled={slicing}>
-                    <Play className="mr-1 h-4 w-4" /> {slicing ? "Slicing…" : "Slice plate"}
-                  </Button>
-                )}
-              </div>
-            )}
-
-            {totalWeightG > 0 && !isStale && hasAccurateQuote && matches.length > 0 && (
-              <>
-                <div className="rounded-3xl border border-border bg-card p-2 shadow-soft">
-                  <PrinterMap pins={mapPins} className="h-64 w-full overflow-hidden rounded-2xl" />
-                </div>
-
-                <div>
-                  <h2 className="font-display text-xl font-semibold">Top matches</h2>
-                  {mfg && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Filtered to AMS-equipped makers with at least {mfg.filaments.length} slots.
-                    </p>
-                  )}
-                  <div className="mt-3 space-y-3">
-                    {matches.map((m) => (
-                      <article key={m.id} className="rounded-2xl border border-border bg-card p-4 shadow-soft transition-all hover:border-primary/50">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                              <MapPin className="h-3.5 w-3.5 text-primary" />
-                              {m.neighborhood || m.city || "Local"}
-                              {m.distanceKm != null && <span>· {m.distanceKm.toFixed(1)} km</span>}
-                            </div>
-                            <div className="mt-1 truncate font-display text-lg font-semibold">{m.brand} {m.model}</div>
-                            <div className="text-xs text-muted-foreground">by {m.profiles?.full_name || "Anonymous Maker"}</div>
-                            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-                              {m.has_ams && (
-                                <Badge tone="ok"><Layers className="h-3 w-3" /> AMS · {m.ams_slot_count}</Badge>
-                              )}
-                              <Badge tone={m.hasMaterial ? "ok" : "off"}>{m.hasMaterial ? "✓" : "✗"} {material}</Badge>
-                              {colorName && !mfg && (
-                                <Badge tone={m.hasColor ? "ok" : "off"}>
-                                  <span className="inline-block h-2 w-2 rounded-full border border-border" style={{ backgroundColor: m.matchedHex ?? "transparent" }} />
-                                  {m.hasColor ? colorName : `no ${colorName}`}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-display text-xl font-semibold">${m.totalPrice.toFixed(2)}</div>
-                            <div className="text-xs text-muted-foreground">${Number(m.price_per_gram).toFixed(2)}/g</div>
-                            <div className="mt-2 inline-flex h-6 items-center rounded-full bg-primary/10 px-2 text-xs font-semibold text-primary">
-                              {m.score}% match
-                            </div>
-                            <div className="mt-3 flex flex-col gap-1.5">
-                              <Button size="sm" variant="hero" onClick={() => handleBook(m)} disabled={slicing || parsing || isStale}>
-                                <CreditCard className="h-3.5 w-3.5" /> {slicing ? "Slicing…" : "Book"}
-                              </Button>
-                              {m.accepts_bulk && (
-                                <Button size="sm" variant="ghost" onClick={() => openBulk(m)}>
-                                  <Package className="h-3.5 w-3.5" /> Bulk
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </section>
-        </div>
-        <CheckoutDialog open={checkoutOpen} onOpenChange={setCheckoutOpen} payload={checkoutPayload} />
-        <BulkQuoteDialog open={bulkOpen} onOpenChange={setBulkOpen} printer={bulkPrinter} />
+        </section>
       </main>
-      <Footer />
     </div>
   );
 };
 
-const Badge = ({ children, tone }: { children: React.ReactNode; tone: "ok" | "off" }) => (
-  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-    tone === "ok" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-  }`}>
-    {children}
-  </span>
+const UploadPanel = ({
+  model,
+  processing,
+  dragging,
+  onDragState,
+  onFile,
+  onClear,
+  inputRef,
+}: {
+  model: ModelFile | null;
+  processing: boolean;
+  dragging: boolean;
+  onDragState: (value: boolean) => void;
+  onFile: (file: File) => void;
+  onClear: () => void;
+  inputRef: React.RefObject<HTMLInputElement>;
+}) => (
+  <section
+    className={`rounded-lg border border-dashed p-5 transition ${dragging ? "border-slicer-green bg-slicer-green/10" : "border-slicer-cyan/50 bg-slicer-panel"}`}
+    onDragOver={(event) => {
+      event.preventDefault();
+      onDragState(true);
+    }}
+    onDragLeave={() => onDragState(false)}
+    onDrop={(event) => {
+      event.preventDefault();
+      onDragState(false);
+      const file = event.dataTransfer.files?.[0];
+      if (file) onFile(file);
+    }}
+  >
+    <input
+      ref={inputRef}
+      type="file"
+      accept=".stl,.obj,model/stl,text/plain"
+      className="sr-only"
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        if (file) onFile(file);
+      }}
+    />
+    <button
+      type="button"
+      onClick={() => inputRef.current?.click()}
+      disabled={processing}
+      className="flex min-h-32 w-full flex-col items-center justify-center rounded-md border border-slicer-border bg-slicer-panel-strong p-5 text-center transition hover:border-slicer-cyan hover:bg-slicer-cyan/10 disabled:opacity-60"
+    >
+      <UploadIcon className="h-9 w-9 text-slicer-cyan" />
+      <span className="mt-3 text-lg font-bold text-slicer-foreground">Drag 3D file here or click to upload</span>
+      <span className="mt-1 text-sm text-slicer-muted">Accepts STL and OBJ files</span>
+    </button>
+    {model && (
+      <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-slicer-border bg-slicer-panel-strong p-3">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-bold text-slicer-foreground">{model.name}</div>
+          <div className="text-xs uppercase text-slicer-muted">.{model.extension} loaded</div>
+        </div>
+        <Button onClick={onClear} variant="ghost" className="min-h-11 text-slicer-danger hover:bg-slicer-danger/10">
+          <Trash2 className="h-4 w-4" /> Clear File
+        </Button>
+      </div>
+    )}
+  </section>
 );
 
-function formatMins(mins: number): string {
-  if (!Number.isFinite(mins) || mins <= 0) return "—";
-  if (mins < 60) return `${Math.round(mins)} min`;
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  return `${h}h ${m}m`;
+const SettingSlider = ({
+  label,
+  help,
+  value,
+  min,
+  max,
+  step,
+  suffix,
+  decimals = 0,
+  onChange,
+}: {
+  label: string;
+  help: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  suffix: string;
+  decimals?: number;
+  onChange: (value: number) => void;
+}) => (
+  <div title={help}>
+    <div className="mb-2 flex items-start justify-between gap-3">
+      <div>
+        <Label className="text-sm font-bold text-slicer-foreground">{label}</Label>
+        <div className="text-xs text-slicer-muted">{help}</div>
+      </div>
+      <div className="rounded-md border border-slicer-border bg-slicer-panel-strong px-2 py-1 text-sm font-bold tabular-nums text-slicer-green">
+        {value.toFixed(decimals)}{suffix}
+      </div>
+    </div>
+    <Slider
+      value={[value]}
+      min={min}
+      max={max}
+      step={step}
+      onValueChange={([next]) => onChange(Number(next.toFixed(decimals || 3)))}
+      className="py-2"
+    />
+  </div>
+);
+
+const RotateButton = ({ axis, direction, onClick }: { axis: "x" | "y" | "z"; direction: number; onClick: () => void }) => (
+  <Button
+    type="button"
+    variant="soft"
+    onClick={onClick}
+    className="min-h-11 border-slicer-border bg-slicer-panel-strong text-slicer-foreground hover:border-slicer-cyan"
+    title={`Rotate ${axis.toUpperCase()} ${direction} degrees`}
+  >
+    {direction < 0 ? <RotateCcw className="h-4 w-4" /> : <RotateCw className="h-4 w-4" />}
+    {axis.toUpperCase()} {Math.abs(direction)}°
+  </Button>
+);
+
+const StatsBox = ({ stats }: { stats: SlicerStats | null }) => (
+  <section className="rounded-lg border border-slicer-border bg-slicer-panel p-4">
+    <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">Stats & Estimates</h2>
+    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
+      <Stat label="Layers" value={stats ? stats.layers.toLocaleString() : "—"} />
+      <Stat label="Print Time" value={stats ? formatDuration(stats.printMinutes) : "—"} />
+      <Stat label="Material" value={stats ? `${stats.weightG.toFixed(1)}g` : "—"} />
+      <Stat label="Plastic Cost" value={stats ? `$${stats.materialCost.toFixed(2)}` : "—"} />
+    </div>
+    <div className="mt-3 rounded-md border border-slicer-border bg-slicer-panel-strong p-3">
+      <div className="text-xs uppercase tracking-wide text-slicer-muted">Model Dimensions</div>
+      <div className="mt-1 text-lg font-bold text-slicer-cyan">
+        {stats ? `${stats.dimensions.width} × ${stats.dimensions.height} × ${stats.dimensions.depth} mm` : "—"}
+      </div>
+      <div className="text-xs text-slicer-muted">Width × Height × Depth</div>
+    </div>
+  </section>
+);
+
+const Stat = ({ label, value }: { label: string; value: string }) => (
+  <div className="rounded-md border border-slicer-border bg-slicer-panel-strong p-3">
+    <div className="text-xs uppercase tracking-wide text-slicer-muted">{label}</div>
+    <div className="mt-1 text-xl font-bold tabular-nums text-slicer-green">{value}</div>
+  </div>
+);
+
+const LayerPreview = ({ layers, layerHeight }: { layers: number; layerHeight: number }) => {
+  const visible = Math.max(1, Math.min(36, layers));
+  return (
+    <section className="rounded-lg border border-slicer-border bg-slicer-panel p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">Layer Preview</h2>
+          <p className="text-xs text-slicer-muted">Visual stack updates with layer height.</p>
+        </div>
+        <div className="text-sm font-bold text-slicer-cyan">{layerHeight.toFixed(2)}mm</div>
+      </div>
+      <div className="mt-4 flex h-48 flex-col-reverse justify-center gap-0.5 rounded-md border border-slicer-border bg-slicer-background p-4">
+        {Array.from({ length: visible }).map((_, index) => (
+          <div
+            key={index}
+            className="mx-auto h-1.5 rounded-full transition-all duration-300"
+            style={{
+              width: `${45 + (index / visible) * 48}%`,
+              backgroundColor: `hsl(${(index * 360) / visible} 100% 55%)`,
+              opacity: 0.55 + index / visible * 0.45,
+            }}
+          />
+        ))}
+      </div>
+      <div className="mt-2 text-xs text-slicer-muted">Showing {visible} visual layers from {layers || 0} calculated layers.</div>
+    </section>
+  );
+};
+
+async function loadStl(file: File): Promise<THREE.BufferGeometry> {
+  const buffer = await file.arrayBuffer();
+  const geometry = new STLLoader().parse(buffer);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+async function loadObj(file: File): Promise<THREE.BufferGeometry> {
+  const text = await file.text();
+  const group = new OBJLoader().parse(text);
+  group.updateMatrixWorld(true);
+  const positions: number[] = [];
+  group.traverse((child) => {
+    if (!(child as THREE.Mesh).isMesh) return;
+    const mesh = child as THREE.Mesh;
+    const geometry = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+    const position = geometry.getAttribute("position");
+    if (!position) return;
+    const vertex = new THREE.Vector3();
+    for (let i = 0; i < position.count; i++) {
+      vertex.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
+      positions.push(vertex.x, vertex.y, vertex.z);
+    }
+  });
+  if (positions.length === 0) throw new Error("OBJ contains no mesh geometry.");
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function downloadText(fileName: string, text: string, mime: string) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function loadSettings(): SlicerSettings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    return raw ? sanitizeSettings(JSON.parse(raw)) : DEFAULT_SLICER_SETTINGS;
+  } catch {
+    return DEFAULT_SLICER_SETTINGS;
+  }
+}
+
+function loadHistory(): SlicerSettings[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map(sanitizeSettings).slice(0, 5) : [];
+  } catch {
+    return [];
+  }
+}
+
+function loadProfiles(): SavedProfile[] {
+  try {
+    const raw = localStorage.getItem(PROFILES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function sanitizeSettings(value: Partial<SlicerSettings>): SlicerSettings {
+  const material = value.material === "ABS" || value.material === "PETG" || value.material === "PLA" ? value.material : "PLA";
+  return {
+    material,
+    layerHeight: clamp(Number(value.layerHeight ?? DEFAULT_SLICER_SETTINGS.layerHeight), 0.1, 0.4),
+    infill: clamp(Math.round(Number(value.infill ?? DEFAULT_SLICER_SETTINGS.infill)), 0, 100),
+    nozzleTemp: clamp(Math.round(Number(value.nozzleTemp ?? MATERIAL_DEFAULTS[material])), 190, 250),
+    speed: clamp(Math.round(Number(value.speed ?? DEFAULT_SLICER_SETTINGS.speed)), 10, 100),
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.min(max, Math.max(min, value));
 }
 
 export default Upload;

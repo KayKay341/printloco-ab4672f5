@@ -57,6 +57,18 @@
     --shadow-glow: 0 20px 60px -20px hsl(22 100% 63% / 0.45);
 
     --transition-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* Technical slicer workspace */
+    --slicer-background: 0 0% 10%;
+    --slicer-foreground: 0 0% 96%;
+    --slicer-panel: 220 18% 13%;
+    --slicer-panel-strong: 220 22% 17%;
+    --slicer-border: 210 16% 26%;
+    --slicer-muted: 215 12% 68%;
+    --slicer-cyan: 190 100% 50%;
+    --slicer-green: 110 100% 54%;
+    --slicer-warning: 45 100% 58%;
+    --slicer-danger: 0 84% 62%;
   }
 }
 

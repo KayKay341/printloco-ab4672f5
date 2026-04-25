@@ -68,6 +68,18 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        slicer: {
+          background: "hsl(var(--slicer-background))",
+          foreground: "hsl(var(--slicer-foreground))",
+          panel: "hsl(var(--slicer-panel))",
+          "panel-strong": "hsl(var(--slicer-panel-strong))",
+          border: "hsl(var(--slicer-border))",
+          muted: "hsl(var(--slicer-muted))",
+          cyan: "hsl(var(--slicer-cyan))",
+          green: "hsl(var(--slicer-green))",
+          warning: "hsl(var(--slicer-warning))",
+          danger: "hsl(var(--slicer-danger))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

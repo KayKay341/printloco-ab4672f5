@@ -92,12 +92,12 @@ const StlPreview = ({
 
     if (hasParts) {
       for (const p of parts!) {
-        const partColor = p.collides ? new THREE.Color("#ef4444") : new THREE.Color(p.color || color);
+        const partColor = p.collides ? new THREE.Color("#ef4444") : toThreeColor(p.color || color);
         const mat = new THREE.MeshStandardMaterial({
           color: partColor,
           metalness: 0.15,
           roughness: 0.55,
-          emissive: p.selected ? new THREE.Color(p.color || color).multiplyScalar(0.25) : new THREE.Color(0x000000),
+          emissive: p.selected ? toThreeColor(p.color || color).multiplyScalar(0.25) : new THREE.Color(0x000000),
         });
         const g = p.geometry; // already transformed by caller
         const mesh = new THREE.Mesh(g, mat);
@@ -131,7 +131,7 @@ const StlPreview = ({
       const size = new THREE.Vector3();
       geom.boundingBox!.getSize(size);
 
-      const partColor = overflow ? new THREE.Color("#ef4444") : new THREE.Color(color);
+      const partColor = overflow ? new THREE.Color("#ef4444") : toThreeColor(color);
       const mat = new THREE.MeshStandardMaterial({
         color: vertexColors ? new THREE.Color(0xffffff) : partColor,
         vertexColors,
@@ -320,3 +320,13 @@ const StlPreview = ({
 };
 
 export default StlPreview;
+
+const toThreeColor = (value: string) => {
+  const varMatch = value.match(/hsl\(var\((--[^)]+)\)\)/);
+  if (varMatch && typeof window !== "undefined") {
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(varMatch[1]).trim();
+    const [h, s, l] = raw.split(/\s+/);
+    if (h && s && l) return new THREE.Color(`hsl(${h}, ${s}, ${l})`);
+  }
+  return new THREE.Color(value);
+};
