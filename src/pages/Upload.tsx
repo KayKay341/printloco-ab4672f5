@@ -8,6 +8,7 @@ import Footer from "@/components/site/Footer";
 import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import {
   Upload as UploadIcon,
   FileBox,
