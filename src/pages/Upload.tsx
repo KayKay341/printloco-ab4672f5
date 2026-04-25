@@ -485,7 +485,7 @@ const UploadPanel = ({
     <input
       ref={inputRef}
       type="file"
-      accept=".stl,.obj,model/stl,text/plain"
+      accept=".stl,.obj,.3mf,model/stl,text/plain,model/3mf"
       className="sr-only"
       onChange={(event) => {
         const file = event.target.files?.[0];
