@@ -9,6 +9,8 @@ export type FilamentSlot = {
   name?: string;       // optional human label (e.g. "Bambu PLA Basic Red")
 };
 
+export type WeightSource = "embedded-gcode" | "fast-estimate" | "none";
+
 export type Mfg3mfResult = {
   geometry: THREE.BufferGeometry;
   /** RGB color attribute on the geometry (one per vertex) — used for multi-color preview. */
@@ -17,6 +19,14 @@ export type Mfg3mfResult = {
   /** Estimated weight per slot (grams). Sum may differ from total if some slots unused. */
   weightPerSlot: number[];
   totalWeightG: number;
+  /** Where totalWeightG came from. */
+  weightSource: WeightSource;
+  /** Raw mesh volume per slot in mm³ (signed-tetrahedron sum). Useful for re-estimates. */
+  slotVolumeMm3: number[];
+  /** Total mesh volume in mm³ (sum of slotVolumeMm3). */
+  meshVolumeMm3: number;
+  /** Approximate surface area in mm² (sum of triangle areas). */
+  surfaceAreaMm2: number;
   /** Estimated print minutes parsed from embedded slicer metadata when present. */
   printMinutes: number;
   sliceSettings: {
