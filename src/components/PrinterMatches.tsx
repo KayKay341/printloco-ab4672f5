@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { MapPin, Star, Search, Filter, Printer as PrinterIcon, ShieldCheck, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+import { useDemoMode } from "@/hooks/useDemoMode";
+import { getSamplePrinters } from "@/lib/sampleData";
 
 type FilamentColor = { material: string; color_name: string; hex_code: string; in_stock: boolean };
 
@@ -52,6 +54,7 @@ function haversineMiles(a: { lat: number; lng: number }, b: { lat: number; lng: 
 }
 
 const PrinterMatches = ({ material, weightGrams, is3mf = false }: Props) => {
+  const { isDemo } = useDemoMode();
   const [printers, setPrinters] = useState<PrinterRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -72,10 +75,34 @@ const PrinterMatches = ({ material, weightGrams, is3mf = false }: Props) => {
       .eq("is_active", true)
       .then(({ data, error }) => {
         if (error) toast.error(error.message);
-        setPrinters((data as unknown as PrinterRow[]) ?? []);
+        const real = (data as unknown as PrinterRow[]) ?? [];
+        if (isDemo) {
+          const demo = getSamplePrinters(60).map((p) => ({
+            id: p.id,
+            brand: p.brand,
+            model: p.model,
+            materials: p.materials,
+            price_per_gram: p.price_per_gram,
+            neighborhood: p.neighborhood,
+            city: p.city,
+            zip_code: null,
+            latitude: p.latitude,
+            longitude: p.longitude,
+            has_ams: p.has_ams,
+            accepts_3mf: p.accepts_3mf,
+            verification_status: p.verification_status,
+            quality_score: p.quality_score,
+            avg_rating: p.avg_rating,
+            rating_count: p.rating_count,
+            filament_colors: p.filament_colors,
+          })) as PrinterRow[];
+          setPrinters([...real, ...demo]);
+        } else {
+          setPrinters(real);
+        }
         setLoading(false);
       });
-  }, []);
+  }, [isDemo]);
 
   useEffect(() => {
     if (!("geolocation" in navigator)) return;
