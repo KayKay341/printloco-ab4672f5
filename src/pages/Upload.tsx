@@ -15,6 +15,7 @@ import {
   Upload as UploadIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import PrinterMatches from "@/components/PrinterMatches";
 import SEO from "@/components/SEO";
 import Logo from "@/components/site/Logo";
 import StlPreview from "@/components/StlPreview";
@@ -412,6 +413,12 @@ const Upload = () => {
             <StatsBox stats={stats} />
             <LayerPreview layers={stats?.layers ?? 0} layerHeight={settings.layerHeight} />
           </div>
+
+          <PrinterMatches
+            material={settings.material}
+            weightGrams={stats?.weightG ?? 0}
+            is3mf={model?.extension === "3mf"}
+          />
 
           {warnings.length > 0 && (
             <div className="rounded-lg border border-slicer-warning/40 bg-slicer-warning/10 p-4 text-sm text-slicer-foreground">
