@@ -1039,8 +1039,8 @@ const Upload = () => {
                               {m.score}% match
                             </div>
                             <div className="mt-3 flex flex-col gap-1.5">
-                              <Button size="sm" variant="hero" onClick={() => handleBook(m)}>
-                                <CreditCard className="h-3.5 w-3.5" /> Book
+                              <Button size="sm" variant="hero" onClick={() => handleBook(m)} disabled={slicing || parsing || isStale}>
+                                <CreditCard className="h-3.5 w-3.5" /> {slicing ? "Slicing…" : "Book"}
                               </Button>
                               {m.accepts_bulk && (
                                 <Button size="sm" variant="ghost" onClick={() => openBulk(m)}>
