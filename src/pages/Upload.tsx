@@ -500,7 +500,7 @@ const UploadPanel = ({
     >
       <UploadIcon className="h-9 w-9 text-slicer-cyan" />
       <span className="mt-3 text-lg font-bold text-slicer-foreground">Drag 3D file here or click to upload</span>
-      <span className="mt-1 text-sm text-slicer-muted">Accepts STL and OBJ files</span>
+      <span className="mt-1 text-sm text-slicer-muted">Accepts STL, OBJ, and 3MF files</span>
     </button>
     {model && (
       <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-slicer-border bg-slicer-panel-strong p-3">
