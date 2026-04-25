@@ -175,6 +175,8 @@ export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
     }
   };
 
+  let surfaceAreaMm2 = 0;
+
   const emitMesh = (mesh: any, xform: number[] | undefined, defaultExtruder: number) => {
     const verts = asArray(mesh.vertices.vertex).map((v: any) => {
       const p = [Number(v.x), Number(v.y), Number(v.z)];
@@ -202,6 +204,7 @@ export async function parse3mf(buf: ArrayBuffer): Promise<Mfg3mfResult> {
 
       while (slotVolumeMm3.length < slot) slotVolumeMm3.push(0);
       slotVolumeMm3[slot - 1] += Math.abs(signedTetVolume(a, b, c));
+      surfaceAreaMm2 += triangleArea(a, b, c);
     }
   };
 
