@@ -98,6 +98,10 @@ const Upload = () => {
   const [mfgFile, setMfgFile] = useState<File | null>(null);
   const [originalSlots, setOriginalSlots] = useState<FilamentSlot[]>([]);
   const [parsing, setParsing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null);
+  const [sliceProgress, setSliceProgress] = useState(0);
+  const [sliceStage, setSliceStage] = useState<string>("");
 
   // Material / color (STL path)
   const [material, setMaterial] = useState("PLA");
