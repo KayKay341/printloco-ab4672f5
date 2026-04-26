@@ -32,10 +32,13 @@ import {
   MapPin,
   Package,
   Phone,
+  Search,
   Sparkles,
   User,
   ExternalLink,
+  X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { useDemoMode } from "@/hooks/useDemoMode";
 
 type MakerOrder = {
