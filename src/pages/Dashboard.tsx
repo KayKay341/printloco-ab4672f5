@@ -12,6 +12,7 @@ import { useDemoMode } from "@/hooks/useDemoMode";
 import { getSamplePrinters, getSampleStlFiles } from "@/lib/sampleData";
 import TierBadge from "@/components/TierBadge";
 import DisputeDialog from "@/components/DisputeDialog";
+import MakerOrders from "@/components/MakerOrders";
 import { tierFromScore, type Tier } from "@/lib/tier";
 
 type PrinterRow = {
