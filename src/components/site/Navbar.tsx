@@ -6,8 +6,7 @@ import { Button } from "@/components/ui/button";
 import Logo from "./Logo";
 import { LogOut, ShieldCheck, Sparkles } from "lucide-react";
 
-const links = [
-  { label: "Find a Printer", to: "/printers" },
+const baseLinks = [
   { label: "Upload STL", to: "/upload" },
   { label: "Gift Cards", to: "/gift-cards" },
   { label: "Waitlist", to: "/waitlist" },
@@ -19,6 +18,13 @@ const Navbar = () => {
   const { isAdmin } = useIsAdmin();
   const { isDemo } = useDemoMode();
   const navigate = useNavigate();
+
+  // Smart toggle: makers see "Find a Printer" (so they can scope the competition);
+  // everyone else sees "Become a Maker" — the Etsy-style seller funnel.
+  const primaryLink = profile?.role === "maker"
+    ? { label: "Find a Printer", to: "/printers" }
+    : { label: "Become a Maker", to: "/become-a-maker" };
+  const links = [primaryLink, ...baseLinks];
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
