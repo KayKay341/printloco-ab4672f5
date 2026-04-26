@@ -1,26 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
 import {
   AlertTriangle,
+  ChevronDown,
+  Clock,
   Copy,
   Download,
   FileBox,
+  HelpCircle,
+  Layers,
   Link as LinkIcon,
-  RotateCcw,
-  RotateCw,
-  Save,
+  Ruler,
+  Settings2,
+  Sparkles,
   Trash2,
   Upload as UploadIcon,
+  Weight,
+  Wand2,
 } from "lucide-react";
 import { toast } from "sonner";
 import PrinterMatches from "@/components/PrinterMatches";
 import SEO from "@/components/SEO";
-import Logo from "@/components/site/Logo";
+import Navbar from "@/components/site/Navbar";
+import Footer from "@/components/site/Footer";
 import StlPreview from "@/components/StlPreview";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -30,11 +37,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { parse3mf } from "@/lib/threeMfParser";
 import {
   DEFAULT_SLICER_SETTINGS,
   MATERIAL_DEFAULTS,
-  PRESETS,
   calculateSlicerStats,
   formatDuration,
   generateBasicGcode,
@@ -53,39 +60,59 @@ type ModelFile = {
   geometry: THREE.BufferGeometry;
 };
 
-type SavedProfile = {
-  id: string;
-  name: string;
-  settings: SlicerSettings;
-};
-
 const SETTINGS_KEY = "printloco-slicer-settings";
-const HISTORY_KEY = "printloco-slicer-history";
-const PROFILES_KEY = "printloco-slicer-profiles";
+
+/** Beginner-friendly quality presets — plain English, no jargon. */
+const QUALITY_PRESETS = [
+  {
+    id: "draft",
+    name: "Quick Draft",
+    description: "Fastest print. Best for testing how a model fits.",
+    emoji: "⚡",
+    settings: { layerHeight: 0.3, infill: 10, speed: 70 },
+  },
+  {
+    id: "standard",
+    name: "Standard",
+    description: "Balanced quality and speed. A great default.",
+    emoji: "✨",
+    settings: { layerHeight: 0.2, infill: 20, speed: 50 },
+  },
+  {
+    id: "detailed",
+    name: "Detailed",
+    description: "Smoother surface for figurines and display pieces.",
+    emoji: "🎨",
+    settings: { layerHeight: 0.12, infill: 25, speed: 40 },
+  },
+  {
+    id: "strong",
+    name: "Strong & Durable",
+    description: "Heavy infill for tools, brackets, and parts that bear weight.",
+    emoji: "🛠️",
+    settings: { layerHeight: 0.2, infill: 60, speed: 45 },
+  },
+] as const;
+
+const MATERIAL_INFO: Record<SlicerSettings["material"], { label: string; description: string }> = {
+  PLA: { label: "PLA — Easy", description: "Easiest to print. Great for decor, toys, and prototypes." },
+  PETG: { label: "PETG — Tough", description: "Stronger and slightly flexible. Good for outdoor parts." },
+  ABS: { label: "ABS — Heat-resistant", description: "For hot environments. Needs an enclosed printer." },
+};
 
 const Upload = () => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [model, setModel] = useState<ModelFile | null>(null);
   const [settings, setSettings] = useState<SlicerSettings>(() => loadSettings());
+  const [activePreset, setActivePreset] = useState<string>("standard");
   const [rotation, setRotation] = useState({ x: 0, y: 0, z: 0 });
   const [processing, setProcessing] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [profiles, setProfiles] = useState<SavedProfile[]>(() => loadProfiles());
-  const [profileName, setProfileName] = useState("");
-  const [history, setHistory] = useState<SlicerSettings[]>(() => loadHistory());
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    setHistory((prev) => {
-      const next = [settings, ...prev.filter((s) => JSON.stringify(s) !== JSON.stringify(settings))].slice(0, 5);
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(next));
-      return next;
-    });
   }, [settings]);
-
-  useEffect(() => {
-    localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
-  }, [profiles]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -94,7 +121,7 @@ const Upload = () => {
     try {
       const decoded = JSON.parse(atob(shared)) as SlicerSettings;
       setSettings(sanitizeSettings(decoded));
-      toast.success("Shared slicer settings loaded");
+      toast.success("Shared settings loaded");
     } catch {
       toast.error("Could not load shared settings");
     }
@@ -115,14 +142,15 @@ const Upload = () => {
     [modelInfo, settings],
   );
 
-  const warnings = useMemo(() => {
+  const tips = useMemo(() => {
     const list: string[] = [];
     if (!stats) return list;
-    if (stats.printMinutes > 480) list.push("This print is estimated over 8 hours.");
-    if (settings.infill < 8) list.push("Very low infill can make parts fragile.");
-    if (settings.speed > 85 && settings.layerHeight < 0.18) list.push("High speed with thin layers may reduce detail.");
+    if (stats.printMinutes > 480) list.push("Heads up — this print is over 8 hours. Consider Quick Draft to test first.");
     if (stats.dimensions.width > 250 || stats.dimensions.depth > 250 || stats.dimensions.height > 250) {
-      list.push("Large model: confirm it fits your printer build volume.");
+      list.push("This model is quite large. Make sure your maker's printer can fit it.");
+    }
+    if (settings.infill < 10 && settings.material !== "PLA") {
+      list.push("Low infill on PETG or ABS can make parts feel hollow.");
     }
     return list;
   }, [settings, stats]);
@@ -139,7 +167,6 @@ const Upload = () => {
     }
 
     setProcessing(true);
-    toast.info(`Received ${file.name} — loading preview…`);
     try {
       const geometry =
         ext === "stl" ? await loadStl(file) : ext === "obj" ? await loadObj(file) : await load3mf(file);
@@ -156,22 +183,13 @@ const Upload = () => {
 
   const updateSetting = <K extends keyof SlicerSettings>(key: K, value: SlicerSettings[K]) => {
     setSettings((current) => ({ ...current, [key]: value }));
+    setActivePreset("custom");
   };
 
-  const applyPreset = (preset: (typeof PRESETS)[number]) => {
+  const applyPreset = (preset: (typeof QUALITY_PRESETS)[number]) => {
     setSettings((current) => ({ ...current, ...preset.settings }));
-    toast.success(`${preset.name} profile applied`);
-  };
-
-  const saveProfile = () => {
-    const name = profileName.trim();
-    if (!name) {
-      toast.error("Name the profile first.");
-      return;
-    }
-    setProfiles((prev) => [{ id: crypto.randomUUID(), name, settings }, ...prev].slice(0, 12));
-    setProfileName("");
-    toast.success("Profile saved");
+    setActivePreset(preset.id);
+    toast.success(`${preset.name} applied`);
   };
 
   const clearFile = () => {
@@ -200,283 +218,379 @@ const Upload = () => {
     toast.success("Share link copied");
   };
 
-  const downloadJson = () => {
-    downloadText("printloco-settings.json", JSON.stringify({ file: model?.name ?? null, settings, stats }, null, 2), "application/json");
-  };
-
-  const downloadTxt = () => {
-    downloadText("printloco-settings.txt", settingsToText(settings, stats, model?.name ?? null), "text/plain");
-  };
-
   return (
-    <div className="min-h-screen bg-slicer-background text-slicer-foreground">
-      <SEO
-        title="PrintLoco 3D Slicer — STL & OBJ GCODE Tool"
-        description="Upload STL or OBJ files, preview models, tune slicer settings, estimate layers, time, weight, and download GCODE."
-        path="/upload"
-      />
-      <header className="border-b border-slicer-border bg-slicer-panel/90">
-        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-4">
-            <Logo className="text-slicer-foreground [&_span_span:last-child]:text-slicer-green" />
-            <div className="hidden h-8 w-px bg-slicer-border sm:block" />
-            <div>
-              <h1 className="font-sans text-xl font-bold tracking-normal text-slicer-foreground sm:text-2xl">
-                PrintLoco 3D Slicer
-              </h1>
-              <p className="text-xs text-slicer-muted">Fast STL/OBJ preview, live estimates, and GCODE export</p>
-            </div>
-          </div>
-          <Button
-            variant="soft"
-            onClick={() => inputRef.current?.click()}
-            className="min-h-11 border-slicer-cyan/40 bg-slicer-panel-strong text-slicer-cyan hover:border-slicer-cyan"
-          >
-            <UploadIcon className="h-4 w-4" /> Upload
-          </Button>
-        </div>
-      </header>
+    <TooltipProvider delayDuration={200}>
+      <div className="min-h-screen bg-background text-foreground">
+        <SEO
+          title="3D Print Quote — Upload STL, OBJ, or 3MF | PrintLoco"
+          description="Upload your 3D model, pick a quality, and get an instant price. Beginner-friendly slicer with auto-matched local makers."
+          path="/upload"
+        />
+        <Navbar />
 
-      <main className="mx-auto grid max-w-[1600px] gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[minmax(360px,40%)_minmax(0,60%)]">
-        <aside className="space-y-4 lg:order-1">
-          <UploadPanel
-            model={model}
-            processing={processing}
-            dragging={dragging}
-            onDragState={setDragging}
-            onFile={handleFile}
-            onClear={clearFile}
-            inputRef={inputRef}
-          />
-
-          <section className="rounded-lg border border-slicer-border bg-slicer-panel p-4 shadow-2xl">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">Slicer Settings</h2>
-                <p className="text-xs text-slicer-muted">Adjust values and watch estimates update instantly.</p>
-              </div>
-              <Select
-                value={settings.material}
-                onValueChange={(value: SlicerSettings["material"]) => {
-                  setSettings((current) => ({ ...current, material: value, nozzleTemp: MATERIAL_DEFAULTS[value] }));
-                }}
-              >
-                <SelectTrigger className="min-h-11 w-28 border-slicer-border bg-slicer-panel-strong text-slicer-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="PLA">PLA</SelectItem>
-                  <SelectItem value="ABS">ABS</SelectItem>
-                  <SelectItem value="PETG">PETG</SelectItem>
-                </SelectContent>
-              </Select>
+        <main className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6">
+          {/* Hero */}
+          <section className="mb-8 text-center">
+            <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs font-medium text-muted-foreground shadow-soft">
+              <Sparkles className="h-3.5 w-3.5 text-accent" />
+              Step 1 of 3 — Upload your design
             </div>
-
-            <div className="space-y-5">
-              <SettingSlider
-                label="Layer Height"
-                help="Thinner layers make more detail but take longer."
-                value={settings.layerHeight}
-                min={0.1}
-                max={0.4}
-                step={0.01}
-                suffix="mm"
-                decimals={2}
-                onChange={(value) => updateSetting("layerHeight", value)}
-              />
-              <SettingSlider
-                label="Infill"
-                help="How solid the inside is — more is stronger but heavier."
-                value={settings.infill}
-                min={0}
-                max={100}
-                step={1}
-                suffix="%"
-                onChange={(value) => updateSetting("infill", value)}
-              />
-              <SettingSlider
-                label="Nozzle Temperature"
-                help="Hotend temperature for the selected plastic."
-                value={settings.nozzleTemp}
-                min={190}
-                max={250}
-                step={1}
-                suffix="°C"
-                onChange={(value) => updateSetting("nozzleTemp", value)}
-              />
-              <SettingSlider
-                label="Print Speed"
-                help="Faster prints finish sooner but can be less precise."
-                value={settings.speed}
-                min={10}
-                max={100}
-                step={1}
-                suffix=" mm/s"
-                onChange={(value) => updateSetting("speed", value)}
-              />
-            </div>
+            <h1 className="mt-4 font-display text-4xl font-bold text-foreground sm:text-5xl">
+              Get an instant 3D print quote
+            </h1>
+            <p className="mx-auto mt-3 max-w-2xl text-balance text-base text-muted-foreground sm:text-lg">
+              Drag in an STL, OBJ, or 3MF file. We'll show your model, estimate the price, and match you with a nearby maker. No experience needed.
+            </p>
           </section>
 
-          <section className="rounded-lg border border-slicer-border bg-slicer-panel p-4">
-            <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">Preset Profiles</h2>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {PRESETS.map((preset) => (
-                <button
-                  key={preset.name}
-                  type="button"
-                  onClick={() => applyPreset(preset)}
-                  className="min-h-11 rounded-md border border-slicer-border bg-slicer-panel-strong p-3 text-left transition hover:border-slicer-green hover:bg-slicer-green/10"
-                >
-                  <div className="text-sm font-bold text-slicer-foreground">{preset.name}</div>
-                  <div className="text-xs text-slicer-muted">{preset.description}</div>
-                </button>
-              ))}
-            </div>
-            <div className="mt-4 flex gap-2">
-              <Input
-                value={profileName}
-                onChange={(event) => setProfileName(event.target.value)}
-                placeholder="Custom profile name"
-                className="min-h-11 border-slicer-border bg-slicer-panel-strong text-slicer-foreground placeholder:text-slicer-muted"
-              />
-              <Button onClick={saveProfile} className="min-h-11 bg-slicer-green text-slicer-background hover:bg-slicer-green/90">
-                <Save className="h-4 w-4" /> Save
-              </Button>
-            </div>
-            {profiles.length > 0 && (
-              <div className="mt-3 space-y-2">
-                {profiles.map((profile) => (
-                  <button
-                    key={profile.id}
-                    type="button"
-                    onClick={() => setSettings(profile.settings)}
-                    className="flex min-h-11 w-full items-center justify-between rounded-md border border-slicer-border px-3 text-sm text-slicer-foreground hover:border-slicer-cyan"
-                  >
-                    <span>{profile.name}</span>
-                    <span className="text-xs text-slicer-muted">{profile.settings.layerHeight}mm · {profile.settings.infill}%</span>
-                  </button>
-                ))}
-              </div>
-            )}
-            {history.length > 1 && (
-              <Button
-                variant="ghost"
-                onClick={() => setSettings(history[1])}
-                className="mt-3 min-h-11 text-slicer-cyan hover:bg-slicer-cyan/10"
-              >
-                Load Previous Settings
-              </Button>
-            )}
-          </section>
-        </aside>
-
-        <section className="space-y-4 lg:order-2">
-          <div className="rounded-lg border border-slicer-border bg-slicer-panel p-3 shadow-2xl">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">3D Model Preview</h2>
-                <p className="text-xs text-slicer-muted">Drag to rotate · mouse wheel to zoom · touch gestures supported</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <RotateButton axis="x" direction={-90} onClick={() => setRotation((r) => ({ ...r, x: r.x - 90 }))} />
-                <RotateButton axis="x" direction={90} onClick={() => setRotation((r) => ({ ...r, x: r.x + 90 }))} />
-                <RotateButton axis="y" direction={90} onClick={() => setRotation((r) => ({ ...r, y: r.y + 90 }))} />
-                <RotateButton axis="z" direction={90} onClick={() => setRotation((r) => ({ ...r, z: r.z + 90 }))} />
-              </div>
-            </div>
-            <div className="relative h-[420px] overflow-hidden rounded-md border border-slicer-border bg-slicer-background sm:h-[520px] lg:h-[610px]">
-              {previewGeometry ? (
-                <StlPreview geometry={previewGeometry} color="hsl(var(--slicer-cyan))" plate={{ x: 260, y: 260, z: 260 }} className="h-full w-full" />
-              ) : (
-                <div className="grid h-full place-items-center p-8 text-center">
-                  <div>
-                    <div className="mx-auto grid h-20 w-20 place-items-center rounded-lg border border-slicer-cyan/40 bg-slicer-cyan/10 text-slicer-cyan">
-                      <FileBox className="h-10 w-10" />
-                    </div>
-                    <div className="mt-5 text-2xl font-bold text-slicer-foreground">No model loaded</div>
-                    <p className="mt-2 max-w-md text-sm text-slicer-muted">Upload an STL or OBJ file to inspect dimensions, tune slicer settings, and download GCODE.</p>
-                  </div>
-                </div>
-              )}
-              {processing && (
-                <div className="absolute inset-0 grid place-items-center bg-slicer-background/80 backdrop-blur-sm">
-                  <div className="rounded-lg border border-slicer-cyan/40 bg-slicer-panel p-5 text-center shadow-2xl">
-                    <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-slicer-cyan border-t-transparent" />
-                    <div className="mt-3 font-bold text-slicer-cyan">Loading model…</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
-            <StatsBox stats={stats} />
-            <LayerPreview layers={stats?.layers ?? 0} layerHeight={settings.layerHeight} />
-          </div>
-
-          <PrinterMatches
-            material={settings.material}
-            weightGrams={stats?.weightG ?? 0}
-            is3mf={model?.extension === "3mf"}
-          />
-
-          {warnings.length > 0 && (
-            <div className="rounded-lg border border-slicer-warning/40 bg-slicer-warning/10 p-4 text-sm text-slicer-foreground">
-              <div className="mb-2 flex items-center gap-2 font-bold text-slicer-warning">
-                <AlertTriangle className="h-4 w-4" /> Safety Warnings
-              </div>
-              <ul className="space-y-1">
-                {warnings.map((warning) => <li key={warning}>• {warning}</li>)}
-              </ul>
-            </div>
+          {/* How it works strip */}
+          {!model && (
+            <section className="mb-8 grid gap-3 sm:grid-cols-3">
+              <HowStep number="1" title="Upload your file" body="STL, OBJ, or 3MF — under 50MB." />
+              <HowStep number="2" title="Pick a quality" body="One click presets, no jargon." />
+              <HowStep number="3" title="Order from a local maker" body="See real makers near you." />
+            </section>
           )}
 
-          <section className="rounded-lg border border-slicer-border bg-slicer-panel p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">Download & Share</h2>
-                <p className="text-xs text-slicer-muted">Export printer instructions or back up the current settings.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={downloadGcode} disabled={!stats} className="min-h-11 bg-slicer-cyan text-slicer-background hover:bg-slicer-cyan/90">
-                  <Download className="h-4 w-4" /> Download GCODE
-                </Button>
-                <Button onClick={copySettings} variant="soft" className="min-h-11 border-slicer-border bg-slicer-panel-strong text-slicer-foreground">
-                  <Copy className="h-4 w-4" /> Copy Settings
-                </Button>
-                <Button onClick={shareSettings} variant="soft" className="min-h-11 border-slicer-border bg-slicer-panel-strong text-slicer-green">
-                  <LinkIcon className="h-4 w-4" /> Share Settings
-                </Button>
-                <Button onClick={downloadJson} variant="ghost" className="min-h-11 text-slicer-muted hover:bg-slicer-panel-strong">JSON</Button>
-                <Button onClick={downloadTxt} variant="ghost" className="min-h-11 text-slicer-muted hover:bg-slicer-panel-strong">TXT</Button>
-              </div>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
+            {/* Left: preview & upload */}
+            <div className="space-y-6">
+              <section className="overflow-hidden rounded-3xl border border-border bg-card shadow-card">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-secondary/40 px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <FileBox className="h-4 w-4 text-primary" />
+                    <h2 className="font-display text-lg font-semibold text-foreground">
+                      {model ? model.name : "Your 3D model"}
+                    </h2>
+                  </div>
+                  {model && (
+                    <div className="flex flex-wrap gap-2">
+                      <RotateChip label="Tip ⟲" onClick={() => setRotation((r) => ({ ...r, x: r.x - 90 }))} />
+                      <RotateChip label="Tip ⟳" onClick={() => setRotation((r) => ({ ...r, x: r.x + 90 }))} />
+                      <RotateChip label="Spin" onClick={() => setRotation((r) => ({ ...r, z: r.z + 90 }))} />
+                      <Button onClick={clearFile} variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10">
+                        <Trash2 className="h-4 w-4" /> Remove
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative aspect-[4/3] w-full bg-gradient-to-br from-secondary/30 to-accent-soft/30">
+                  {previewGeometry ? (
+                    <StlPreview
+                      geometry={previewGeometry}
+                      color="hsl(var(--primary))"
+                      plate={{ x: 260, y: 260, z: 260 }}
+                      className="h-full w-full"
+                    />
+                  ) : (
+                    <UploadDropzone
+                      processing={processing}
+                      dragging={dragging}
+                      onDragState={setDragging}
+                      onFile={handleFile}
+                      inputRef={inputRef}
+                    />
+                  )}
+                  {processing && previewGeometry && (
+                    <div className="absolute inset-0 grid place-items-center bg-background/80 backdrop-blur-sm">
+                      <div className="rounded-2xl border border-border bg-card p-5 text-center shadow-card">
+                        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        <div className="mt-3 font-medium text-foreground">Loading your model…</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {model && (
+                  <div className="border-t border-border bg-secondary/30 px-5 py-3 text-xs text-muted-foreground">
+                    Drag to rotate · scroll to zoom · pinch on touch
+                  </div>
+                )}
+              </section>
+
+              {/* Quote summary */}
+              {stats && (
+                <section className="rounded-3xl border border-border bg-card p-6 shadow-card">
+                  <div className="mb-5 flex items-center justify-between">
+                    <h2 className="font-display text-xl font-semibold text-foreground">Your instant estimate</h2>
+                    <span className="rounded-full bg-accent-soft px-3 py-1 text-xs font-semibold text-accent-foreground">
+                      Updates live
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <FriendlyStat icon={<Clock className="h-4 w-4" />} label="Print time" value={formatDuration(stats.printMinutes)} />
+                    <FriendlyStat icon={<Weight className="h-4 w-4" />} label="Plastic used" value={`${stats.weightG.toFixed(1)} g`} />
+                    <FriendlyStat icon={<Layers className="h-4 w-4" />} label="Layers" value={stats.layers.toLocaleString()} />
+                    <FriendlyStat
+                      icon={<Ruler className="h-4 w-4" />}
+                      label="Size"
+                      value={`${Math.round(stats.dimensions.width)}×${Math.round(stats.dimensions.depth)}×${Math.round(stats.dimensions.height)} mm`}
+                    />
+                  </div>
+
+                  {tips.length > 0 && (
+                    <div className="mt-5 rounded-2xl border border-accent/30 bg-accent-soft/60 p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-accent-foreground">
+                        <AlertTriangle className="h-4 w-4" /> Friendly tips
+                      </div>
+                      <ul className="space-y-1 text-sm text-foreground">
+                        {tips.map((tip) => <li key={tip}>• {tip}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    <Button onClick={downloadGcode} className="min-h-11 bg-primary text-primary-foreground hover:bg-primary/90">
+                      <Download className="h-4 w-4" /> Download GCODE
+                    </Button>
+                    <Button onClick={copySettings} variant="outline" className="min-h-11">
+                      <Copy className="h-4 w-4" /> Copy settings
+                    </Button>
+                    <Button onClick={shareSettings} variant="ghost" className="min-h-11">
+                      <LinkIcon className="h-4 w-4" /> Share link
+                    </Button>
+                  </div>
+                </section>
+              )}
             </div>
-          </section>
-        </section>
-      </main>
-    </div>
+
+            {/* Right: settings */}
+            <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+              {/* Material */}
+              <section className="rounded-3xl border border-border bg-card p-6 shadow-card">
+                <SectionHeader
+                  icon={<Wand2 className="h-4 w-4" />}
+                  title="Pick a material"
+                  hint="What plastic should your maker use?"
+                />
+                <Select
+                  value={settings.material}
+                  onValueChange={(value: SlicerSettings["material"]) => {
+                    setSettings((current) => ({ ...current, material: value, nozzleTemp: MATERIAL_DEFAULTS[value] }));
+                    setActivePreset("custom");
+                  }}
+                >
+                  <SelectTrigger className="mt-3 min-h-12 bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(MATERIAL_INFO) as SlicerSettings["material"][]).map((key) => (
+                      <SelectItem key={key} value={key}>
+                        <div className="flex flex-col items-start py-1">
+                          <span className="font-semibold">{MATERIAL_INFO[key].label}</span>
+                          <span className="text-xs text-muted-foreground">{MATERIAL_INFO[key].description}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </section>
+
+              {/* Quality presets */}
+              <section className="rounded-3xl border border-border bg-card p-6 shadow-card">
+                <SectionHeader
+                  icon={<Sparkles className="h-4 w-4" />}
+                  title="Choose a quality"
+                  hint="Most people pick Standard. You can change it anytime."
+                />
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {QUALITY_PRESETS.map((preset) => {
+                    const active = activePreset === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => applyPreset(preset)}
+                        className={`group flex min-h-20 flex-col items-start rounded-2xl border p-3 text-left transition ${
+                          active
+                            ? "border-primary bg-primary/5 shadow-soft"
+                            : "border-border bg-background hover:border-primary/50 hover:bg-secondary/40"
+                        }`}
+                      >
+                        <div className="flex w-full items-center justify-between">
+                          <span className="text-sm font-bold text-foreground">
+                            <span className="mr-1.5">{preset.emoji}</span>
+                            {preset.name}
+                          </span>
+                          {active && (
+                            <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary-foreground">
+                              On
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">{preset.description}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+
+              {/* Advanced (collapsible) */}
+              <section className="rounded-3xl border border-border bg-card shadow-card">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced((v) => !v)}
+                  className="flex w-full items-center justify-between gap-3 px-6 py-4 text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <Settings2 className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-display text-base font-semibold text-foreground">Advanced settings</span>
+                    <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                      Optional
+                    </span>
+                  </div>
+                  <ChevronDown
+                    className={`h-4 w-4 text-muted-foreground transition-transform ${showAdvanced ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                {showAdvanced && (
+                  <div className="space-y-6 border-t border-border px-6 py-5">
+                    <FriendlySlider
+                      label="Layer thickness"
+                      help="Thinner = smoother surface, but takes longer."
+                      value={settings.layerHeight}
+                      min={0.1}
+                      max={0.4}
+                      step={0.01}
+                      suffix=" mm"
+                      decimals={2}
+                      leftHint="Smoother"
+                      rightHint="Faster"
+                      onChange={(v) => updateSetting("layerHeight", v)}
+                    />
+                    <FriendlySlider
+                      label="Inside fill"
+                      help="How solid the inside is. More fill = stronger and heavier."
+                      value={settings.infill}
+                      min={0}
+                      max={100}
+                      step={5}
+                      suffix="%"
+                      leftHint="Lighter"
+                      rightHint="Stronger"
+                      onChange={(v) => updateSetting("infill", v)}
+                    />
+                    <FriendlySlider
+                      label="Print speed"
+                      help="Slower prints usually look cleaner."
+                      value={settings.speed}
+                      min={20}
+                      max={100}
+                      step={5}
+                      suffix=" mm/s"
+                      leftHint="Cleaner"
+                      rightHint="Faster"
+                      onChange={(v) => updateSetting("speed", v)}
+                    />
+                    <FriendlySlider
+                      label="Nozzle temperature"
+                      help="Set automatically when you change material — only adjust if you know what you're doing."
+                      value={settings.nozzleTemp}
+                      min={190}
+                      max={250}
+                      step={1}
+                      suffix=" °C"
+                      onChange={(v) => updateSetting("nozzleTemp", v)}
+                    />
+                  </div>
+                )}
+              </section>
+
+              <div className="rounded-2xl border border-dashed border-border bg-secondary/30 p-4 text-xs text-muted-foreground">
+                Need help? Check our{" "}
+                <Link to="/" className="font-medium text-primary hover:underline">
+                  guide
+                </Link>{" "}
+                or browse <Link to="/printers" className="font-medium text-primary hover:underline">printers</Link>.
+              </div>
+            </aside>
+          </div>
+
+          {/* Printer matches */}
+          {stats && (
+            <section className="mt-10">
+              <div className="mb-5 text-center">
+                <div className="inline-flex items-center gap-2 rounded-full bg-accent-soft px-4 py-1.5 text-xs font-semibold text-accent-foreground">
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Step 3 — Pick a maker
+                </div>
+                <h2 className="mt-3 font-display text-3xl font-bold text-foreground">Local makers near you</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Auto-matched to your file, material, and quality. Cost shown is for the full print.
+                </p>
+              </div>
+              <PrinterMatches
+                material={settings.material}
+                weightGrams={stats.weightG}
+                is3mf={model?.extension === "3mf"}
+              />
+            </section>
+          )}
+        </main>
+
+        <Footer />
+      </div>
+    </TooltipProvider>
   );
 };
 
-const UploadPanel = ({
-  model,
+const HowStep = ({ number, title, body }: { number: string; title: string; body: string }) => (
+  <div className="rounded-2xl border border-border bg-card p-5 shadow-soft">
+    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
+      {number}
+    </div>
+    <div className="mt-3 font-display text-lg font-semibold text-foreground">{title}</div>
+    <div className="mt-1 text-sm text-muted-foreground">{body}</div>
+  </div>
+);
+
+const SectionHeader = ({ icon, title, hint }: { icon: React.ReactNode; title: string; hint: string }) => (
+  <div>
+    <div className="flex items-center gap-2 text-primary">
+      {icon}
+      <h3 className="font-display text-lg font-semibold text-foreground">{title}</h3>
+    </div>
+    <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+  </div>
+);
+
+const FriendlyStat = ({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) => (
+  <div className="rounded-2xl border border-border bg-secondary/40 p-4">
+    <div className="flex items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground">
+      {icon}
+      {label}
+    </div>
+    <div className="mt-2 font-display text-xl font-bold text-foreground">{value}</div>
+  </div>
+);
+
+const RotateChip = ({ label, onClick }: { label: string; onClick: () => void }) => (
+  <Button variant="outline" size="sm" onClick={onClick} className="bg-card">
+    {label}
+  </Button>
+);
+
+const UploadDropzone = ({
   processing,
   dragging,
   onDragState,
   onFile,
-  onClear,
   inputRef,
 }: {
-  model: ModelFile | null;
   processing: boolean;
   dragging: boolean;
   onDragState: (value: boolean) => void;
   onFile: (file: File) => void;
-  onClear: () => void;
   inputRef: React.RefObject<HTMLInputElement>;
 }) => (
-  <section
-    className={`rounded-lg border border-dashed p-5 transition ${dragging ? "border-slicer-green bg-slicer-green/10" : "border-slicer-cyan/50 bg-slicer-panel"}`}
+  <div
+    className={`absolute inset-0 m-4 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed text-center transition ${
+      dragging
+        ? "border-accent bg-accent-soft/60"
+        : "border-primary/40 bg-card/50 hover:border-primary hover:bg-card"
+    }`}
     onDragOver={(event) => {
       event.preventDefault();
       onDragState(true);
@@ -503,27 +617,30 @@ const UploadPanel = ({
       type="button"
       onClick={() => inputRef.current?.click()}
       disabled={processing}
-      className="flex min-h-32 w-full flex-col items-center justify-center rounded-md border border-slicer-border bg-slicer-panel-strong p-5 text-center transition hover:border-slicer-cyan hover:bg-slicer-cyan/10 disabled:opacity-60"
+      className="flex flex-col items-center px-6 py-8 disabled:opacity-60"
     >
-      <UploadIcon className="h-9 w-9 text-slicer-cyan" />
-      <span className="mt-3 text-lg font-bold text-slicer-foreground">Drag 3D file here or click to upload</span>
-      <span className="mt-1 text-sm text-slicer-muted">Accepts STL, OBJ, and 3MF files</span>
-    </button>
-    {model && (
-      <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-slicer-border bg-slicer-panel-strong p-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-bold text-slicer-foreground">{model.name}</div>
-          <div className="text-xs uppercase text-slicer-muted">.{model.extension} loaded</div>
-        </div>
-        <Button onClick={onClear} variant="ghost" className="min-h-11 text-slicer-danger hover:bg-slicer-danger/10">
-          <Trash2 className="h-4 w-4" /> Clear File
-        </Button>
+      <div className="grid h-16 w-16 place-items-center rounded-2xl bg-primary/10 text-primary">
+        <UploadIcon className="h-8 w-8" />
       </div>
-    )}
-  </section>
+      <div className="mt-4 font-display text-2xl font-bold text-foreground">
+        {processing ? "Loading…" : "Drop your file here"}
+      </div>
+      <div className="mt-1 text-sm text-muted-foreground">
+        or <span className="font-semibold text-primary underline-offset-2 hover:underline">browse your computer</span>
+      </div>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
+        {["STL", "OBJ", "3MF"].map((tag) => (
+          <span key={tag} className="rounded-full border border-border bg-card px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+            .{tag.toLowerCase()}
+          </span>
+        ))}
+        <span className="text-xs text-muted-foreground">· up to 50MB</span>
+      </div>
+    </button>
+  </div>
 );
 
-const SettingSlider = ({
+const FriendlySlider = ({
   label,
   help,
   value,
@@ -532,6 +649,8 @@ const SettingSlider = ({
   step,
   suffix,
   decimals = 0,
+  leftHint,
+  rightHint,
   onChange,
 }: {
   label: string;
@@ -542,15 +661,24 @@ const SettingSlider = ({
   step: number;
   suffix: string;
   decimals?: number;
+  leftHint?: string;
+  rightHint?: string;
   onChange: (value: number) => void;
 }) => (
-  <div title={help}>
-    <div className="mb-2 flex items-start justify-between gap-3">
-      <div>
-        <Label className="text-sm font-bold text-slicer-foreground">{label}</Label>
-        <div className="text-xs text-slicer-muted">{help}</div>
+  <div>
+    <div className="mb-2 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-1.5">
+        <Label className="text-sm font-semibold text-foreground">{label}</Label>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button type="button" className="text-muted-foreground hover:text-foreground">
+              <HelpCircle className="h-3.5 w-3.5" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-[220px] text-xs">{help}</TooltipContent>
+        </Tooltip>
       </div>
-      <div className="rounded-md border border-slicer-border bg-slicer-panel-strong px-2 py-1 text-sm font-bold tabular-nums text-slicer-green">
+      <div className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-bold tabular-nums text-foreground">
         {value.toFixed(decimals)}{suffix}
       </div>
     </div>
@@ -560,78 +688,15 @@ const SettingSlider = ({
       max={max}
       step={step}
       onValueChange={([next]) => onChange(Number(next.toFixed(decimals || 3)))}
-      className="py-2"
     />
+    {(leftHint || rightHint) && (
+      <div className="mt-1.5 flex justify-between text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span>{leftHint}</span>
+        <span>{rightHint}</span>
+      </div>
+    )}
   </div>
 );
-
-const RotateButton = ({ axis, direction, onClick }: { axis: "x" | "y" | "z"; direction: number; onClick: () => void }) => (
-  <Button
-    type="button"
-    variant="soft"
-    onClick={onClick}
-    className="min-h-11 border-slicer-border bg-slicer-panel-strong text-slicer-foreground hover:border-slicer-cyan"
-    title={`Rotate ${axis.toUpperCase()} ${direction} degrees`}
-  >
-    {direction < 0 ? <RotateCcw className="h-4 w-4" /> : <RotateCw className="h-4 w-4" />}
-    {axis.toUpperCase()} {Math.abs(direction)}°
-  </Button>
-);
-
-const StatsBox = ({ stats }: { stats: SlicerStats | null }) => (
-  <section className="rounded-lg border border-slicer-border bg-slicer-panel p-4">
-    <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">Stats & Estimates</h2>
-    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-2">
-      <Stat label="Layers" value={stats ? stats.layers.toLocaleString() : "—"} />
-      <Stat label="Print Time" value={stats ? formatDuration(stats.printMinutes) : "—"} />
-      <Stat label="Material" value={stats ? `${stats.weightG.toFixed(1)}g` : "—"} />
-      <Stat label="Plastic Cost" value={stats ? `$${stats.materialCost.toFixed(2)}` : "—"} />
-    </div>
-    <div className="mt-3 rounded-md border border-slicer-border bg-slicer-panel-strong p-3">
-      <div className="text-xs uppercase tracking-wide text-slicer-muted">Model Dimensions</div>
-      <div className="mt-1 text-lg font-bold text-slicer-cyan">
-        {stats ? `${stats.dimensions.width} × ${stats.dimensions.height} × ${stats.dimensions.depth} mm` : "—"}
-      </div>
-      <div className="text-xs text-slicer-muted">Width × Height × Depth</div>
-    </div>
-  </section>
-);
-
-const Stat = ({ label, value }: { label: string; value: string }) => (
-  <div className="rounded-md border border-slicer-border bg-slicer-panel-strong p-3">
-    <div className="text-xs uppercase tracking-wide text-slicer-muted">{label}</div>
-    <div className="mt-1 text-xl font-bold tabular-nums text-slicer-green">{value}</div>
-  </div>
-);
-
-const LayerPreview = ({ layers, layerHeight }: { layers: number; layerHeight: number }) => {
-  const visible = Math.max(1, Math.min(36, layers));
-  return (
-    <section className="rounded-lg border border-slicer-border bg-slicer-panel p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="font-sans text-base font-bold tracking-normal text-slicer-foreground">Layer Preview</h2>
-          <p className="text-xs text-slicer-muted">Visual stack updates with layer height.</p>
-        </div>
-        <div className="text-sm font-bold text-slicer-cyan">{layerHeight.toFixed(2)}mm</div>
-      </div>
-      <div className="mt-4 flex h-48 flex-col-reverse justify-center gap-0.5 rounded-md border border-slicer-border bg-slicer-background p-4">
-        {Array.from({ length: visible }).map((_, index) => (
-          <div
-            key={index}
-            className="mx-auto h-1.5 rounded-full transition-all duration-300"
-            style={{
-              width: `${45 + (index / visible) * 48}%`,
-              backgroundColor: `hsl(${(index * 360) / visible} 100% 55%)`,
-              opacity: 0.55 + index / visible * 0.45,
-            }}
-          />
-        ))}
-      </div>
-      <div className="mt-2 text-xs text-slicer-muted">Showing {visible} visual layers from {layers || 0} calculated layers.</div>
-    </section>
-  );
-};
 
 async function loadStl(file: File): Promise<THREE.BufferGeometry> {
   const buffer = await file.arrayBuffer();
@@ -693,26 +758,6 @@ function loadSettings(): SlicerSettings {
     return raw ? sanitizeSettings(JSON.parse(raw)) : DEFAULT_SLICER_SETTINGS;
   } catch {
     return DEFAULT_SLICER_SETTINGS;
-  }
-}
-
-function loadHistory(): SlicerSettings[] {
-  try {
-    const raw = localStorage.getItem(HISTORY_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.map(sanitizeSettings).slice(0, 5) : [];
-  } catch {
-    return [];
-  }
-}
-
-function loadProfiles(): SavedProfile[] {
-  try {
-    const raw = localStorage.getItem(PROFILES_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
   }
 }
 
