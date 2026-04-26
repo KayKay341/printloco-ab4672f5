@@ -22,6 +22,7 @@ import ResetPassword from "./pages/ResetPassword.tsx";
 import GiftCards from "./pages/GiftCards.tsx";
 import RedeemGiftCard from "./pages/RedeemGiftCard.tsx";
 import GiftCardReturn from "./pages/GiftCardReturn.tsx";
+import BecomeMaker from "./pages/BecomeMaker.tsx";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ const App = () => (
             <Route path="/gift-cards" element={<GiftCards />} />
             <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
             <Route path="/gift-cards/return" element={<GiftCardReturn />} />
+            <Route path="/become-a-maker" element={<BecomeMaker />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
