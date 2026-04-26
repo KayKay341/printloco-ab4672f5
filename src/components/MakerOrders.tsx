@@ -92,6 +92,7 @@ export default function MakerOrders({ userId }: { userId: string }) {
   const [orders, setOrders] = useState<MakerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<MakerOrder | null>(null);
   const [downloading, setDownloading] = useState(false);
 
