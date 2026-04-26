@@ -41,15 +41,22 @@ const Navbar = () => {
           )}
         </div>
         <nav className="hidden items-center gap-8 md:flex">
-          {links.map((l) => (
-            <Link
-              key={l.to}
-              to={l.to}
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {l.label}
-            </Link>
-          ))}
+          {links.map((l, i) => {
+            const isPrimary = i === 0;
+            return (
+              <Link
+                key={l.to}
+                to={l.to}
+                className={
+                  isPrimary
+                    ? "text-sm font-semibold text-accent transition-colors hover:text-accent/80"
+                    : "text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                }
+              >
+                {l.label}
+              </Link>
+            );
+          })}
         </nav>
         <div className="flex items-center gap-2">
           {user ? (
