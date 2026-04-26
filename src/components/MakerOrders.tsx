@@ -192,7 +192,16 @@ export default function MakerOrders({ userId }: { userId: string }) {
     if (selected?.id === orderId) setSelected({ ...selected, status });
   };
 
-  const filtered = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+  const byStatus = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+  const q = search.trim().toLowerCase();
+  const filtered = !q
+    ? byStatus
+    : byStatus.filter((o) => {
+        const name = o.profiles?.full_name?.toLowerCase() ?? "";
+        const file = o.stl_files?.file_name?.toLowerCase() ?? "";
+        const id = o.id.toLowerCase();
+        return name.includes(q) || file.includes(q) || id.includes(q);
+      });
 
   const counts = {
     all: orders.length,
