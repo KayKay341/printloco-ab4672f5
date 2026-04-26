@@ -32,10 +32,13 @@ import {
   MapPin,
   Package,
   Phone,
+  Search,
   Sparkles,
   User,
   ExternalLink,
+  X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { useDemoMode } from "@/hooks/useDemoMode";
 
 type MakerOrder = {
@@ -89,6 +92,7 @@ export default function MakerOrders({ userId }: { userId: string }) {
   const [orders, setOrders] = useState<MakerOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
+  const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<MakerOrder | null>(null);
   const [downloading, setDownloading] = useState(false);
 
@@ -188,7 +192,16 @@ export default function MakerOrders({ userId }: { userId: string }) {
     if (selected?.id === orderId) setSelected({ ...selected, status });
   };
 
-  const filtered = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+  const byStatus = filter === "all" ? orders : orders.filter((o) => o.status === filter);
+  const q = search.trim().toLowerCase();
+  const filtered = !q
+    ? byStatus
+    : byStatus.filter((o) => {
+        const name = o.profiles?.full_name?.toLowerCase() ?? "";
+        const file = o.stl_files?.file_name?.toLowerCase() ?? "";
+        const id = o.id.toLowerCase();
+        return name.includes(q) || file.includes(q) || id.includes(q);
+      });
 
   const counts = {
     all: orders.length,
@@ -226,27 +239,54 @@ export default function MakerOrders({ userId }: { userId: string }) {
 
   return (
     <>
-      {/* Filter chips */}
-      <div className="mb-4 flex flex-wrap gap-2">
-        {[
-          { id: "all", label: "All", n: counts.all },
-          { id: "pending", label: "New", n: counts.pending },
-          { id: "printing", label: "In progress", n: counts.printing },
-          { id: "ready", label: "Ready", n: counts.ready },
-        ].map((c) => (
-          <button
-            key={c.id}
-            onClick={() => setFilter(c.id)}
-            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-              filter === c.id
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border bg-card text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {c.label} <span className="ml-1 opacity-70">({c.n})</span>
-          </button>
-        ))}
+      {/* Search + filter chips */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1 sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by customer or file name…"
+            className="pl-9 pr-9"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: "all", label: "All", n: counts.all },
+            { id: "pending", label: "New", n: counts.pending },
+            { id: "printing", label: "In progress", n: counts.printing },
+            { id: "ready", label: "Ready", n: counts.ready },
+          ].map((c) => (
+            <button
+              key={c.id}
+              onClick={() => setFilter(c.id)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                filter === c.id
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {c.label} <span className="ml-1 opacity-70">({c.n})</span>
+            </button>
+          ))}
+        </div>
       </div>
+
+      {filtered.length === 0 && (
+        <div className="mb-4 rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+          No orders match{search ? ` "${search}"` : " this filter"}.
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
         <Table>
