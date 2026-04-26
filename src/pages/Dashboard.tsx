@@ -12,6 +12,7 @@ import { useDemoMode } from "@/hooks/useDemoMode";
 import { getSamplePrinters, getSampleStlFiles } from "@/lib/sampleData";
 import TierBadge from "@/components/TierBadge";
 import DisputeDialog from "@/components/DisputeDialog";
+import MakerOrders from "@/components/MakerOrders";
 import { tierFromScore, type Tier } from "@/lib/tier";
 
 type PrinterRow = {
@@ -263,6 +264,17 @@ const Dashboard = () => {
                 })}
               </div>
             )}
+
+            {/* Incoming orders for makers */}
+            <div className="mt-12">
+              <div className="mb-4 flex items-center gap-2">
+                <h2 className="font-display text-2xl font-semibold">Incoming orders</h2>
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                  <FileBox className="h-3 w-3" /> STL & 3MF files included
+                </span>
+              </div>
+              <MakerOrders userId={user.id} />
+            </div>
           </section>
         ) : (
           <section>
