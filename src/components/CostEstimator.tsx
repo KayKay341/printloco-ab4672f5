@@ -214,13 +214,20 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
       {/* Big total */}
       <div className={`flex items-end justify-between gap-3 ${dirty ? "opacity-50" : ""}`}>
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Live estimate</div>
-          <div className="mt-1 font-display text-5xl font-semibold leading-none">
-            ${(out.amountCents / 100).toFixed(2)}
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {research ? "Researched estimate" : "Live estimate"}
+          </div>
+          <div className="mt-1 font-display text-5xl font-semibold leading-none transition-all duration-300">
+            ${(displayCents / 100).toFixed(2)}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            ${(out.perUnitCents / 100).toFixed(2)} / unit · {inputs.quantity} ×
+            ${(displayPerUnitCents / 100).toFixed(2)} / unit · {inputs.quantity} ×
           </div>
+          {minimumApplied && (
+            <div className="mt-1 text-[11px] font-medium text-primary">
+              From $2.00 minimum
+            </div>
+          )}
         </div>
         <div className="hidden text-right text-xs text-muted-foreground sm:block">
           <div>{weightLabel}</div>
@@ -235,6 +242,75 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
         <Stat icon={<Timer className="h-3 w-3" />} label="Print time" value={timeLabel} />
         <Stat icon={<Ruler className="h-3 w-3" />} label="Bbox" value={bboxLabel} />
       </div>
+
+      {/* Research panel */}
+      <div className="mt-4 rounded-2xl border border-border bg-background/60 p-3">
+        {!research ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">Fair-price check.</span>{" "}
+              Compare against real-world maker shop pricing.
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={refineWithResearch}
+              disabled={researching || dirty || out.weightG <= 0}
+              className="gap-1.5"
+            >
+              <TrendingUp className="h-3.5 w-3.5" />
+              {researching ? "Researching…" : "Refine with research"}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3 animate-fade-in">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold">
+                <TrendingUp className="h-3.5 w-3.5 text-primary" />
+                Market range
+                <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-primary">
+                  {research.market?.confidence ?? "estimate"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResearch(null)}
+                className="text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                Hide
+              </button>
+            </div>
+            {research.market && (
+              <>
+                <MarketRangeBar
+                  lowCents={research.market.marketLowCents}
+                  typicalCents={research.market.marketTypicalCents}
+                  highCents={research.market.marketHighCents}
+                  youCents={research.finalCents}
+                />
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {research.market.rationale}
+                </p>
+                {research.market.sources?.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {research.market.sources.map((s) => (
+                      <span key={s} className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {research.minimumApplied && (
+              <div className="text-[11px] font-medium text-primary">
+                $2.00 minimum applied — small jobs still need setup time.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
 
       {/* Controls */}
       <div className="mt-5 space-y-5">
