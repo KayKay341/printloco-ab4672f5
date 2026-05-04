@@ -6,7 +6,7 @@
  * cubic post-scaling, no infill heuristics, no shell math.
  */
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,9 +19,12 @@ import {
   Ruler,
   Sparkles,
   Timer,
+  TrendingUp,
   Wrench,
   Zap,
 } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { MATERIAL_BASE_PRICE } from "@/lib/stlSlicer";
 
 export type CostInputs = {
