@@ -1,10 +1,26 @@
 import { Button } from "@/components/ui/button";
 import { MapPin, Search, Upload, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState } from "react";
 import heroImg from "@/assets/hero-printer.jpg";
 
-const Hero = () => (
+const ROTATING = [
+  { word: "3D printed.", color: "text-primary" },
+  { word: "laser cut.", color: "text-accent" },
+  { word: "embroidered.", color: "text-primary" },
+  { word: "CNC machined.", color: "text-accent" },
+  { word: "vinyl cut.", color: "text-primary" },
+];
+
+const Hero = () => {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % ROTATING.length), 2400);
+    return () => clearInterval(t);
+  }, []);
+  const current = ROTATING[idx];
+  return (
   <section className="relative overflow-hidden bg-gradient-hero">
     <div className="grain absolute inset-0 opacity-60" aria-hidden />
     <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-accent/15 blur-3xl" aria-hidden />
@@ -31,7 +47,21 @@ const Hero = () => (
         >
           Every neighborhood
           <br />
-          has a <span className="italic text-primary">3D printer.</span>
+          has it{" "}
+          <span className="relative inline-block align-baseline">
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={current.word}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.4 }}
+                className={`italic ${current.color}`}
+              >
+                {current.word}
+              </motion.span>
+            </AnimatePresence>
+          </span>
           <br />
           <span className="text-accent">We help you find it.</span>
         </motion.h1>
@@ -42,9 +72,9 @@ const Hero = () => (
           transition={{ duration: 0.7, delay: 0.1 }}
           className="mt-6 max-w-xl text-lg text-muted-foreground text-balance"
         >
-          PrintLoco is the hyperlocal marketplace for 3D printing. Upload your STL, get a real
-          quote in seconds, and pick up your part from a maker around the corner — not a warehouse
-          across the country.
+          PrintLoco is the hyperlocal marketplace for 3D printing, laser cutting,
+          embroidery, CNC, and vinyl. Upload your file, get a fair quote in seconds, and
+          pick up from a maker around the corner — not a warehouse across the country.
         </motion.p>
 
         {/* Search card */}
@@ -80,7 +110,7 @@ const Hero = () => (
               </div>
             </label>
             <Button variant="hero" size="lg" className="rounded-2xl" asChild>
-              <Link to="/upload"><Upload className="h-4 w-4" /> Try the demo</Link>
+              <Link to="/services"><Upload className="h-4 w-4" /> Make something</Link>
             </Button>
           </div>
         </motion.div>
@@ -150,6 +180,7 @@ const Hero = () => (
       </motion.div>
     </div>
   </section>
-);
+  );
+};
 
 export default Hero;
