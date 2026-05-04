@@ -4,20 +4,20 @@ const steps = [
   {
     n: "01",
     icon: Upload,
-    title: "Upload your STL",
-    body: "Drag and drop any 3D file up to 500MB. We instantly calculate weight, print time, and material cost.",
+    title: "Upload your file",
+    body: "STL, SVG, DST, STEP — any format for any service. We instantly calculate size, time, and material cost with a $2 minimum.",
   },
   {
     n: "02",
     icon: MapPin,
     title: "Pick a local maker",
-    body: "Browse verified printers within 10 miles. Compare ratings, materials, build volume, and turnaround time.",
+    body: "Browse verified makers within 10 miles for 3D print, laser cut, embroidery, CNC, or vinyl. Compare ratings, materials, and turnaround.",
   },
   {
     n: "03",
     icon: Package,
     title: "Pickup or delivery",
-    body: "Same-day rush, next-day standard, or weekend pickup. Track your print live and message your maker.",
+    body: "Same-day rush, next-day standard, or weekend pickup. Track your order live and message your maker any time.",
   },
 ];
 
