@@ -91,6 +91,8 @@ type Props = {
 
 const LAYER_HEIGHTS = [0.08, 0.12, 0.16, 0.2, 0.28];
 
+export const MIN_PRICE_CENTS = 200; // $2.00 platform-wide floor
+
 export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOutput {
   const qty = Math.max(1, Math.min(500, Math.floor(i.quantity)));
 
@@ -101,11 +103,16 @@ export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOu
 
   const ppg = base.pricePerGram ?? MATERIAL_BASE_PRICE[i.material] ?? 0.2;
   const baseCost = totalWeightG * ppg;
+  const machineCost = (totalMinutes / 60) * 1.5; // $1.50/hr machine time
+  const setup = totalWeightG > 0 ? 0.75 : 0;
   const supportsBump = i.supports && totalWeightG > 0 ? Math.max(0.5, totalWeightG * 0.02) : 0;
-  let total = baseCost + supportsBump;
+  let total = baseCost + machineCost + setup + supportsBump;
   if (i.rush) total *= 1.25;
+  total *= 1.1; // platform + processing
 
-  const amountCents = totalWeightG > 0 ? Math.max(100, Math.round(total * 100)) : 0;
+  const amountCents = totalWeightG > 0
+    ? Math.max(MIN_PRICE_CENTS, Math.round(total * 100))
+    : 0;
   const perUnitCents = qty > 0 ? Math.round(amountCents / qty) : 0;
 
   return {
