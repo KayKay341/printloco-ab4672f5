@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -23,8 +24,40 @@ import GiftCards from "./pages/GiftCards.tsx";
 import RedeemGiftCard from "./pages/RedeemGiftCard.tsx";
 import GiftCardReturn from "./pages/GiftCardReturn.tsx";
 import BecomeMaker from "./pages/BecomeMaker.tsx";
+import Services from "./pages/Services.tsx";
+import Order from "./pages/Order.tsx";
 
 const queryClient = new QueryClient();
+
+const AnimatedRoutes = () => {
+  const location = useLocation();
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<Index />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/printers" element={<Printers />} />
+        <Route path="/printers/new" element={<NewPrinter />} />
+        <Route path="/upload" element={<Upload />} />
+        <Route path="/services" element={<Services />} />
+        <Route path="/order/:service" element={<Order />} />
+        <Route path="/waitlist" element={<Waitlist />} />
+        <Route path="/invest" element={<Invest />} />
+        <Route path="/checkout/return" element={<CheckoutReturn />} />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="/unsubscribe" element={<Unsubscribe />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/gift-cards" element={<GiftCards />} />
+        <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
+        <Route path="/gift-cards/return" element={<GiftCardReturn />} />
+        <Route path="/become-a-maker" element={<BecomeMaker />} />
+        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </AnimatePresence>
+  );
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -35,26 +68,7 @@ const App = () => (
         <AuthProvider>
           <PaymentTestModeBanner />
           <DemoModeBanner />
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/printers" element={<Printers />} />
-            <Route path="/printers/new" element={<NewPrinter />} />
-            <Route path="/upload" element={<Upload />} />
-            <Route path="/waitlist" element={<Waitlist />} />
-            <Route path="/invest" element={<Invest />} />
-            <Route path="/checkout/return" element={<CheckoutReturn />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/unsubscribe" element={<Unsubscribe />} />
-            <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/gift-cards" element={<GiftCards />} />
-            <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
-            <Route path="/gift-cards/return" element={<GiftCardReturn />} />
-            <Route path="/become-a-maker" element={<BecomeMaker />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <AnimatedRoutes />
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

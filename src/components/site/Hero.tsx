@@ -1,10 +1,26 @@
 import { Button } from "@/components/ui/button";
 import { MapPin, Search, Upload, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useState } from "react";
 import heroImg from "@/assets/hero-printer.jpg";
 
-const Hero = () => (
+const ROTATING = [
+  { word: "3D printed.", color: "text-primary" },
+  { word: "laser cut.", color: "text-accent" },
+  { word: "embroidered.", color: "text-primary" },
+  { word: "CNC machined.", color: "text-accent" },
+  { word: "vinyl cut.", color: "text-primary" },
+];
+
+const Hero = () => {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setIdx((i) => (i + 1) % ROTATING.length), 2400);
+    return () => clearInterval(t);
+  }, []);
+  const current = ROTATING[idx];
+  return (
   <section className="relative overflow-hidden bg-gradient-hero">
     <div className="grain absolute inset-0 opacity-60" aria-hidden />
     <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-accent/15 blur-3xl" aria-hidden />
