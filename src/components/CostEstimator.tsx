@@ -6,7 +6,7 @@
  * cubic post-scaling, no infill heuristics, no shell math.
  */
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,9 +19,12 @@ import {
   Ruler,
   Sparkles,
   Timer,
+  TrendingUp,
   Wrench,
   Zap,
 } from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { MATERIAL_BASE_PRICE } from "@/lib/stlSlicer";
 
 export type CostInputs = {
@@ -88,6 +91,8 @@ type Props = {
 
 const LAYER_HEIGHTS = [0.08, 0.12, 0.16, 0.2, 0.28];
 
+export const MIN_PRICE_CENTS = 200; // $2.00 platform-wide floor
+
 export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOutput {
   const qty = Math.max(1, Math.min(500, Math.floor(i.quantity)));
 
@@ -98,11 +103,16 @@ export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOu
 
   const ppg = base.pricePerGram ?? MATERIAL_BASE_PRICE[i.material] ?? 0.2;
   const baseCost = totalWeightG * ppg;
+  const machineCost = (totalMinutes / 60) * 1.5; // $1.50/hr machine time
+  const setup = totalWeightG > 0 ? 0.75 : 0;
   const supportsBump = i.supports && totalWeightG > 0 ? Math.max(0.5, totalWeightG * 0.02) : 0;
-  let total = baseCost + supportsBump;
+  let total = baseCost + machineCost + setup + supportsBump;
   if (i.rush) total *= 1.25;
+  total *= 1.1; // platform + processing
 
-  const amountCents = totalWeightG > 0 ? Math.max(100, Math.round(total * 100)) : 0;
+  const amountCents = totalWeightG > 0
+    ? Math.max(MIN_PRICE_CENTS, Math.round(total * 100))
+    : 0;
   const perUnitCents = qty > 0 ? Math.round(amountCents / qty) : 0;
 
   return {
@@ -114,8 +124,31 @@ export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOu
   };
 }
 
+type MarketResearch = {
+  marketLowCents: number;
+  marketTypicalCents: number;
+  marketHighCents: number;
+  confidence: "low" | "medium" | "high";
+  rationale: string;
+  sources: string[];
+};
+type ResearchResult = {
+  finalCents: number;
+  localCents: number;
+  minimumApplied: boolean;
+  market: MarketResearch | null;
+  breakdown?: Array<{ label: string; cents: number }>;
+};
+
 export default function CostEstimator({ base, inputs, onChange, onResolved, hideMaterial, dirty, onSlice, slicing }: Props) {
   const out = useMemo(() => computeEstimate(base, inputs), [base, inputs]);
+  const [research, setResearch] = useState<ResearchResult | null>(null);
+  const [researching, setResearching] = useState(false);
+
+  // Invalidate research whenever the underlying spec changes.
+  useEffect(() => { setResearch(null); }, [
+    out.amountCents, out.weightG, out.printMinutes, inputs.material, inputs.rush,
+  ]);
 
   useEffect(() => {
     onResolved?.(out);
@@ -129,6 +162,41 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
 
   const weightLabel = `${out.weightG.toFixed(1)} g · ${(out.weightG / 28.3495).toFixed(2)} oz`;
   const timeLabel = fmtMinutes(out.printMinutes);
+
+  const minimumApplied = out.amountCents > 0 && out.amountCents <= MIN_PRICE_CENTS;
+  const displayCents = research?.finalCents ?? out.amountCents;
+  const displayPerUnitCents = inputs.quantity > 0 ? Math.round(displayCents / inputs.quantity) : 0;
+
+  async function refineWithResearch() {
+    if (out.weightG <= 0) {
+      toast.error("Slice the model first so we have something to research.");
+      return;
+    }
+    setResearching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("estimate-cost", {
+        body: {
+          service: "3d_print",
+          material: inputs.material,
+          quantity: inputs.quantity,
+          weightG: base.weightG,
+          printMinutes: base.printMinutes,
+          bboxMm: base.bboxMm,
+          rush: inputs.rush,
+          research: true,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setResearch(data as ResearchResult);
+      toast.success("Refined with market research");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Couldn't fetch market data");
+    } finally {
+      setResearching(false);
+    }
+  }
+
 
   return (
     <div className="rounded-3xl bg-gradient-hero p-6 shadow-card">
@@ -146,13 +214,20 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
       {/* Big total */}
       <div className={`flex items-end justify-between gap-3 ${dirty ? "opacity-50" : ""}`}>
         <div>
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Live estimate</div>
-          <div className="mt-1 font-display text-5xl font-semibold leading-none">
-            ${(out.amountCents / 100).toFixed(2)}
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {research ? "Researched estimate" : "Live estimate"}
+          </div>
+          <div className="mt-1 font-display text-5xl font-semibold leading-none transition-all duration-300">
+            ${(displayCents / 100).toFixed(2)}
           </div>
           <div className="mt-1 text-xs text-muted-foreground">
-            ${(out.perUnitCents / 100).toFixed(2)} / unit · {inputs.quantity} ×
+            ${(displayPerUnitCents / 100).toFixed(2)} / unit · {inputs.quantity} ×
           </div>
+          {minimumApplied && (
+            <div className="mt-1 text-[11px] font-medium text-primary">
+              From $2.00 minimum
+            </div>
+          )}
         </div>
         <div className="hidden text-right text-xs text-muted-foreground sm:block">
           <div>{weightLabel}</div>
@@ -167,6 +242,75 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
         <Stat icon={<Timer className="h-3 w-3" />} label="Print time" value={timeLabel} />
         <Stat icon={<Ruler className="h-3 w-3" />} label="Bbox" value={bboxLabel} />
       </div>
+
+      {/* Research panel */}
+      <div className="mt-4 rounded-2xl border border-border bg-background/60 p-3">
+        {!research ? (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">Fair-price check.</span>{" "}
+              Compare against real-world maker shop pricing.
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={refineWithResearch}
+              disabled={researching || dirty || out.weightG <= 0}
+              className="gap-1.5"
+            >
+              <TrendingUp className="h-3.5 w-3.5" />
+              {researching ? "Researching…" : "Refine with research"}
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3 animate-fade-in">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold">
+                <TrendingUp className="h-3.5 w-3.5 text-primary" />
+                Market range
+                <span className="ml-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-primary">
+                  {research.market?.confidence ?? "estimate"}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResearch(null)}
+                className="text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                Hide
+              </button>
+            </div>
+            {research.market && (
+              <>
+                <MarketRangeBar
+                  lowCents={research.market.marketLowCents}
+                  typicalCents={research.market.marketTypicalCents}
+                  highCents={research.market.marketHighCents}
+                  youCents={research.finalCents}
+                />
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {research.market.rationale}
+                </p>
+                {research.market.sources?.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {research.market.sources.map((s) => (
+                      <span key={s} className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] text-muted-foreground">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {research.minimumApplied && (
+              <div className="text-[11px] font-medium text-primary">
+                $2.00 minimum applied — small jobs still need setup time.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
 
       {/* Controls */}
       <div className="mt-5 space-y-5">
@@ -344,3 +488,39 @@ function fmtMinutes(mins: number): string {
   const m = Math.round(mins % 60);
   return `${h}h ${m}m`;
 }
+
+function MarketRangeBar({
+  lowCents, typicalCents, highCents, youCents,
+}: { lowCents: number; typicalCents: number; highCents: number; youCents: number }) {
+  const lo = Math.min(lowCents, youCents);
+  const hi = Math.max(highCents, youCents);
+  const span = Math.max(1, hi - lo);
+  const pos = (c: number) => `${((c - lo) / span) * 100}%`;
+  const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
+  return (
+    <div className="space-y-1.5">
+      <div className="relative h-2 rounded-full bg-muted">
+        <div
+          className="absolute top-0 h-2 rounded-full bg-primary/30"
+          style={{ left: pos(lowCents), width: `calc(${pos(highCents)} - ${pos(lowCents)})` }}
+        />
+        <div
+          className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-primary shadow"
+          style={{ left: pos(typicalCents) }}
+          title={`Typical ${fmt(typicalCents)}`}
+        />
+        <div
+          className="absolute top-1/2 h-4 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground"
+          style={{ left: pos(youCents) }}
+          title={`Your price ${fmt(youCents)}`}
+        />
+      </div>
+      <div className="flex justify-between text-[10px] text-muted-foreground">
+        <span>Low {fmt(lowCents)}</span>
+        <span className="font-semibold text-foreground">You {fmt(youCents)}</span>
+        <span>High {fmt(highCents)}</span>
+      </div>
+    </div>
+  );
+}
+

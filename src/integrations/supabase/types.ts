@@ -281,6 +281,30 @@ export type Database = {
         }
         Relationships: []
       }
+      estimate_cache: {
+        Row: {
+          created_at: string
+          id: string
+          payload: Json
+          service: string
+          spec_hash: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          payload: Json
+          service: string
+          spec_hash: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          payload?: Json
+          service?: string
+          spec_hash?: string
+        }
+        Relationships: []
+      }
       filament_colors: {
         Row: {
           color_name: string
