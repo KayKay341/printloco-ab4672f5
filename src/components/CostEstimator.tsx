@@ -488,3 +488,39 @@ function fmtMinutes(mins: number): string {
   const m = Math.round(mins % 60);
   return `${h}h ${m}m`;
 }
+
+function MarketRangeBar({
+  lowCents, typicalCents, highCents, youCents,
+}: { lowCents: number; typicalCents: number; highCents: number; youCents: number }) {
+  const lo = Math.min(lowCents, youCents);
+  const hi = Math.max(highCents, youCents);
+  const span = Math.max(1, hi - lo);
+  const pos = (c: number) => `${((c - lo) / span) * 100}%`;
+  const fmt = (c: number) => `$${(c / 100).toFixed(2)}`;
+  return (
+    <div className="space-y-1.5">
+      <div className="relative h-2 rounded-full bg-muted">
+        <div
+          className="absolute top-0 h-2 rounded-full bg-primary/30"
+          style={{ left: pos(lowCents), width: `calc(${pos(highCents)} - ${pos(lowCents)})` }}
+        />
+        <div
+          className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-primary shadow"
+          style={{ left: pos(typicalCents) }}
+          title={`Typical ${fmt(typicalCents)}`}
+        />
+        <div
+          className="absolute top-1/2 h-4 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground"
+          style={{ left: pos(youCents) }}
+          title={`Your price ${fmt(youCents)}`}
+        />
+      </div>
+      <div className="flex justify-between text-[10px] text-muted-foreground">
+        <span>Low {fmt(lowCents)}</span>
+        <span className="font-semibold text-foreground">You {fmt(youCents)}</span>
+        <span>High {fmt(highCents)}</span>
+      </div>
+    </div>
+  );
+}
+
