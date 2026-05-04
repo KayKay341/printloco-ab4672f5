@@ -124,8 +124,31 @@ export function computeEstimate(base: EstimatorBase, i: CostInputs): EstimatorOu
   };
 }
 
+type MarketResearch = {
+  marketLowCents: number;
+  marketTypicalCents: number;
+  marketHighCents: number;
+  confidence: "low" | "medium" | "high";
+  rationale: string;
+  sources: string[];
+};
+type ResearchResult = {
+  finalCents: number;
+  localCents: number;
+  minimumApplied: boolean;
+  market: MarketResearch | null;
+  breakdown?: Array<{ label: string; cents: number }>;
+};
+
 export default function CostEstimator({ base, inputs, onChange, onResolved, hideMaterial, dirty, onSlice, slicing }: Props) {
   const out = useMemo(() => computeEstimate(base, inputs), [base, inputs]);
+  const [research, setResearch] = useState<ResearchResult | null>(null);
+  const [researching, setResearching] = useState(false);
+
+  // Invalidate research whenever the underlying spec changes.
+  useEffect(() => { setResearch(null); }, [
+    out.amountCents, out.weightG, out.printMinutes, inputs.material, inputs.rush,
+  ]);
 
   useEffect(() => {
     onResolved?.(out);
@@ -139,6 +162,41 @@ export default function CostEstimator({ base, inputs, onChange, onResolved, hide
 
   const weightLabel = `${out.weightG.toFixed(1)} g · ${(out.weightG / 28.3495).toFixed(2)} oz`;
   const timeLabel = fmtMinutes(out.printMinutes);
+
+  const minimumApplied = out.amountCents > 0 && out.amountCents <= MIN_PRICE_CENTS;
+  const displayCents = research?.finalCents ?? out.amountCents;
+  const displayPerUnitCents = inputs.quantity > 0 ? Math.round(displayCents / inputs.quantity) : 0;
+
+  async function refineWithResearch() {
+    if (out.weightG <= 0) {
+      toast.error("Slice the model first so we have something to research.");
+      return;
+    }
+    setResearching(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("estimate-cost", {
+        body: {
+          service: "3d_print",
+          material: inputs.material,
+          quantity: inputs.quantity,
+          weightG: base.weightG,
+          printMinutes: base.printMinutes,
+          bboxMm: base.bboxMm,
+          rush: inputs.rush,
+          research: true,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      setResearch(data as ResearchResult);
+      toast.success("Refined with market research");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Couldn't fetch market data");
+    } finally {
+      setResearching(false);
+    }
+  }
+
 
   return (
     <div className="rounded-3xl bg-gradient-hero p-6 shadow-card">
