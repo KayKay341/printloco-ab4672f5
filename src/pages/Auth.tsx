@@ -42,12 +42,17 @@ const Auth = () => {
     setSubmitting(true);
     try {
       if (mode === "signup") {
+        if (role === "maker" && machines.length === 0) {
+          toast.error("Pick at least one machine you can run.");
+          setSubmitting(false);
+          return;
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/dashboard`,
-            data: { full_name: fullName, role },
+            data: { full_name: fullName, role, machines: role === "maker" ? machines : [] },
           },
         });
         if (error) throw error;
