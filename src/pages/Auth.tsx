@@ -110,7 +110,7 @@ const Auth = () => {
     forgot: "Reset your password",
   };
   const subtitleMap: Record<Mode, string> = {
-    signup: "Find a printer in your neighborhood — or share yours.",
+    signup: "Get things 3D printed, laser cut, embroidered, milled & more — right in your neighborhood.",
     signin: "Sign in to continue.",
     otp: "We'll email you a 6-digit code — no password needed.",
     forgot: "We'll email you a link to set a new password.",
@@ -120,7 +120,7 @@ const Auth = () => {
     <div className="min-h-screen bg-gradient-hero">
       <SEO
         title="Sign in to PrintLoco"
-        description="Sign in or create your PrintLoco account to upload prints, list your 3D printer, and manage orders."
+        description="Sign in or create your PrintLoco account to order 3D prints, laser cutting, embroidery, CNC, and vinyl — or list your own machine."
         path="/auth"
         noindex
       />
@@ -188,9 +188,11 @@ const Auth = () => {
                             : "border-border hover:border-foreground/30"
                         }`}
                       >
-                        <div className="font-semibold capitalize">{r === "maker" ? "I have a printer" : "I need a print"}</div>
+                        <div className="font-semibold">{r === "maker" ? "I have a machine" : "I want something made"}</div>
                         <div className="text-xs text-muted-foreground">
-                          {r === "maker" ? "List your printer" : "Upload an STL"}
+                          {r === "maker"
+                            ? "3D printer, laser, embroidery, CNC or vinyl"
+                            : "Order prints, cuts, patches & more"}
                         </div>
                       </button>
                     ))}
