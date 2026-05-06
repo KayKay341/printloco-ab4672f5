@@ -22,12 +22,16 @@ const Auth = () => {
 
   const [mode, setMode] = useState<Mode>(initialMode);
   const [role, setRole] = useState<"customer" | "maker">(initialRole);
+  const [machines, setMachines] = useState<ServiceId[]>([]);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const toggleMachine = (id: ServiceId) =>
+    setMachines((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
 
   useEffect(() => {
     if (user) navigate("/dashboard", { replace: true });
