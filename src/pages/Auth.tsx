@@ -9,6 +9,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp
 import { toast } from "sonner";
 import Logo from "@/components/site/Logo";
 import SEO from "@/components/SEO";
+import { SERVICES, type ServiceId } from "@/lib/services";
 
 type Mode = "signup" | "signin" | "otp" | "forgot";
 
@@ -21,12 +22,16 @@ const Auth = () => {
 
   const [mode, setMode] = useState<Mode>(initialMode);
   const [role, setRole] = useState<"customer" | "maker">(initialRole);
+  const [machines, setMachines] = useState<ServiceId[]>([]);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const toggleMachine = (id: ServiceId) =>
+    setMachines((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
 
   useEffect(() => {
     if (user) navigate("/dashboard", { replace: true });
@@ -37,12 +42,17 @@ const Auth = () => {
     setSubmitting(true);
     try {
       if (mode === "signup") {
+        if (role === "maker" && machines.length === 0) {
+          toast.error("Pick at least one machine you can run.");
+          setSubmitting(false);
+          return;
+        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/dashboard`,
-            data: { full_name: fullName, role },
+            data: { full_name: fullName, role, machines: role === "maker" ? machines : [] },
           },
         });
         if (error) throw error;
@@ -197,6 +207,36 @@ const Auth = () => {
                       </button>
                     ))}
                   </div>
+                  {role === "maker" && (
+                    <div className="space-y-2">
+                      <Label>Which machines do you run?</Label>
+                      <p className="text-xs text-muted-foreground">Pick all that apply — you can add more later.</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {SERVICES.map((s) => {
+                          const Icon = s.icon;
+                          const active = machines.includes(s.id);
+                          return (
+                            <button
+                              type="button"
+                              key={s.id}
+                              onClick={() => toggleMachine(s.id)}
+                              className={`flex items-start gap-2 rounded-2xl border p-3 text-left text-sm transition-all ${
+                                active
+                                  ? "border-primary bg-primary/5 shadow-soft"
+                                  : "border-border hover:border-foreground/30"
+                              }`}
+                            >
+                              <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                              <div className="min-w-0">
+                                <div className="font-semibold leading-tight">{s.shortName}</div>
+                                <div className="truncate text-xs text-muted-foreground">{s.tagline}</div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <Label htmlFor="fullName">Full name</Label>
                     <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
