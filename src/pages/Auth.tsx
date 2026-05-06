@@ -110,7 +110,7 @@ const Auth = () => {
     forgot: "Reset your password",
   };
   const subtitleMap: Record<Mode, string> = {
-    signup: "Find a printer in your neighborhood — or share yours.",
+    signup: "Get things 3D printed, laser cut, embroidered, milled & more — right in your neighborhood.",
     signin: "Sign in to continue.",
     otp: "We'll email you a 6-digit code — no password needed.",
     forgot: "We'll email you a link to set a new password.",
