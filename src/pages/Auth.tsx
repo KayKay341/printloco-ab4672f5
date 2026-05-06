@@ -120,7 +120,7 @@ const Auth = () => {
     <div className="min-h-screen bg-gradient-hero">
       <SEO
         title="Sign in to PrintLoco"
-        description="Sign in or create your PrintLoco account to upload prints, list your 3D printer, and manage orders."
+        description="Sign in or create your PrintLoco account to order 3D prints, laser cutting, embroidery, CNC, and vinyl — or list your own machine."
         path="/auth"
         noindex
       />
