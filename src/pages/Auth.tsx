@@ -188,9 +188,11 @@ const Auth = () => {
                             : "border-border hover:border-foreground/30"
                         }`}
                       >
-                        <div className="font-semibold capitalize">{r === "maker" ? "I have a printer" : "I need a print"}</div>
+                        <div className="font-semibold">{r === "maker" ? "I have a machine" : "I want something made"}</div>
                         <div className="text-xs text-muted-foreground">
-                          {r === "maker" ? "List your printer" : "Upload an STL"}
+                          {r === "maker"
+                            ? "3D printer, laser, embroidery, CNC or vinyl"
+                            : "Order prints, cuts, patches & more"}
                         </div>
                       </button>
                     ))}
