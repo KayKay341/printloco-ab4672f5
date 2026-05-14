@@ -1,0 +1,14 @@
+# PrintLoco
+
+> Hyperlocal marketplace for on-demand making — 3D printing, laser cutting, embroidery, CNC, and vinyl. Upload a file, get an instant quote, and pick up from a trusted maker in your neighborhood.
+
+## Pages
+
+- [Home](/): Find local makers, get instant quotes, and order same-day.
+- [Services](/services): Browse supported crafts — 3D printing, laser cutting, embroidery, CNC, vinyl.
+- [Order](/order): Upload your file and get an instant cost estimate.
+- [Printers](/printers): Discover trusted makers near you with ratings and tiers.
+- [Become a Maker](/become-a-maker): List your machine and earn from local orders.
+- [Gift Cards](/gift-cards): Buy and redeem PrintLoco gift cards.
+- [Invest](/invest): Learn about investing in PrintLoco.
+- [Sign in / Sign up](/auth): Create an account as a customer or maker.
