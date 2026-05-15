@@ -65,8 +65,8 @@ export const SERVICES: ServiceDef[] = [
     description: "Send an SVG, DXF, or PDF. Red lines cut, black lines engrave. Great for signage, jewelry, packaging, and enclosures.",
     icon: Flame,
     emoji: "🔥",
-    acceptedFiles: [".svg", ".dxf", ".pdf"],
-    fileHint: "SVG, DXF or PDF — vectors only",
+    acceptedFiles: [".svg", ".dxf", ".pdf", ".ai", ".eps", ".xcs", ".lbrn", ".lbrn2", ".dwg", ".png", ".jpg", ".jpeg"],
+    fileHint: "SVG, DXF, PDF, AI, EPS, xTool (.xcs), LightBurn (.lbrn) or raster (PNG/JPG)",
     materials: ["Plywood 3mm", "Plywood 6mm", "Acrylic 3mm", "Acrylic 6mm", "MDF 3mm", "Cardboard"],
     qualityPresets: [
       { id: "fast", name: "Fast Cut", description: "Production speed", emoji: "⚡" },
