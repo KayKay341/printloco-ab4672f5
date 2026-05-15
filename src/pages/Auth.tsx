@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import Logo from "@/components/site/Logo";
 import SEO from "@/components/SEO";
 import { SERVICES, type ServiceId } from "@/lib/services";
+import { lovable } from "@/integrations/lovable";
 
 type Mode = "signup" | "signin" | "otp" | "forgot";
 
@@ -94,6 +95,21 @@ const Auth = () => {
     } catch (err: any) {
       toast.error(err.message ?? "Failed to send code");
     } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    setSubmitting(true);
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: `${window.location.origin}/dashboard`,
+      });
+      if (result.error) throw new Error(result.error.message ?? "Google sign-in failed");
+      if (result.redirected) return;
+      navigate("/dashboard", { replace: true });
+    } catch (err: any) {
+      toast.error(err.message ?? "Google sign-in failed");
       setSubmitting(false);
     }
   };
