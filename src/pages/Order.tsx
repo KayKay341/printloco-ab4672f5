@@ -74,6 +74,39 @@ export default function Order() {
 
 /* ----------------------------- Service flow ------------------------------- */
 
+export type LaserMachine = {
+  id: string;
+  name: string;
+  /** Working bed size mm */
+  bedW: number;
+  bedH: number;
+  /** Common stock sheet size mm (what we buy material in) */
+  sheetW: number;
+  sheetH: number;
+  /** Relative speed multiplier (1 = baseline) */
+  speed: number;
+};
+
+export const LASER_MACHINES: LaserMachine[] = [
+  { id: "xtool-s1",   name: "xTool S1 (40W diode)",     bedW: 498, bedH: 319, sheetW: 600, sheetH: 400, speed: 1.0 },
+  { id: "xtool-p2",   name: "xTool P2 (55W CO2)",       bedW: 600, bedH: 308, sheetW: 600, sheetH: 400, speed: 1.6 },
+  { id: "xtool-m1",   name: "xTool M1 (10W diode)",     bedW: 385, bedH: 300, sheetW: 400, sheetH: 300, speed: 0.6 },
+  { id: "xtool-f1",   name: "xTool F1 (Fiber + diode)", bedW: 115, bedH: 115, sheetW: 200, sheetH: 200, speed: 0.8 },
+  { id: "glowforge",  name: "Glowforge Pro (45W CO2)",  bedW: 495, bedH: 279, sheetW: 500, sheetH: 300, speed: 1.4 },
+  { id: "co2-100w",   name: "Generic 100W CO2",         bedW: 900, bedH: 600, sheetW: 1220, sheetH: 610, speed: 2.2 },
+  { id: "fiber-50w",  name: "Fiber laser 50W (metal)",  bedW: 200, bedH: 200, sheetW: 300, sheetH: 300, speed: 1.8 },
+  { id: "other",      name: "Other / unsure",           bedW: 500, bedH: 300, sheetW: 600, sheetH: 400, speed: 1.0 },
+];
+
+/** A layer = a unique stroke color in the uploaded vector, with a chosen action. */
+export type LaserLayer = {
+  color: string;
+  pathCount: number;
+  /** Approximate total length of paths in mm at the SVG's mm scale */
+  lengthMm: number;
+  action: "cut" | "engrave" | "skip";
+};
+
 type Specs = {
   material: string;
   preset: string;
@@ -84,6 +117,9 @@ type Specs = {
   // service-specific knobs
   cutLengthMm?: number; // laser
   engraveAreaCm2?: number; // laser
+  machineId?: string; // laser
+  layers?: LaserLayer[]; // laser
+  autoMeasured?: boolean; // laser — true when dims/length came from file
   stitchCount?: number; // embroidery
   machineMinutes?: number; // cnc
   thicknessMm?: number; // cnc / laser
@@ -101,7 +137,16 @@ function defaultSpecs(s: ServiceDef): Specs {
     rush: false,
     notes: "",
   };
-  if (s.id === "laser-cut") return { ...base, cutLengthMm: 800, engraveAreaCm2: 0, thicknessMm: 3 };
+  if (s.id === "laser-cut")
+    return {
+      ...base,
+      cutLengthMm: 800,
+      engraveAreaCm2: 0,
+      thicknessMm: 3,
+      machineId: LASER_MACHINES[0].id,
+      layers: [],
+      autoMeasured: false,
+    };
   if (s.id === "embroidery") return { ...base, stitchCount: 8000 };
   if (s.id === "cnc") return { ...base, machineMinutes: 30, thicknessMm: 12 };
   return base;
