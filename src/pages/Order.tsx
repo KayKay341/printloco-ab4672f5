@@ -738,17 +738,32 @@ function localEstimateCents(service: ServiceDef, s: Specs): { cents: number; bre
 
   switch (service.id) {
     case "laser-cut": {
-      // $0.06 per cm of cut + $0.03 per cm² engrave + material fee from area
+      const machine = LASER_MACHINES.find((m) => m.id === s.machineId) ?? LASER_MACHINES[0];
+      // Per-piece cut/engrave time-based cost, scaled by machine speed.
       const cutCm = (s.cutLengthMm ?? 0) / 10;
-      const cutC = Math.round(cutCm * 6);
-      const engC = Math.round((s.engraveAreaCm2 ?? 0) * 3);
-      const areaCm2 = (s.widthMm * s.heightMm) / 100;
-      const matC = Math.round(areaCm2 * 1.5 * (s.thicknessMm ?? 3) * 0.4);
-      breakdown.push({ label: "Cutting", cents: cutC });
-      if (engC) breakdown.push({ label: "Engraving", cents: engC });
-      breakdown.push({ label: `Material (${s.material})`, cents: matC });
-      total += cutC + engC + matC;
-      break;
+      const cutC = Math.round((cutCm * 6) / machine.speed);
+      const engC = Math.round(((s.engraveAreaCm2 ?? 0) * 3) / machine.speed);
+      // Sheet packing — how many parts fit on one stock sheet (with 5mm kerf gap).
+      const gap = 5;
+      const perRow = Math.max(1, Math.floor((machine.sheetW + gap) / (s.widthMm + gap)));
+      const perCol = Math.max(1, Math.floor((machine.sheetH + gap) / (s.heightMm + gap)));
+      const partsPerSheet = Math.max(1, perRow * perCol);
+      const sheets = Math.ceil(s.quantity / partsPerSheet);
+      const sheetAreaCm2 = (machine.sheetW * machine.sheetH) / 100;
+      const matPerSheet = Math.round(sheetAreaCm2 * 1.5 * (s.thicknessMm ?? 3) * 0.4);
+      const matC = matPerSheet * sheets;
+      const cutTotal = cutC * s.quantity;
+      const engTotal = engC * s.quantity;
+      breakdown.push({ label: `Cutting (${s.quantity}×)`, cents: cutTotal });
+      if (engTotal) breakdown.push({ label: `Engraving (${s.quantity}×)`, cents: engTotal });
+      breakdown.push({
+        label: `Material — ${sheets} sheet${sheets === 1 ? "" : "s"} of ${s.material}`,
+        cents: matC,
+      });
+      total = setupC + cutTotal + engTotal + matC;
+      if (s.rush) total = Math.round(total * 1.25);
+      total = Math.round(total * 1.1);
+      return { cents: Math.max(MIN_PRICE_CENTS, total), breakdown };
     }
     case "embroidery": {
       const per1k = 80; // 80¢ per 1k stitches
