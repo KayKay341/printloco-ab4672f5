@@ -164,6 +164,38 @@ function ServiceFlow({ service }: { service: ServiceDef }) {
 
   const set = (patch: Partial<Specs>) => setSpecs((s) => ({ ...s, ...patch }));
 
+  // Auto-measure laser SVG uploads → populate dimensions, layers, cut length.
+  useEffect(() => {
+    if (service.id !== "laser-cut" || !file) return;
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (ext !== "svg") return;
+    let cancelled = false;
+    file.text().then((text) => {
+      if (cancelled) return;
+      const measured = measureSvg(text);
+      if (!measured) return;
+      const layers: LaserLayer[] = measured.colors.map((c) => ({
+        ...c,
+        action: isReddish(c.color) ? "cut" : "engrave",
+      }));
+      const cutLen = layers.filter((l) => l.action === "cut").reduce((a, l) => a + l.lengthMm, 0);
+      const engLen = layers.filter((l) => l.action === "engrave").reduce((a, l) => a + l.lengthMm, 0);
+      set({
+        widthMm: Math.max(1, Math.round(measured.widthMm)),
+        heightMm: Math.max(1, Math.round(measured.heightMm)),
+        layers,
+        cutLengthMm: Math.round(cutLen),
+        // rough engrave area: stroke length × 0.5mm beam width → cm²
+        engraveAreaCm2: Math.round(((engLen * 0.5) / 100) * 10) / 10,
+        autoMeasured: true,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, service.id]);
+
   return (
     <div className="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
       {/* LEFT: upload + preview + specs */}
@@ -184,6 +216,14 @@ function ServiceFlow({ service }: { service: ServiceDef }) {
 
         <PreviewSwitch service={service} file={file} />
 
+        {service.id === "laser-cut" && (
+          <LaserMachinePanel specs={specs} onChange={set} />
+        )}
+
+        {service.id === "laser-cut" && (specs.layers?.length ?? 0) > 0 && (
+          <LayerMappingPanel specs={specs} onChange={set} />
+        )}
+
         <SpecsPanel service={service} specs={specs} onChange={set} />
       </div>
 
@@ -191,6 +231,233 @@ function ServiceFlow({ service }: { service: ServiceDef }) {
       <div className="lg:sticky lg:top-24 lg:self-start">
         <Estimator service={service} specs={specs} />
       </div>
+    </div>
+  );
+}
+
+/* ----------------------------- SVG measurement ---------------------------- */
+
+function isReddish(color: string): boolean {
+  const c = color.toLowerCase().trim();
+  if (c === "red") return true;
+  const m = c.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/);
+  if (!m) return false;
+  let r: number, g: number, b: number;
+  if (m[1].length === 3) {
+    r = parseInt(m[1][0] + m[1][0], 16);
+    g = parseInt(m[1][1] + m[1][1], 16);
+    b = parseInt(m[1][2] + m[1][2], 16);
+  } else {
+    r = parseInt(m[1].slice(0, 2), 16);
+    g = parseInt(m[1].slice(2, 4), 16);
+    b = parseInt(m[1].slice(4, 6), 16);
+  }
+  return r > 150 && g < 100 && b < 100;
+}
+
+function measureSvg(text: string): {
+  widthMm: number;
+  heightMm: number;
+  colors: { color: string; pathCount: number; lengthMm: number }[];
+} | null {
+  try {
+    const doc = new DOMParser().parseFromString(text, "image/svg+xml");
+    const svg = doc.querySelector("svg");
+    if (!svg) return null;
+
+    // Determine user-unit → mm scale.
+    const parseSize = (v: string | null): number => {
+      if (!v) return 0;
+      const n = parseFloat(v);
+      if (Number.isNaN(n)) return 0;
+      if (v.endsWith("in")) return n * 25.4;
+      if (v.endsWith("cm")) return n * 10;
+      if (v.endsWith("mm")) return n;
+      return (n / 96) * 25.4; // px → mm @ 96dpi
+    };
+    let widthMm = parseSize(svg.getAttribute("width"));
+    let heightMm = parseSize(svg.getAttribute("height"));
+    const vb = svg.getAttribute("viewBox")?.split(/[\s,]+/).map(Number);
+    let scale = 25.4 / 96; // default px→mm
+    if (vb && vb.length === 4) {
+      if (!widthMm) widthMm = (vb[2] / 96) * 25.4;
+      if (!heightMm) heightMm = (vb[3] / 96) * 25.4;
+      // user units → mm
+      if (vb[2] > 0) scale = widthMm / vb[2];
+    }
+
+    // Render off-screen to use getTotalLength on browser path engine.
+    const host = document.createElement("div");
+    host.style.position = "absolute";
+    host.style.left = "-99999px";
+    host.innerHTML = text.replace(/<script[\s\S]*?<\/script>/gi, "");
+    document.body.appendChild(host);
+    const live = host.querySelector("svg") as SVGSVGElement | null;
+    const colorMap = new Map<string, { pathCount: number; lengthMm: number }>();
+    if (live) {
+      const els = live.querySelectorAll<SVGGeometryElement>(
+        "path,line,polyline,polygon,rect,circle,ellipse",
+      );
+      els.forEach((el) => {
+        const stroke = (el.getAttribute("stroke") || el.style.stroke || "#000000").toLowerCase();
+        const norm = normalizeColor(stroke);
+        const len = safeLength(el) * scale;
+        const cur = colorMap.get(norm) ?? { pathCount: 0, lengthMm: 0 };
+        cur.pathCount += 1;
+        cur.lengthMm += len;
+        colorMap.set(norm, cur);
+      });
+    }
+    document.body.removeChild(host);
+
+    const colors = Array.from(colorMap.entries())
+      .map(([color, v]) => ({ color, pathCount: v.pathCount, lengthMm: v.lengthMm }))
+      .sort((a, b) => b.lengthMm - a.lengthMm);
+
+    return { widthMm: widthMm || 100, heightMm: heightMm || 100, colors };
+  } catch {
+    return null;
+  }
+}
+
+function safeLength(el: SVGGeometryElement): number {
+  try {
+    return el.getTotalLength?.() ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function normalizeColor(c: string): string {
+  c = c.trim();
+  if (!c || c === "none") return "#000000";
+  if (c.startsWith("#")) {
+    if (c.length === 4) return ("#" + c[1] + c[1] + c[2] + c[2] + c[3] + c[3]).toLowerCase();
+    return c.toLowerCase();
+  }
+  // named → use a temp element
+  const ctx = document.createElement("canvas").getContext("2d");
+  if (!ctx) return "#000000";
+  ctx.fillStyle = "#000000";
+  ctx.fillStyle = c;
+  return ctx.fillStyle.toLowerCase();
+}
+
+/* ----------------------------- Machine panel ------------------------------ */
+
+function LaserMachinePanel({
+  specs,
+  onChange,
+}: {
+  specs: Specs;
+  onChange: (p: Partial<Specs>) => void;
+}) {
+  const machine = LASER_MACHINES.find((m) => m.id === specs.machineId) ?? LASER_MACHINES[0];
+  const fits = specs.widthMm <= machine.bedW && specs.heightMm <= machine.bedH;
+  return (
+    <div className="space-y-3 rounded-3xl border border-border bg-card p-6 shadow-soft">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-lg font-semibold">Machine</h2>
+        <span className="text-[11px] text-muted-foreground">
+          Bed {machine.bedW}×{machine.bedH} mm · Sheet {machine.sheetW}×{machine.sheetH} mm
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {LASER_MACHINES.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => onChange({ machineId: m.id })}
+            className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+              specs.machineId === m.id
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {m.name}
+          </button>
+        ))}
+      </div>
+      {!fits && (
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-700 dark:text-amber-300">
+          Your part ({specs.widthMm}×{specs.heightMm} mm) is larger than this machine's bed. Pick a
+          bigger machine or split the design.
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ----------------------------- Layer mapping ------------------------------ */
+
+function LayerMappingPanel({
+  specs,
+  onChange,
+}: {
+  specs: Specs;
+  onChange: (p: Partial<Specs>) => void;
+}) {
+  const layers = specs.layers ?? [];
+  const update = (idx: number, action: LaserLayer["action"]) => {
+    const next = layers.map((l, i) => (i === idx ? { ...l, action } : l));
+    const cutLen = next.filter((l) => l.action === "cut").reduce((a, l) => a + l.lengthMm, 0);
+    const engLen = next.filter((l) => l.action === "engrave").reduce((a, l) => a + l.lengthMm, 0);
+    onChange({
+      layers: next,
+      cutLengthMm: Math.round(cutLen),
+      engraveAreaCm2: Math.round(((engLen * 0.5) / 100) * 10) / 10,
+    });
+  };
+  return (
+    <div className="space-y-3 rounded-3xl border border-border bg-card p-6 shadow-soft">
+      <div className="flex items-center justify-between">
+        <h2 className="font-display text-lg font-semibold">Layers detected</h2>
+        <span className="text-[11px] text-muted-foreground">
+          Auto-measured from your file — adjust per color
+        </span>
+      </div>
+      <ul className="space-y-2">
+        {layers.map((l, i) => (
+          <li
+            key={l.color + i}
+            className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background/60 p-2"
+          >
+            <div className="flex min-w-0 items-center gap-2">
+              <span
+                className="h-5 w-5 shrink-0 rounded-md border border-border"
+                style={{ backgroundColor: l.color }}
+                aria-hidden
+              />
+              <div className="min-w-0">
+                <div className="truncate text-xs font-semibold">{l.color}</div>
+                <div className="text-[10px] text-muted-foreground">
+                  {l.pathCount} path{l.pathCount === 1 ? "" : "s"} · {(l.lengthMm / 10).toFixed(1)} cm
+                </div>
+              </div>
+            </div>
+            <div className="flex shrink-0 gap-1">
+              {(["cut", "engrave", "skip"] as const).map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  onClick={() => update(i, a)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors ${
+                    l.action === a
+                      ? a === "cut"
+                        ? "border-red-500 bg-red-500 text-white"
+                        : a === "engrave"
+                        ? "border-foreground bg-foreground text-background"
+                        : "border-border bg-muted text-muted-foreground"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
