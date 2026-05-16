@@ -202,32 +202,64 @@ function ServiceFlow({ service }: { service: ServiceDef }) {
 
   const set = (patch: Partial<Specs>) => setSpecs((s) => ({ ...s, ...patch }));
 
-  // Auto-measure laser SVG uploads → populate dimensions, layers, cut length.
+  // Auto-measure laser uploads (SVG → real dims & path lengths; raster → image dims at 96 DPI).
   useEffect(() => {
     if (service.id !== "laser-cut" || !file) return;
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext !== "svg") return;
     let cancelled = false;
-    file.text().then((text) => {
-      if (cancelled) return;
-      const measured = measureSvg(text);
-      if (!measured) return;
-      const layers: LaserLayer[] = measured.colors.map((c) => ({
-        ...c,
-        action: isReddish(c.color) ? "cut" : "engrave",
-      }));
-      const cutLen = layers.filter((l) => l.action === "cut").reduce((a, l) => a + l.lengthMm, 0);
-      const engLen = layers.filter((l) => l.action === "engrave").reduce((a, l) => a + l.lengthMm, 0);
-      set({
-        widthMm: Math.max(1, Math.round(measured.widthMm)),
-        heightMm: Math.max(1, Math.round(measured.heightMm)),
-        layers,
-        cutLengthMm: Math.round(cutLen),
-        // rough engrave area: stroke length × 0.5mm beam width → cm²
-        engraveAreaCm2: Math.round(((engLen * 0.5) / 100) * 10) / 10,
-        autoMeasured: true,
+    if (ext === "svg") {
+      file.text().then((text) => {
+        if (cancelled) return;
+        const measured = measureSvg(text);
+        if (!measured) return;
+        const layers: LaserLayer[] = measured.colors.map((c) => ({
+          ...c,
+          action: isReddish(c.color) ? "cut" : "engrave",
+        }));
+        const cutLen = layers
+          .filter((l) => l.action === "cut")
+          .reduce((a, l) => a + l.lengthMm, 0);
+        const engLen = layers
+          .filter((l) => l.action === "engrave")
+          .reduce((a, l) => a + l.lengthMm, 0);
+        const unit = measured.detectedUnit;
+        const factor = UNIT_TO_MM[unit];
+        set({
+          widthMm: Math.max(1, Math.round(measured.rawW * factor)),
+          heightMm: Math.max(1, Math.round(measured.rawH * factor)),
+          rawW: measured.rawW,
+          rawH: measured.rawH,
+          rawLen: cutLen / factor, // store raw user-units so unit override rescales correctly
+          sourceUnit: unit,
+          layers,
+          cutLengthMm: Math.round(cutLen),
+          // rough engrave area: stroke length × 0.5mm beam width → cm²
+          engraveAreaCm2: Math.round(((engLen * 0.5) / 100) * 10) / 10,
+          autoMeasured: true,
+        });
       });
-    });
+    } else if (["png", "jpg", "jpeg"].includes(ext ?? "")) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        if (cancelled) return;
+        // Raster has no real-world dims; assume 96 DPI as a starting point. User can switch unit.
+        const wPx = img.naturalWidth || 100;
+        const hPx = img.naturalHeight || 100;
+        const factor = UNIT_TO_MM.px;
+        set({
+          widthMm: Math.max(1, Math.round(wPx * factor)),
+          heightMm: Math.max(1, Math.round(hPx * factor)),
+          rawW: wPx,
+          rawH: hPx,
+          rawLen: 0,
+          sourceUnit: "px",
+          autoMeasured: true,
+        });
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    }
     return () => {
       cancelled = true;
     };
