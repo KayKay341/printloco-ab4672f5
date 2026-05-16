@@ -448,18 +448,37 @@ function normalizeColor(c: string): string {
 function LaserMachinePanel({
   specs,
   onChange,
+  kwhRate,
+  setKwhRate,
 }: {
   specs: Specs;
   onChange: (p: Partial<Specs>) => void;
+  kwhRate: number;
+  setKwhRate: (v: number) => void;
 }) {
   const machine = LASER_MACHINES.find((m) => m.id === specs.machineId) ?? LASER_MACHINES[0];
   const fits = specs.widthMm <= machine.bedW && specs.heightMm <= machine.bedH;
+  const currentUnit = specs.sourceUnit ?? "mm";
+  const applyUnit = (u: NonNullable<Specs["sourceUnit"]>) => {
+    const factor = UNIT_TO_MM[u];
+    if (specs.rawW && specs.rawH) {
+      onChange({
+        sourceUnit: u,
+        widthMm: Math.max(1, Math.round(specs.rawW * factor)),
+        heightMm: Math.max(1, Math.round(specs.rawH * factor)),
+        cutLengthMm:
+          specs.rawLen != null ? Math.round(specs.rawLen * factor) : specs.cutLengthMm,
+      });
+    } else {
+      onChange({ sourceUnit: u });
+    }
+  };
   return (
-    <div className="space-y-3 rounded-3xl border border-border bg-card p-6 shadow-soft">
+    <div className="space-y-4 rounded-3xl border border-border bg-card p-6 shadow-soft">
       <div className="flex items-center justify-between">
         <h2 className="font-display text-lg font-semibold">Machine</h2>
         <span className="text-[11px] text-muted-foreground">
-          Bed {machine.bedW}×{machine.bedH} mm · Sheet {machine.sheetW}×{machine.sheetH} mm
+          Bed {machine.bedW}×{machine.bedH} mm · Sheet {machine.sheetW}×{machine.sheetH} mm · {machine.watts} W
         </span>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -478,6 +497,68 @@ function LaserMachinePanel({
           </button>
         ))}
       </div>
+
+      {/* Source-unit override — fixes wrong dim detection from headerless SVGs */}
+      {specs.autoMeasured && (
+        <div className="rounded-2xl border border-border bg-background/60 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-semibold">File dimensions look wrong?</div>
+              <div className="text-[11px] text-muted-foreground">
+                Auto-detected as <span className="font-semibold">{currentUnit}</span>. If the part
+                should be bigger or smaller, switch the unit your file was authored in.
+              </div>
+            </div>
+            <div className="flex gap-1">
+              {(["mm", "cm", "in", "px"] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => applyUnit(u)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase transition-colors ${
+                    currentUnit === u
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          </div>
+          {specs.rawW && specs.rawH && (
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Raw file canvas: {specs.rawW.toFixed(1)} × {specs.rawH.toFixed(1)} user-units →{" "}
+              <span className="font-semibold text-foreground">
+                {specs.widthMm} × {specs.heightMm} mm
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Electricity rate setting — drives the cutting machine cost */}
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background/60 p-3">
+        <div>
+          <div className="text-xs font-semibold">Electricity rate</div>
+          <div className="text-[11px] text-muted-foreground">
+            Used to compute machine cost = run time × wattage × rate. Saved on this device.
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground">$</span>
+          <Input
+            type="number"
+            min={0}
+            step={0.01}
+            value={kwhRate}
+            onChange={(e) => setKwhRate(Math.max(0, Number(e.target.value) || 0))}
+            className="h-8 w-20"
+          />
+          <span className="text-xs text-muted-foreground">/ kWh</span>
+        </div>
+      </div>
+
       {!fits && (
         <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-700 dark:text-amber-300">
           Your part ({specs.widthMm}×{specs.heightMm} mm) is larger than this machine's bed. Pick a
