@@ -193,7 +193,7 @@ const UNIT_TO_MM: Record<NonNullable<Specs["sourceUnit"]>, number> = {
 function ServiceFlow({ service }: { service: ServiceDef }) {
   const [file, setFile] = useState<File | null>(null);
   const [specs, setSpecs] = useState<Specs>(() => defaultSpecs(service));
-
+  const [kwhRate, setKwhRate] = useElectricityRate();
   // Reset when service changes (component is keyed, but be defensive).
   useEffect(() => {
     setSpecs(defaultSpecs(service));
