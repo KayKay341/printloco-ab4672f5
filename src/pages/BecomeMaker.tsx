@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
@@ -229,12 +229,23 @@ const ECON: Record<ServiceId, EarningsModel> = {
 const BecomeMaker = () => {
   const { user, profile } = useAuth();
   const isAlreadyMaker = profile?.role === "maker";
+  const { service: routeService } = useParams<{ service?: string }>();
+  const routeServiceId = SERVICES.find((s) => s.id === routeService)?.id;
 
-  const [serviceId, setServiceId] = useState<ServiceId>("3d-print");
+  const [serviceId, setServiceId] = useState<ServiceId>(routeServiceId ?? "3d-print");
   const [hoursPerWeek, setHoursPerWeek] = useState<number>(20);
   const econ = ECON[serviceId];
   const [rate, setRate] = useState<number>(econ.defaultRate);
   const service = SERVICES.find((s) => s.id === serviceId)!;
+
+  // If the route changes (e.g. user clicks a different /become-a-maker/:service link), sync state.
+  useEffect(() => {
+    if (routeServiceId && routeServiceId !== serviceId) {
+      setServiceId(routeServiceId);
+      setRate(ECON[routeServiceId].defaultRate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeServiceId]);
 
   // Recompute when service changes — keep rate in valid range.
   const onPickService = (id: ServiceId) => {
@@ -260,13 +271,18 @@ const BecomeMaker = () => {
       : "/auth?mode=signup&role=maker"
     : "/auth?mode=signup&role=maker";
 
+  const onRoute = !!routeServiceId;
+  const seoTitle = onRoute
+    ? `Become a ${service.name} Maker — Earn With Your ${service.shortName} | PrintLoco`
+    : "Become a Maker — Earn With Your Workshop | PrintLoco";
+  const seoDesc = onRoute
+    ? `Turn your ${service.shortName.toLowerCase()} into income. Get matched with neighbors on PrintLoco — paid upfront, free to list.`
+    : "Turn your 3D printer, laser cutter, embroidery machine, CNC, or vinyl cutter into income. List on PrintLoco and get matched with neighbors.";
+  const seoPath = onRoute ? `/become-a-maker/${service.id}` : "/become-a-maker";
+
   return (
     <div className="min-h-screen bg-background">
-      <SEO
-        title="Become a Maker — Earn With Your Workshop | PrintLoco"
-        description="Turn your 3D printer, laser cutter, embroidery machine, CNC, or vinyl cutter into income. List on PrintLoco and get matched with neighbors."
-        path="/become-a-maker"
-      />
+      <SEO title={seoTitle} description={seoDesc} path={seoPath} />
       <Navbar />
 
       <main>
@@ -275,17 +291,21 @@ const BecomeMaker = () => {
           <div className="container grid gap-12 py-20 lg:grid-cols-2 lg:items-center lg:py-28">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-accent">
-                <Sparkles className="h-3 w-3" /> For Makers
+                <Sparkles className="h-3 w-3" /> {onRoute ? `For ${service.shortName} Makers` : "For Makers"}
               </div>
               <h1 className="mt-4 font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
-                Turn your workshop into a{" "}
-                <span className="italic text-primary">side income</span>.
+                {onRoute ? (
+                  <>
+                    Turn your <span className="italic text-primary">{service.shortName.toLowerCase()}</span> machine into income.
+                  </>
+                ) : (
+                  <>
+                    Turn your workshop into a <span className="italic text-primary">side income</span>.
+                  </>
+                )}
               </h1>
               <p className="mt-5 max-w-xl text-lg text-muted-foreground">
-                Whether you 3D print, laser cut, embroider, mill, or cut vinyl —
-                join hundreds of local makers earning $200–$1,500/month making
-                things for neighbors. No factory. No marketing. Just your
-                machine, your schedule, and real customers around the corner.
+                {onRoute ? service.description : "Whether you 3D print, laser cut, embroider, mill, or cut vinyl — join hundreds of local makers earning $200–$1,500/month making things for neighbors. No factory. No marketing. Just your machine, your schedule, and real customers around the corner."}
               </p>
 
               {/* Service chips */}

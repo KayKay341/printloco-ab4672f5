@@ -85,18 +85,42 @@ export type LaserMachine = {
   sheetH: number;
   /** Relative speed multiplier (1 = baseline) */
   speed: number;
+  /** Total electrical draw at full power (watts) — used for electricity cost */
+  watts: number;
+  /** Realistic cut feed-rate at 3mm plywood (mm/min) */
+  cutSpeedMmPerMin: number;
+  /** Realistic engrave feed-rate (mm/min of stroke length) */
+  engraveSpeedMmPerMin: number;
 };
 
 export const LASER_MACHINES: LaserMachine[] = [
-  { id: "xtool-s1",   name: "xTool S1 (40W diode)",     bedW: 498, bedH: 319, sheetW: 600, sheetH: 400, speed: 1.0 },
-  { id: "xtool-p2",   name: "xTool P2 (55W CO2)",       bedW: 600, bedH: 308, sheetW: 600, sheetH: 400, speed: 1.6 },
-  { id: "xtool-m1",   name: "xTool M1 (10W diode)",     bedW: 385, bedH: 300, sheetW: 400, sheetH: 300, speed: 0.6 },
-  { id: "xtool-f1",   name: "xTool F1 (Fiber + diode)", bedW: 115, bedH: 115, sheetW: 200, sheetH: 200, speed: 0.8 },
-  { id: "glowforge",  name: "Glowforge Pro (45W CO2)",  bedW: 495, bedH: 279, sheetW: 500, sheetH: 300, speed: 1.4 },
-  { id: "co2-100w",   name: "Generic 100W CO2",         bedW: 900, bedH: 600, sheetW: 1220, sheetH: 610, speed: 2.2 },
-  { id: "fiber-50w",  name: "Fiber laser 50W (metal)",  bedW: 200, bedH: 200, sheetW: 300, sheetH: 300, speed: 1.8 },
-  { id: "other",      name: "Other / unsure",           bedW: 500, bedH: 300, sheetW: 600, sheetH: 400, speed: 1.0 },
+  { id: "xtool-s1",   name: "xTool S1 (40W diode)",     bedW: 498, bedH: 319, sheetW: 600, sheetH: 400, speed: 1.0, watts: 160,  cutSpeedMmPerMin: 600,  engraveSpeedMmPerMin: 4000 },
+  { id: "xtool-p2",   name: "xTool P2 (55W CO2)",       bedW: 600, bedH: 308, sheetW: 600, sheetH: 400, speed: 1.6, watts: 900,  cutSpeedMmPerMin: 1200, engraveSpeedMmPerMin: 9000 },
+  { id: "xtool-m1",   name: "xTool M1 (10W diode)",     bedW: 385, bedH: 300, sheetW: 400, sheetH: 300, speed: 0.6, watts: 90,   cutSpeedMmPerMin: 250,  engraveSpeedMmPerMin: 3000 },
+  { id: "xtool-f1",   name: "xTool F1 (Fiber + diode)", bedW: 115, bedH: 115, sheetW: 200, sheetH: 200, speed: 0.8, watts: 80,   cutSpeedMmPerMin: 300,  engraveSpeedMmPerMin: 6000 },
+  { id: "glowforge",  name: "Glowforge Pro (45W CO2)",  bedW: 495, bedH: 279, sheetW: 500, sheetH: 300, speed: 1.4, watts: 800,  cutSpeedMmPerMin: 900,  engraveSpeedMmPerMin: 7500 },
+  { id: "co2-100w",   name: "Generic 100W CO2",         bedW: 900, bedH: 600, sheetW: 1220, sheetH: 610, speed: 2.2, watts: 1500, cutSpeedMmPerMin: 1800, engraveSpeedMmPerMin: 12000 },
+  { id: "fiber-50w",  name: "Fiber laser 50W (metal)",  bedW: 200, bedH: 200, sheetW: 300, sheetH: 300, speed: 1.8, watts: 700,  cutSpeedMmPerMin: 1500, engraveSpeedMmPerMin: 10000 },
+  { id: "other",      name: "Other / unsure",           bedW: 500, bedH: 300, sheetW: 600, sheetH: 400, speed: 1.0, watts: 400,  cutSpeedMmPerMin: 800,  engraveSpeedMmPerMin: 6000 },
 ];
+
+/** Default $/kWh — overridable in the inline settings (stored in localStorage). */
+export const DEFAULT_KWH_RATE = 0.18;
+/** Flat material cost per stock sheet (USD). */
+export const SHEET_COST_USD = 1.9;
+
+function useElectricityRate(): [number, (v: number) => void] {
+  const [rate, setRate] = useState<number>(() => {
+    if (typeof window === "undefined") return DEFAULT_KWH_RATE;
+    const v = parseFloat(localStorage.getItem("printloco.kwhRate") ?? "");
+    return Number.isFinite(v) && v > 0 ? v : DEFAULT_KWH_RATE;
+  });
+  const update = (v: number) => {
+    setRate(v);
+    try { localStorage.setItem("printloco.kwhRate", String(v)); } catch {}
+  };
+  return [rate, update];
+}
 
 /** A layer = a unique stroke color in the uploaded vector, with a chosen action. */
 export type LaserLayer = {
@@ -120,6 +144,12 @@ type Specs = {
   machineId?: string; // laser
   layers?: LaserLayer[]; // laser
   autoMeasured?: boolean; // laser — true when dims/length came from file
+  /** Raw user-unit numbers from the source file (svg user units). Lets us rescale to mm/cm/in. */
+  rawW?: number;
+  rawH?: number;
+  rawLen?: number;
+  /** What unit the file was actually authored in. Default "mm" (CAD standard). */
+  sourceUnit?: "mm" | "cm" | "in" | "px";
   stitchCount?: number; // embroidery
   machineMinutes?: number; // cnc
   thicknessMm?: number; // cnc / laser
@@ -146,16 +176,24 @@ function defaultSpecs(s: ServiceDef): Specs {
       machineId: LASER_MACHINES[0].id,
       layers: [],
       autoMeasured: false,
+      sourceUnit: "mm",
     };
   if (s.id === "embroidery") return { ...base, stitchCount: 8000 };
   if (s.id === "cnc") return { ...base, machineMinutes: 30, thicknessMm: 12 };
   return base;
 }
 
+const UNIT_TO_MM: Record<NonNullable<Specs["sourceUnit"]>, number> = {
+  mm: 1,
+  cm: 10,
+  in: 25.4,
+  px: 25.4 / 96,
+};
+
 function ServiceFlow({ service }: { service: ServiceDef }) {
   const [file, setFile] = useState<File | null>(null);
   const [specs, setSpecs] = useState<Specs>(() => defaultSpecs(service));
-
+  const [kwhRate, setKwhRate] = useElectricityRate();
   // Reset when service changes (component is keyed, but be defensive).
   useEffect(() => {
     setSpecs(defaultSpecs(service));
@@ -164,32 +202,64 @@ function ServiceFlow({ service }: { service: ServiceDef }) {
 
   const set = (patch: Partial<Specs>) => setSpecs((s) => ({ ...s, ...patch }));
 
-  // Auto-measure laser SVG uploads → populate dimensions, layers, cut length.
+  // Auto-measure laser uploads (SVG → real dims & path lengths; raster → image dims at 96 DPI).
   useEffect(() => {
     if (service.id !== "laser-cut" || !file) return;
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (ext !== "svg") return;
     let cancelled = false;
-    file.text().then((text) => {
-      if (cancelled) return;
-      const measured = measureSvg(text);
-      if (!measured) return;
-      const layers: LaserLayer[] = measured.colors.map((c) => ({
-        ...c,
-        action: isReddish(c.color) ? "cut" : "engrave",
-      }));
-      const cutLen = layers.filter((l) => l.action === "cut").reduce((a, l) => a + l.lengthMm, 0);
-      const engLen = layers.filter((l) => l.action === "engrave").reduce((a, l) => a + l.lengthMm, 0);
-      set({
-        widthMm: Math.max(1, Math.round(measured.widthMm)),
-        heightMm: Math.max(1, Math.round(measured.heightMm)),
-        layers,
-        cutLengthMm: Math.round(cutLen),
-        // rough engrave area: stroke length × 0.5mm beam width → cm²
-        engraveAreaCm2: Math.round(((engLen * 0.5) / 100) * 10) / 10,
-        autoMeasured: true,
+    if (ext === "svg") {
+      file.text().then((text) => {
+        if (cancelled) return;
+        const measured = measureSvg(text);
+        if (!measured) return;
+        const layers: LaserLayer[] = measured.colors.map((c) => ({
+          ...c,
+          action: isReddish(c.color) ? "cut" : "engrave",
+        }));
+        const cutLen = layers
+          .filter((l) => l.action === "cut")
+          .reduce((a, l) => a + l.lengthMm, 0);
+        const engLen = layers
+          .filter((l) => l.action === "engrave")
+          .reduce((a, l) => a + l.lengthMm, 0);
+        const unit = measured.detectedUnit;
+        const factor = UNIT_TO_MM[unit];
+        set({
+          widthMm: Math.max(1, Math.round(measured.rawW * factor)),
+          heightMm: Math.max(1, Math.round(measured.rawH * factor)),
+          rawW: measured.rawW,
+          rawH: measured.rawH,
+          rawLen: cutLen / factor, // store raw user-units so unit override rescales correctly
+          sourceUnit: unit,
+          layers,
+          cutLengthMm: Math.round(cutLen),
+          // rough engrave area: stroke length × 0.5mm beam width → cm²
+          engraveAreaCm2: Math.round(((engLen * 0.5) / 100) * 10) / 10,
+          autoMeasured: true,
+        });
       });
-    });
+    } else if (["png", "jpg", "jpeg"].includes(ext ?? "")) {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        if (cancelled) return;
+        // Raster has no real-world dims; assume 96 DPI as a starting point. User can switch unit.
+        const wPx = img.naturalWidth || 100;
+        const hPx = img.naturalHeight || 100;
+        const factor = UNIT_TO_MM.px;
+        set({
+          widthMm: Math.max(1, Math.round(wPx * factor)),
+          heightMm: Math.max(1, Math.round(hPx * factor)),
+          rawW: wPx,
+          rawH: hPx,
+          rawLen: 0,
+          sourceUnit: "px",
+          autoMeasured: true,
+        });
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    }
     return () => {
       cancelled = true;
     };
@@ -217,7 +287,7 @@ function ServiceFlow({ service }: { service: ServiceDef }) {
         <PreviewSwitch service={service} file={file} />
 
         {service.id === "laser-cut" && (
-          <LaserMachinePanel specs={specs} onChange={set} />
+          <LaserMachinePanel specs={specs} onChange={set} kwhRate={kwhRate} setKwhRate={setKwhRate} />
         )}
 
         {service.id === "laser-cut" && (specs.layers?.length ?? 0) > 0 && (
@@ -229,7 +299,7 @@ function ServiceFlow({ service }: { service: ServiceDef }) {
 
       {/* RIGHT: estimator */}
       <div className="lg:sticky lg:top-24 lg:self-start">
-        <Estimator service={service} specs={specs} />
+        <Estimator service={service} specs={specs} kwhRate={kwhRate} />
       </div>
     </div>
   );
@@ -258,6 +328,11 @@ function isReddish(color: string): boolean {
 function measureSvg(text: string): {
   widthMm: number;
   heightMm: number;
+  /** Raw user-unit width/height from the viewBox (what the file thinks the canvas is). */
+  rawW: number;
+  rawH: number;
+  /** Inferred source unit. */
+  detectedUnit: "mm" | "cm" | "in" | "px";
   colors: { color: string; pathCount: number; lengthMm: number }[];
 } | null {
   try {
@@ -265,28 +340,46 @@ function measureSvg(text: string): {
     const svg = doc.querySelector("svg");
     if (!svg) return null;
 
-    // Determine user-unit → mm scale.
+    const wAttr = svg.getAttribute("width");
+    const hAttr = svg.getAttribute("height");
+    const vb = svg.getAttribute("viewBox")?.split(/[\s,]+/).map(Number);
+
+    // Detect unit from explicit suffix on width attr; default to mm (CAD standard) when ambiguous.
+    let detectedUnit: "mm" | "cm" | "in" | "px" = "mm";
+    if (wAttr) {
+      if (/in\s*$/.test(wAttr)) detectedUnit = "in";
+      else if (/cm\s*$/.test(wAttr)) detectedUnit = "cm";
+      else if (/mm\s*$/.test(wAttr)) detectedUnit = "mm";
+      else if (/px\s*$/.test(wAttr) || /^\d+(\.\d+)?$/.test(wAttr.trim())) {
+        // Bare number — Inkscape writes mm by default but most browser-exported SVGs are px.
+        detectedUnit = "px";
+      }
+    } else {
+      detectedUnit = "px"; // no width attr → viewBox only, treat as px
+    }
+
     const parseSize = (v: string | null): number => {
       if (!v) return 0;
       const n = parseFloat(v);
       if (Number.isNaN(n)) return 0;
-      if (v.endsWith("in")) return n * 25.4;
-      if (v.endsWith("cm")) return n * 10;
-      if (v.endsWith("mm")) return n;
+      if (/in\s*$/.test(v)) return n * 25.4;
+      if (/cm\s*$/.test(v)) return n * 10;
+      if (/mm\s*$/.test(v)) return n;
       return (n / 96) * 25.4; // px → mm @ 96dpi
     };
-    let widthMm = parseSize(svg.getAttribute("width"));
-    let heightMm = parseSize(svg.getAttribute("height"));
-    const vb = svg.getAttribute("viewBox")?.split(/[\s,]+/).map(Number);
-    let scale = 25.4 / 96; // default px→mm
+    let widthMm = parseSize(wAttr);
+    let heightMm = parseSize(hAttr);
+    let rawW = parseFloat(wAttr ?? "") || 0;
+    let rawH = parseFloat(hAttr ?? "") || 0;
+    let scale = 25.4 / 96;
     if (vb && vb.length === 4) {
+      if (!rawW) rawW = vb[2];
+      if (!rawH) rawH = vb[3];
       if (!widthMm) widthMm = (vb[2] / 96) * 25.4;
       if (!heightMm) heightMm = (vb[3] / 96) * 25.4;
-      // user units → mm
       if (vb[2] > 0) scale = widthMm / vb[2];
     }
 
-    // Render off-screen to use getTotalLength on browser path engine.
     const host = document.createElement("div");
     host.style.position = "absolute";
     host.style.left = "-99999px";
@@ -314,7 +407,14 @@ function measureSvg(text: string): {
       .map(([color, v]) => ({ color, pathCount: v.pathCount, lengthMm: v.lengthMm }))
       .sort((a, b) => b.lengthMm - a.lengthMm);
 
-    return { widthMm: widthMm || 100, heightMm: heightMm || 100, colors };
+    return {
+      widthMm: widthMm || 100,
+      heightMm: heightMm || 100,
+      rawW: rawW || 100,
+      rawH: rawH || 100,
+      detectedUnit,
+      colors,
+    };
   } catch {
     return null;
   }
@@ -348,18 +448,37 @@ function normalizeColor(c: string): string {
 function LaserMachinePanel({
   specs,
   onChange,
+  kwhRate,
+  setKwhRate,
 }: {
   specs: Specs;
   onChange: (p: Partial<Specs>) => void;
+  kwhRate: number;
+  setKwhRate: (v: number) => void;
 }) {
   const machine = LASER_MACHINES.find((m) => m.id === specs.machineId) ?? LASER_MACHINES[0];
   const fits = specs.widthMm <= machine.bedW && specs.heightMm <= machine.bedH;
+  const currentUnit = specs.sourceUnit ?? "mm";
+  const applyUnit = (u: NonNullable<Specs["sourceUnit"]>) => {
+    const factor = UNIT_TO_MM[u];
+    if (specs.rawW && specs.rawH) {
+      onChange({
+        sourceUnit: u,
+        widthMm: Math.max(1, Math.round(specs.rawW * factor)),
+        heightMm: Math.max(1, Math.round(specs.rawH * factor)),
+        cutLengthMm:
+          specs.rawLen != null ? Math.round(specs.rawLen * factor) : specs.cutLengthMm,
+      });
+    } else {
+      onChange({ sourceUnit: u });
+    }
+  };
   return (
-    <div className="space-y-3 rounded-3xl border border-border bg-card p-6 shadow-soft">
+    <div className="space-y-4 rounded-3xl border border-border bg-card p-6 shadow-soft">
       <div className="flex items-center justify-between">
         <h2 className="font-display text-lg font-semibold">Machine</h2>
         <span className="text-[11px] text-muted-foreground">
-          Bed {machine.bedW}×{machine.bedH} mm · Sheet {machine.sheetW}×{machine.sheetH} mm
+          Bed {machine.bedW}×{machine.bedH} mm · Sheet {machine.sheetW}×{machine.sheetH} mm · {machine.watts} W
         </span>
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -378,6 +497,68 @@ function LaserMachinePanel({
           </button>
         ))}
       </div>
+
+      {/* Source-unit override — fixes wrong dim detection from headerless SVGs */}
+      {specs.autoMeasured && (
+        <div className="rounded-2xl border border-border bg-background/60 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-xs font-semibold">File dimensions look wrong?</div>
+              <div className="text-[11px] text-muted-foreground">
+                Auto-detected as <span className="font-semibold">{currentUnit}</span>. If the part
+                should be bigger or smaller, switch the unit your file was authored in.
+              </div>
+            </div>
+            <div className="flex gap-1">
+              {(["mm", "cm", "in", "px"] as const).map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  onClick={() => applyUnit(u)}
+                  className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase transition-colors ${
+                    currentUnit === u
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          </div>
+          {specs.rawW && specs.rawH && (
+            <div className="mt-2 text-[11px] text-muted-foreground">
+              Raw file canvas: {specs.rawW.toFixed(1)} × {specs.rawH.toFixed(1)} user-units →{" "}
+              <span className="font-semibold text-foreground">
+                {specs.widthMm} × {specs.heightMm} mm
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Electricity rate setting — drives the cutting machine cost */}
+      <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-background/60 p-3">
+        <div>
+          <div className="text-xs font-semibold">Electricity rate</div>
+          <div className="text-[11px] text-muted-foreground">
+            Used to compute machine cost = run time × wattage × rate. Saved on this device.
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-xs text-muted-foreground">$</span>
+          <Input
+            type="number"
+            min={0}
+            step={0.01}
+            value={kwhRate}
+            onChange={(e) => setKwhRate(Math.max(0, Number(e.target.value) || 0))}
+            className="h-8 w-20"
+          />
+          <span className="text-xs text-muted-foreground">/ kWh</span>
+        </div>
+      </div>
+
       {!fits && (
         <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 p-2 text-[11px] text-amber-700 dark:text-amber-300">
           Your part ({specs.widthMm}×{specs.heightMm} mm) is larger than this machine's bed. Pick a
@@ -729,7 +910,11 @@ function NumField({
 
 /* ------------------------------ Estimator --------------------------------- */
 
-function localEstimateCents(service: ServiceDef, s: Specs): { cents: number; breakdown: { label: string; cents: number }[] } {
+function localEstimateCents(
+  service: ServiceDef,
+  s: Specs,
+  kwhRate: number = DEFAULT_KWH_RATE,
+): { cents: number; breakdown: { label: string; cents: number }[] } {
   const breakdown: { label: string; cents: number }[] = [];
   let total = 0;
   const setupC = 150;
@@ -739,30 +924,40 @@ function localEstimateCents(service: ServiceDef, s: Specs): { cents: number; bre
   switch (service.id) {
     case "laser-cut": {
       const machine = LASER_MACHINES.find((m) => m.id === s.machineId) ?? LASER_MACHINES[0];
-      // Per-piece cut/engrave time-based cost, scaled by machine speed.
-      const cutCm = (s.cutLengthMm ?? 0) / 10;
-      const cutC = Math.round((cutCm * 6) / machine.speed);
-      const engC = Math.round(((s.engraveAreaCm2 ?? 0) * 3) / machine.speed);
-      // Sheet packing — how many parts fit on one stock sheet (with 5mm kerf gap).
+
+      // --- Time on machine (per piece) ---
+      // Slow down cuts for thicker stock: 3mm baseline, doubles every +3mm.
+      const thickness = s.thicknessMm ?? 3;
+      const thickFactor = Math.max(1, thickness / 3);
+      const cutMin = (s.cutLengthMm ?? 0) / Math.max(60, machine.cutSpeedMmPerMin / thickFactor);
+      // engrave area cm² → ~stroke mm equivalent (× 200) at engrave feed
+      const engMin = ((s.engraveAreaCm2 ?? 0) * 200) / Math.max(60, machine.engraveSpeedMmPerMin);
+      const totalRunMin = (cutMin + engMin) * s.quantity;
+
+      // --- Electricity (machine) cost — kWh × $/kWh ---
+      const kWh = (totalRunMin / 60) * (machine.watts / 1000);
+      const elecC = Math.max(1, Math.round(kWh * kwhRate * 100));
+
+      // --- Sheet packing ---
       const gap = 5;
       const perRow = Math.max(1, Math.floor((machine.sheetW + gap) / (s.widthMm + gap)));
       const perCol = Math.max(1, Math.floor((machine.sheetH + gap) / (s.heightMm + gap)));
       const partsPerSheet = Math.max(1, perRow * perCol);
       const sheets = Math.ceil(s.quantity / partsPerSheet);
-      const sheetAreaCm2 = (machine.sheetW * machine.sheetH) / 100;
-      const matPerSheet = Math.round(sheetAreaCm2 * 1.5 * (s.thicknessMm ?? 3) * 0.4);
-      const matC = matPerSheet * sheets;
-      const cutTotal = cutC * s.quantity;
-      const engTotal = engC * s.quantity;
-      breakdown.push({ label: `Cutting (${s.quantity}×)`, cents: cutTotal });
-      if (engTotal) breakdown.push({ label: `Engraving (${s.quantity}×)`, cents: engTotal });
+      const matC = Math.round(SHEET_COST_USD * 100) * sheets;
+
       breakdown.push({
-        label: `Material — ${sheets} sheet${sheets === 1 ? "" : "s"} of ${s.material}`,
+        label: `Machine time — ${totalRunMin.toFixed(1)} min @ ${machine.watts}W`,
+        cents: elecC,
+      });
+      breakdown.push({
+        label: `Material — ${sheets} sheet${sheets === 1 ? "" : "s"} (${partsPerSheet}/sheet)`,
         cents: matC,
       });
-      total = setupC + cutTotal + engTotal + matC;
+
+      total = setupC + elecC + matC;
       if (s.rush) total = Math.round(total * 1.25);
-      total = Math.round(total * 1.1);
+      total = Math.round(total * 1.1); // platform + processing
       return { cents: Math.max(MIN_PRICE_CENTS, total), breakdown };
     }
     case "embroidery": {
@@ -809,8 +1004,8 @@ type Research = {
   sources: string[];
 };
 
-function Estimator({ service, specs }: { service: ServiceDef; specs: Specs }) {
-  const { cents, breakdown } = useMemo(() => localEstimateCents(service, specs), [service, specs]);
+function Estimator({ service, specs, kwhRate = DEFAULT_KWH_RATE }: { service: ServiceDef; specs: Specs; kwhRate?: number }) {
+  const { cents, breakdown } = useMemo(() => localEstimateCents(service, specs, kwhRate), [service, specs, kwhRate]);
   const [research, setResearch] = useState<Research | null>(null);
   const [finalCents, setFinalCents] = useState<number>(cents);
   const [loading, setLoading] = useState(false);

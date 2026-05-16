@@ -52,6 +52,7 @@ const AnimatedRoutes = () => {
         <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
         <Route path="/gift-cards/return" element={<GiftCardReturn />} />
         <Route path="/become-a-maker" element={<BecomeMaker />} />
+        <Route path="/become-a-maker/:service" element={<BecomeMaker />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
