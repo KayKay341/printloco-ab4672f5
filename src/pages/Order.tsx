@@ -910,7 +910,11 @@ function NumField({
 
 /* ------------------------------ Estimator --------------------------------- */
 
-function localEstimateCents(service: ServiceDef, s: Specs): { cents: number; breakdown: { label: string; cents: number }[] } {
+function localEstimateCents(
+  service: ServiceDef,
+  s: Specs,
+  kwhRate: number = DEFAULT_KWH_RATE,
+): { cents: number; breakdown: { label: string; cents: number }[] } {
   const breakdown: { label: string; cents: number }[] = [];
   let total = 0;
   const setupC = 150;
@@ -920,30 +924,40 @@ function localEstimateCents(service: ServiceDef, s: Specs): { cents: number; bre
   switch (service.id) {
     case "laser-cut": {
       const machine = LASER_MACHINES.find((m) => m.id === s.machineId) ?? LASER_MACHINES[0];
-      // Per-piece cut/engrave time-based cost, scaled by machine speed.
-      const cutCm = (s.cutLengthMm ?? 0) / 10;
-      const cutC = Math.round((cutCm * 6) / machine.speed);
-      const engC = Math.round(((s.engraveAreaCm2 ?? 0) * 3) / machine.speed);
-      // Sheet packing — how many parts fit on one stock sheet (with 5mm kerf gap).
+
+      // --- Time on machine (per piece) ---
+      // Slow down cuts for thicker stock: 3mm baseline, doubles every +3mm.
+      const thickness = s.thicknessMm ?? 3;
+      const thickFactor = Math.max(1, thickness / 3);
+      const cutMin = (s.cutLengthMm ?? 0) / Math.max(60, machine.cutSpeedMmPerMin / thickFactor);
+      // engrave area cm² → ~stroke mm equivalent (× 200) at engrave feed
+      const engMin = ((s.engraveAreaCm2 ?? 0) * 200) / Math.max(60, machine.engraveSpeedMmPerMin);
+      const totalRunMin = (cutMin + engMin) * s.quantity;
+
+      // --- Electricity (machine) cost — kWh × $/kWh ---
+      const kWh = (totalRunMin / 60) * (machine.watts / 1000);
+      const elecC = Math.max(1, Math.round(kWh * kwhRate * 100));
+
+      // --- Sheet packing ---
       const gap = 5;
       const perRow = Math.max(1, Math.floor((machine.sheetW + gap) / (s.widthMm + gap)));
       const perCol = Math.max(1, Math.floor((machine.sheetH + gap) / (s.heightMm + gap)));
       const partsPerSheet = Math.max(1, perRow * perCol);
       const sheets = Math.ceil(s.quantity / partsPerSheet);
-      const sheetAreaCm2 = (machine.sheetW * machine.sheetH) / 100;
-      const matPerSheet = Math.round(sheetAreaCm2 * 1.5 * (s.thicknessMm ?? 3) * 0.4);
-      const matC = matPerSheet * sheets;
-      const cutTotal = cutC * s.quantity;
-      const engTotal = engC * s.quantity;
-      breakdown.push({ label: `Cutting (${s.quantity}×)`, cents: cutTotal });
-      if (engTotal) breakdown.push({ label: `Engraving (${s.quantity}×)`, cents: engTotal });
+      const matC = Math.round(SHEET_COST_USD * 100) * sheets;
+
       breakdown.push({
-        label: `Material — ${sheets} sheet${sheets === 1 ? "" : "s"} of ${s.material}`,
+        label: `Machine time — ${totalRunMin.toFixed(1)} min @ ${machine.watts}W`,
+        cents: elecC,
+      });
+      breakdown.push({
+        label: `Material — ${sheets} sheet${sheets === 1 ? "" : "s"} (${partsPerSheet}/sheet)`,
         cents: matC,
       });
-      total = setupC + cutTotal + engTotal + matC;
+
+      total = setupC + elecC + matC;
       if (s.rush) total = Math.round(total * 1.25);
-      total = Math.round(total * 1.1);
+      total = Math.round(total * 1.1); // platform + processing
       return { cents: Math.max(MIN_PRICE_CENTS, total), breakdown };
     }
     case "embroidery": {
