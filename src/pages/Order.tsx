@@ -85,18 +85,42 @@ export type LaserMachine = {
   sheetH: number;
   /** Relative speed multiplier (1 = baseline) */
   speed: number;
+  /** Total electrical draw at full power (watts) — used for electricity cost */
+  watts: number;
+  /** Realistic cut feed-rate at 3mm plywood (mm/min) */
+  cutSpeedMmPerMin: number;
+  /** Realistic engrave feed-rate (mm/min of stroke length) */
+  engraveSpeedMmPerMin: number;
 };
 
 export const LASER_MACHINES: LaserMachine[] = [
-  { id: "xtool-s1",   name: "xTool S1 (40W diode)",     bedW: 498, bedH: 319, sheetW: 600, sheetH: 400, speed: 1.0 },
-  { id: "xtool-p2",   name: "xTool P2 (55W CO2)",       bedW: 600, bedH: 308, sheetW: 600, sheetH: 400, speed: 1.6 },
-  { id: "xtool-m1",   name: "xTool M1 (10W diode)",     bedW: 385, bedH: 300, sheetW: 400, sheetH: 300, speed: 0.6 },
-  { id: "xtool-f1",   name: "xTool F1 (Fiber + diode)", bedW: 115, bedH: 115, sheetW: 200, sheetH: 200, speed: 0.8 },
-  { id: "glowforge",  name: "Glowforge Pro (45W CO2)",  bedW: 495, bedH: 279, sheetW: 500, sheetH: 300, speed: 1.4 },
-  { id: "co2-100w",   name: "Generic 100W CO2",         bedW: 900, bedH: 600, sheetW: 1220, sheetH: 610, speed: 2.2 },
-  { id: "fiber-50w",  name: "Fiber laser 50W (metal)",  bedW: 200, bedH: 200, sheetW: 300, sheetH: 300, speed: 1.8 },
-  { id: "other",      name: "Other / unsure",           bedW: 500, bedH: 300, sheetW: 600, sheetH: 400, speed: 1.0 },
+  { id: "xtool-s1",   name: "xTool S1 (40W diode)",     bedW: 498, bedH: 319, sheetW: 600, sheetH: 400, speed: 1.0, watts: 160,  cutSpeedMmPerMin: 600,  engraveSpeedMmPerMin: 4000 },
+  { id: "xtool-p2",   name: "xTool P2 (55W CO2)",       bedW: 600, bedH: 308, sheetW: 600, sheetH: 400, speed: 1.6, watts: 900,  cutSpeedMmPerMin: 1200, engraveSpeedMmPerMin: 9000 },
+  { id: "xtool-m1",   name: "xTool M1 (10W diode)",     bedW: 385, bedH: 300, sheetW: 400, sheetH: 300, speed: 0.6, watts: 90,   cutSpeedMmPerMin: 250,  engraveSpeedMmPerMin: 3000 },
+  { id: "xtool-f1",   name: "xTool F1 (Fiber + diode)", bedW: 115, bedH: 115, sheetW: 200, sheetH: 200, speed: 0.8, watts: 80,   cutSpeedMmPerMin: 300,  engraveSpeedMmPerMin: 6000 },
+  { id: "glowforge",  name: "Glowforge Pro (45W CO2)",  bedW: 495, bedH: 279, sheetW: 500, sheetH: 300, speed: 1.4, watts: 800,  cutSpeedMmPerMin: 900,  engraveSpeedMmPerMin: 7500 },
+  { id: "co2-100w",   name: "Generic 100W CO2",         bedW: 900, bedH: 600, sheetW: 1220, sheetH: 610, speed: 2.2, watts: 1500, cutSpeedMmPerMin: 1800, engraveSpeedMmPerMin: 12000 },
+  { id: "fiber-50w",  name: "Fiber laser 50W (metal)",  bedW: 200, bedH: 200, sheetW: 300, sheetH: 300, speed: 1.8, watts: 700,  cutSpeedMmPerMin: 1500, engraveSpeedMmPerMin: 10000 },
+  { id: "other",      name: "Other / unsure",           bedW: 500, bedH: 300, sheetW: 600, sheetH: 400, speed: 1.0, watts: 400,  cutSpeedMmPerMin: 800,  engraveSpeedMmPerMin: 6000 },
 ];
+
+/** Default $/kWh — overridable in the inline settings (stored in localStorage). */
+export const DEFAULT_KWH_RATE = 0.18;
+/** Flat material cost per stock sheet (USD). */
+export const SHEET_COST_USD = 1.9;
+
+function useElectricityRate(): [number, (v: number) => void] {
+  const [rate, setRate] = useState<number>(() => {
+    if (typeof window === "undefined") return DEFAULT_KWH_RATE;
+    const v = parseFloat(localStorage.getItem("printloco.kwhRate") ?? "");
+    return Number.isFinite(v) && v > 0 ? v : DEFAULT_KWH_RATE;
+  });
+  const update = (v: number) => {
+    setRate(v);
+    try { localStorage.setItem("printloco.kwhRate", String(v)); } catch {}
+  };
+  return [rate, update];
+}
 
 /** A layer = a unique stroke color in the uploaded vector, with a chosen action. */
 export type LaserLayer = {
