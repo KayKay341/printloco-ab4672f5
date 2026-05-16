@@ -88,6 +88,56 @@ export default function Services() {
               );
             })}
           </div>
+
+          {/* Become a maker — per-craft entry points */}
+          <section className="mt-20 rounded-3xl border border-border bg-card/50 p-8 shadow-soft">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
+                  Have a machine?
+                </div>
+                <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight">
+                  Become a maker — by craft
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  See real earnings, sample orders, and setup steps tuned to your machine.
+                </p>
+              </div>
+              <Link
+                to="/become-a-maker"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
+              >
+                All crafts <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {SERVICES.map((s) => {
+                const Icon = s.icon;
+                return (
+                  <Link
+                    key={s.id}
+                    to={`/become-a-maker/${s.id}`}
+                    className="group flex items-center justify-between gap-3 rounded-2xl border border-border bg-background/60 p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:bg-primary/5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold">
+                          Become a {s.shortName} maker
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          Earn with your {s.shortName.toLowerCase()} machine
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
         </main>
       </PageTransition>
       <Footer />
