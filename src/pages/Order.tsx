@@ -328,6 +328,11 @@ function isReddish(color: string): boolean {
 function measureSvg(text: string): {
   widthMm: number;
   heightMm: number;
+  /** Raw user-unit width/height from the viewBox (what the file thinks the canvas is). */
+  rawW: number;
+  rawH: number;
+  /** Inferred source unit. */
+  detectedUnit: "mm" | "cm" | "in" | "px";
   colors: { color: string; pathCount: number; lengthMm: number }[];
 } | null {
   try {
@@ -335,28 +340,46 @@ function measureSvg(text: string): {
     const svg = doc.querySelector("svg");
     if (!svg) return null;
 
-    // Determine user-unit → mm scale.
+    const wAttr = svg.getAttribute("width");
+    const hAttr = svg.getAttribute("height");
+    const vb = svg.getAttribute("viewBox")?.split(/[\s,]+/).map(Number);
+
+    // Detect unit from explicit suffix on width attr; default to mm (CAD standard) when ambiguous.
+    let detectedUnit: "mm" | "cm" | "in" | "px" = "mm";
+    if (wAttr) {
+      if (/in\s*$/.test(wAttr)) detectedUnit = "in";
+      else if (/cm\s*$/.test(wAttr)) detectedUnit = "cm";
+      else if (/mm\s*$/.test(wAttr)) detectedUnit = "mm";
+      else if (/px\s*$/.test(wAttr) || /^\d+(\.\d+)?$/.test(wAttr.trim())) {
+        // Bare number — Inkscape writes mm by default but most browser-exported SVGs are px.
+        detectedUnit = "px";
+      }
+    } else {
+      detectedUnit = "px"; // no width attr → viewBox only, treat as px
+    }
+
     const parseSize = (v: string | null): number => {
       if (!v) return 0;
       const n = parseFloat(v);
       if (Number.isNaN(n)) return 0;
-      if (v.endsWith("in")) return n * 25.4;
-      if (v.endsWith("cm")) return n * 10;
-      if (v.endsWith("mm")) return n;
+      if (/in\s*$/.test(v)) return n * 25.4;
+      if (/cm\s*$/.test(v)) return n * 10;
+      if (/mm\s*$/.test(v)) return n;
       return (n / 96) * 25.4; // px → mm @ 96dpi
     };
-    let widthMm = parseSize(svg.getAttribute("width"));
-    let heightMm = parseSize(svg.getAttribute("height"));
-    const vb = svg.getAttribute("viewBox")?.split(/[\s,]+/).map(Number);
-    let scale = 25.4 / 96; // default px→mm
+    let widthMm = parseSize(wAttr);
+    let heightMm = parseSize(hAttr);
+    let rawW = parseFloat(wAttr ?? "") || 0;
+    let rawH = parseFloat(hAttr ?? "") || 0;
+    let scale = 25.4 / 96;
     if (vb && vb.length === 4) {
+      if (!rawW) rawW = vb[2];
+      if (!rawH) rawH = vb[3];
       if (!widthMm) widthMm = (vb[2] / 96) * 25.4;
       if (!heightMm) heightMm = (vb[3] / 96) * 25.4;
-      // user units → mm
       if (vb[2] > 0) scale = widthMm / vb[2];
     }
 
-    // Render off-screen to use getTotalLength on browser path engine.
     const host = document.createElement("div");
     host.style.position = "absolute";
     host.style.left = "-99999px";
@@ -384,7 +407,14 @@ function measureSvg(text: string): {
       .map(([color, v]) => ({ color, pathCount: v.pathCount, lengthMm: v.lengthMm }))
       .sort((a, b) => b.lengthMm - a.lengthMm);
 
-    return { widthMm: widthMm || 100, heightMm: heightMm || 100, colors };
+    return {
+      widthMm: widthMm || 100,
+      heightMm: heightMm || 100,
+      rawW: rawW || 100,
+      rawH: rawH || 100,
+      detectedUnit,
+      colors,
+    };
   } catch {
     return null;
   }
