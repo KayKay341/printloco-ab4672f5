@@ -1004,8 +1004,8 @@ type Research = {
   sources: string[];
 };
 
-function Estimator({ service, specs }: { service: ServiceDef; specs: Specs }) {
-  const { cents, breakdown } = useMemo(() => localEstimateCents(service, specs), [service, specs]);
+function Estimator({ service, specs, kwhRate = DEFAULT_KWH_RATE }: { service: ServiceDef; specs: Specs; kwhRate?: number }) {
+  const { cents, breakdown } = useMemo(() => localEstimateCents(service, specs, kwhRate), [service, specs, kwhRate]);
   const [research, setResearch] = useState<Research | null>(null);
   const [finalCents, setFinalCents] = useState<number>(cents);
   const [loading, setLoading] = useState(false);
