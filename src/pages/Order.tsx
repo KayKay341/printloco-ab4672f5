@@ -144,6 +144,12 @@ type Specs = {
   machineId?: string; // laser
   layers?: LaserLayer[]; // laser
   autoMeasured?: boolean; // laser — true when dims/length came from file
+  /** Raw user-unit numbers from the source file (svg user units). Lets us rescale to mm/cm/in. */
+  rawW?: number;
+  rawH?: number;
+  rawLen?: number;
+  /** What unit the file was actually authored in. Default "mm" (CAD standard). */
+  sourceUnit?: "mm" | "cm" | "in" | "px";
   stitchCount?: number; // embroidery
   machineMinutes?: number; // cnc
   thicknessMm?: number; // cnc / laser
@@ -170,11 +176,19 @@ function defaultSpecs(s: ServiceDef): Specs {
       machineId: LASER_MACHINES[0].id,
       layers: [],
       autoMeasured: false,
+      sourceUnit: "mm",
     };
   if (s.id === "embroidery") return { ...base, stitchCount: 8000 };
   if (s.id === "cnc") return { ...base, machineMinutes: 30, thicknessMm: 12 };
   return base;
 }
+
+const UNIT_TO_MM: Record<NonNullable<Specs["sourceUnit"]>, number> = {
+  mm: 1,
+  cm: 10,
+  in: 25.4,
+  px: 25.4 / 96,
+};
 
 function ServiceFlow({ service }: { service: ServiceDef }) {
   const [file, setFile] = useState<File | null>(null);
