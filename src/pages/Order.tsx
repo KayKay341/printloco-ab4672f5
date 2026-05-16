@@ -287,7 +287,7 @@ function ServiceFlow({ service }: { service: ServiceDef }) {
         <PreviewSwitch service={service} file={file} />
 
         {service.id === "laser-cut" && (
-          <LaserMachinePanel specs={specs} onChange={set} />
+          <LaserMachinePanel specs={specs} onChange={set} kwhRate={kwhRate} setKwhRate={setKwhRate} />
         )}
 
         {service.id === "laser-cut" && (specs.layers?.length ?? 0) > 0 && (
@@ -299,7 +299,7 @@ function ServiceFlow({ service }: { service: ServiceDef }) {
 
       {/* RIGHT: estimator */}
       <div className="lg:sticky lg:top-24 lg:self-start">
-        <Estimator service={service} specs={specs} />
+        <Estimator service={service} specs={specs} kwhRate={kwhRate} />
       </div>
     </div>
   );
