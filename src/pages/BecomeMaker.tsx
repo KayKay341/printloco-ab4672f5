@@ -229,12 +229,23 @@ const ECON: Record<ServiceId, EarningsModel> = {
 const BecomeMaker = () => {
   const { user, profile } = useAuth();
   const isAlreadyMaker = profile?.role === "maker";
+  const { service: routeService } = useParams<{ service?: string }>();
+  const routeServiceId = SERVICES.find((s) => s.id === routeService)?.id;
 
-  const [serviceId, setServiceId] = useState<ServiceId>("3d-print");
+  const [serviceId, setServiceId] = useState<ServiceId>(routeServiceId ?? "3d-print");
   const [hoursPerWeek, setHoursPerWeek] = useState<number>(20);
   const econ = ECON[serviceId];
   const [rate, setRate] = useState<number>(econ.defaultRate);
   const service = SERVICES.find((s) => s.id === serviceId)!;
+
+  // If the route changes (e.g. user clicks a different /become-a-maker/:service link), sync state.
+  useEffect(() => {
+    if (routeServiceId && routeServiceId !== serviceId) {
+      setServiceId(routeServiceId);
+      setRate(ECON[routeServiceId].defaultRate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeServiceId]);
 
   // Recompute when service changes — keep rate in valid range.
   const onPickService = (id: ServiceId) => {
