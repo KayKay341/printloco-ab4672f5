@@ -28,6 +28,7 @@ import BecomeMaker from "./pages/BecomeMaker.tsx";
 import MakerOnboarding from "./pages/MakerOnboarding.tsx";
 import MakerOnboardingImages from "./pages/MakerOnboardingImages.tsx";
 import MakerOnboardingComplete from "./pages/MakerOnboardingComplete.tsx";
+import MakerDashboardSelector from "./pages/MakerDashboardSelector.tsx";
 import RoleSelection from "./pages/RoleSelection.tsx";
 import Services from "./pages/Services.tsx";
 import Order from "./pages/Order.tsx";
@@ -61,6 +62,7 @@ const AnimatedRoutes = () => {
         <Route path="/onboarding/maker" element={<MakerOnboarding />} />
         <Route path="/onboarding/images" element={<MakerOnboardingImages />} />
         <Route path="/onboarding/complete" element={<MakerOnboardingComplete />} />
+        <Route path="/maker/dashboard-selector" element={<MakerDashboardSelector />} />
         <Route path="/onboarding/role" element={<RoleSelection />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />

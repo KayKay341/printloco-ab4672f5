@@ -132,7 +132,14 @@ const Dashboard = () => {
   if (loading) return <div className="container py-24">Loading…</div>;
   if (!user) return <Navigate to="/auth?mode=signin" replace />;
   if (!profile || !profile.role) return <Navigate to="/onboarding/role" replace />;
-  if (profile.role === "maker" && printers.length === 0 && !usingSample) return <Navigate to="/onboarding/maker" replace />;
+  
+  if (profile.role === "maker") {
+    // Only redirect to selector if we are at the dashboard root and haven't selected anything yet
+    // Or if they are on a maker account, forward to the selector
+    return <Navigate to="/maker/dashboard-selector" replace />;
+  }
+  
+  if (printers.length === 0 && !usingSample) return <Navigate to="/onboarding/maker" replace />;
 
   // Maker rollups
   const totalEarningsCents = printers.reduce((sum, p) => sum + Math.round(p.successful_orders * Number(p.price_per_gram) * 38 * 0.9 * 100), 0);
