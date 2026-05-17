@@ -4,9 +4,10 @@ import { AnimatePresence } from "framer-motion";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/hooks/useAuth";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
+import { VerificationBanner } from "@/components/VerificationBanner";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import Auth from "./pages/Auth.tsx";
@@ -26,6 +27,7 @@ import GiftCardReturn from "./pages/GiftCardReturn.tsx";
 import BecomeMaker from "./pages/BecomeMaker.tsx";
 import MakerOnboarding from "./pages/MakerOnboarding.tsx";
 import MakerOnboardingImages from "./pages/MakerOnboardingImages.tsx";
+import MakerOnboardingComplete from "./pages/MakerOnboardingComplete.tsx";
 import RoleSelection from "./pages/RoleSelection.tsx";
 import Services from "./pages/Services.tsx";
 import Order from "./pages/Order.tsx";
@@ -58,6 +60,7 @@ const AnimatedRoutes = () => {
         <Route path="/become-a-maker/:service" element={<BecomeMaker />} />
         <Route path="/onboarding/maker" element={<MakerOnboarding />} />
         <Route path="/onboarding/images" element={<MakerOnboardingImages />} />
+        <Route path="/onboarding/complete" element={<MakerOnboardingComplete />} />
         <Route path="/onboarding/role" element={<RoleSelection />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
@@ -65,11 +68,6 @@ const AnimatedRoutes = () => {
     </AnimatePresence>
   );
 };
-
-import { AuthProvider, useAuth } from "@/hooks/useAuth";
-import { VerificationBanner } from "@/components/VerificationBanner";
-import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
-// ...
 
 const App = () => {
   return (
