@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { SERVICES } from "@/lib/services";
+import { MACHINE_PRESETS } from "@/lib/machinePresets";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import { MotionWrapper } from "@/components/ui/MotionWrapper";
@@ -22,9 +22,22 @@ const MakerOnboarding = () => {
     serviceId: "",
   });
 
+  const brands = useMemo(() => {
+    if (!formData.serviceId || !MACHINE_PRESETS[formData.serviceId]) return [];
+    return Object.keys(MACHINE_PRESETS[formData.serviceId]);
+  }, [formData.serviceId]);
+
+  const models = useMemo(() => {
+    if (!formData.serviceId || !formData.brand || !MACHINE_PRESETS[formData.serviceId][formData.brand]) return [];
+    return MACHINE_PRESETS[formData.serviceId][formData.brand];
+  }, [formData.serviceId, formData.brand]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !formData.serviceId || !formData.brand || !formData.model) {
+      toast.error("Please fill in all fields.");
+      return;
+    }
     setLoading(true);
 
     try {
@@ -71,7 +84,7 @@ const MakerOnboarding = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label>What is your primary craft?</Label>
-                <Select onValueChange={(v) => setFormData({ ...formData, serviceId: v })}>
+                <Select onValueChange={(v) => setFormData({ serviceId: v, brand: "", model: "" })}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select your craft" />
                   </SelectTrigger>
@@ -82,25 +95,36 @@ const MakerOnboarding = () => {
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-2">
                 <Label>Machine Brand</Label>
-                <Input 
-                  placeholder="e.g. Bambu Lab" 
-                  value={formData.brand}
-                  onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                  required
-                />
+                <Select disabled={!formData.serviceId} onValueChange={(v) => setFormData({ ...formData, brand: v, model: "" })}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select brand" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {brands.map((brand) => (
+                      <SelectItem key={brand} value={brand}>{brand}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+
               <div className="space-y-2">
                 <Label>Machine Model</Label>
-                <Input 
-                  placeholder="e.g. X1 Carbon" 
-                  value={formData.model}
-                  onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                  required
-                />
+                <Select disabled={!formData.brand} onValueChange={(v) => setFormData({ ...formData, model: v })}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {models.map((model) => (
+                      <SelectItem key={model} value={model}>{model}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <Button type="submit" className="w-full mt-6" disabled={loading}>
+
+              <Button type="submit" className="w-full mt-6" disabled={loading || !formData.model}>
                 {loading ? "Saving..." : "Start my shop"}
               </Button>
             </form>
