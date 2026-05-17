@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { SERVICES } from "@/lib/services";
 import { MACHINE_PRESETS } from "@/lib/machinePresets";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
+import { OnboardingSteps } from "@/components/OnboardingSteps";
 import { MotionWrapper } from "@/components/ui/MotionWrapper";
 
 const MakerOnboarding = () => {
