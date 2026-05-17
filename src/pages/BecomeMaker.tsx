@@ -398,12 +398,18 @@ const BecomeMaker = () => {
     : "/auth?mode=signup&role=maker";
 
   const onRoute = !!routeServiceId;
+  const craft = onRoute ? CRAFT_CONTENT[serviceId] : null;
+  const steps = craft?.steps ?? STEPS;
+  const perks = craft?.perks ?? PERKS;
+  const testimonials = craft?.testimonials ?? TESTIMONIALS;
+  const faq = craft?.faq ?? FAQ;
+
   const seoTitle = onRoute
     ? `Become a ${service.name} Maker — Earn With Your ${service.shortName} | PrintLoco`
     : "Become a Maker — Earn With Your Workshop | PrintLoco";
   const seoDesc = onRoute
     ? `Turn your ${service.shortName.toLowerCase()} into income. Get matched with neighbors on PrintLoco — paid upfront, free to list.`
-    : "Turn your 3D printer, laser cutter, embroidery machine, CNC, or vinyl cutter into income. List on PrintLoco and get matched with neighbors.";
+    : "Turn your 3D printer, laser cutter, embroidery machine, or vinyl cutter into income. List on PrintLoco and get matched with neighbors.";
   const seoPath = onRoute ? `/become-a-maker/${service.id}` : "/become-a-maker";
 
   return (
@@ -420,10 +426,8 @@ const BecomeMaker = () => {
                 <Sparkles className="h-3 w-3" /> {onRoute ? `For ${service.shortName} Makers` : "For Makers"}
               </div>
               <h1 className="mt-4 font-display text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl">
-                {onRoute ? (
-                  <>
-                    Turn your <span className="italic text-primary">{service.shortName.toLowerCase()}</span> machine into income.
-                  </>
+                {craft ? (
+                  craft.heroTitle
                 ) : (
                   <>
                     Turn your workshop into a <span className="italic text-primary">side income</span>.
@@ -431,7 +435,7 @@ const BecomeMaker = () => {
                 )}
               </h1>
               <p className="mt-5 max-w-xl text-lg text-muted-foreground">
-                {onRoute ? service.description : "Whether you 3D print, laser cut, embroider, mill, or cut vinyl — join hundreds of local makers earning $200–$1,500/month making things for neighbors. No factory. No marketing. Just your machine, your schedule, and real customers around the corner."}
+                {craft ? craft.heroBody : "Whether you 3D print, laser cut, embroider, or cut vinyl — join hundreds of local makers earning $200–$1,500/month making things for neighbors. No factory. No marketing. Just your machine, your schedule, and real customers around the corner."}
               </p>
 
               {/* Service chips */}
