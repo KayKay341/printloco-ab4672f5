@@ -66,20 +66,39 @@ const AnimatedRoutes = () => {
   );
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AuthProvider>
-          <PaymentTestModeBanner />
-          <DemoModeBanner />
-          <AnimatedRoutes />
-        </AuthProvider>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
-);
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import { VerificationBanner } from "@/components/VerificationBanner";
+import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
+// ...
+
+const App = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AuthProvider>
+            <AppContent />
+          </AuthProvider>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+};
+
+const AppContent = () => {
+  const { profile } = useAuth();
+  // Mock verification check until backend field is added
+  const isVerified = profile ? true : true; 
+  return (
+    <>
+      <VerificationBanner isVisible={!isVerified} />
+      <PaymentTestModeBanner />
+      <DemoModeBanner />
+      <AnimatedRoutes />
+    </>
+  );
+};
 
 export default App;

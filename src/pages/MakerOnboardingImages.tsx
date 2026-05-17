@@ -47,7 +47,7 @@ const MakerOnboardingImages = () => {
         <OnboardingSteps currentStep={3} />
         <Card className="rounded-3xl border border-border shadow-card p-6">
           <CardHeader className="text-center pb-6">
-            <CardTitle className="font-display text-4xl font-semibold tracking-tight">Machine Verification</CardTitle>
+            <CardTitle className="font-display text-4xl font-semibold tracking-tight">Upload Machine Files</CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
               Upload at least 3 photos of your machine, including one showing the serial number or a screenshot of your proof of purchase.
             </CardDescription>

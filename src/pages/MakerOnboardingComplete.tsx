@@ -15,7 +15,7 @@ const MakerOnboardingComplete = () => {
           <CardHeader className="text-center pb-6">
             <CardTitle className="font-display text-4xl font-semibold tracking-tight">Onboarding Complete!</CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
-              Your printer is pending verification. Our team will review your photos soon. You can start setting up your shop in the meantime!
+              Your printer is pending verification. You will receive an email once your item has been approved. You can start setting up your shop in the meantime!
             </CardDescription>
           </CardHeader>
           <CardContent>
