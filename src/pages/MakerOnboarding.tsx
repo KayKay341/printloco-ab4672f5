@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { SERVICES } from "@/lib/services";
 import { MACHINE_PRESETS } from "@/lib/machinePresets";
 import { toast } from "sonner";
@@ -21,6 +22,7 @@ const MakerOnboarding = () => {
     model: "",
     serviceId: "",
   });
+  const [photo, setPhoto] = useState<File | null>(null);
 
   const brands = useMemo(() => {
     if (!formData.serviceId || !MACHINE_PRESETS[formData.serviceId]) return [];
@@ -36,6 +38,10 @@ const MakerOnboarding = () => {
     e.preventDefault();
     if (!user || !formData.serviceId || !formData.brand || !formData.model) {
       toast.error("Please fill in all fields.");
+      return;
+    }
+    if (!photo) {
+      toast.error("Please upload a photo of your machine.");
       return;
     }
     setLoading(true);
@@ -84,7 +90,7 @@ const MakerOnboarding = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label>What is your primary craft?</Label>
-                <Select onValueChange={(v) => setFormData({ serviceId: v, brand: "", model: "" })}>
+                <Select value={formData.serviceId} onValueChange={(v) => setFormData({ serviceId: v, brand: "", model: "" })}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select your craft" />
                   </SelectTrigger>
@@ -98,7 +104,7 @@ const MakerOnboarding = () => {
 
               <div className="space-y-2">
                 <Label>Machine Brand</Label>
-                <Select disabled={!formData.serviceId} onValueChange={(v) => setFormData({ ...formData, brand: v, model: "" })}>
+                <Select value={formData.brand} disabled={!formData.serviceId} onValueChange={(v) => setFormData({ ...formData, brand: v, model: "" })}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select brand" />
                   </SelectTrigger>
@@ -112,7 +118,7 @@ const MakerOnboarding = () => {
 
               <div className="space-y-2">
                 <Label>Machine Model</Label>
-                <Select disabled={!formData.brand} onValueChange={(v) => setFormData({ ...formData, model: v })}>
+                <Select value={formData.model} disabled={!formData.brand} onValueChange={(v) => setFormData({ ...formData, model: v })}>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select model" />
                   </SelectTrigger>
@@ -124,7 +130,12 @@ const MakerOnboarding = () => {
                 </Select>
               </div>
 
-              <Button type="submit" className="w-full mt-6" disabled={loading || !formData.model}>
+              <div className="space-y-2">
+                <Label>Upload machine photo</Label>
+                <Input type="file" accept="image/*" onChange={(e) => setPhoto(e.target.files?.[0] || null)} required />
+              </div>
+
+              <Button type="submit" className="w-full mt-6" disabled={loading || !formData.model || !photo}>
                 {loading ? "Saving..." : "Start my shop"}
               </Button>
             </form>
