@@ -25,6 +25,7 @@ import RedeemGiftCard from "./pages/RedeemGiftCard.tsx";
 import GiftCardReturn from "./pages/GiftCardReturn.tsx";
 import BecomeMaker from "./pages/BecomeMaker.tsx";
 import MakerOnboarding from "./pages/MakerOnboarding.tsx";
+import MakerOnboardingImages from "./pages/MakerOnboardingImages.tsx";
 import RoleSelection from "./pages/RoleSelection.tsx";
 import Services from "./pages/Services.tsx";
 import Order from "./pages/Order.tsx";
@@ -56,6 +57,7 @@ const AnimatedRoutes = () => {
         <Route path="/become-a-maker" element={<BecomeMaker />} />
         <Route path="/become-a-maker/:service" element={<BecomeMaker />} />
         <Route path="/onboarding/maker" element={<MakerOnboarding />} />
+        <Route path="/onboarding/images" element={<MakerOnboardingImages />} />
         <Route path="/onboarding/role" element={<RoleSelection />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />

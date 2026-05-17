@@ -62,8 +62,8 @@ const MakerOnboarding = () => {
         });
 
       await refreshProfile();
-      toast.success("Welcome, Maker!");
-      navigate("/dashboard");
+      toast.success("Machine registered! Next: upload verification photos.");
+      navigate("/onboarding/images");
     } catch (error) {
       toast.error("Failed to complete onboarding.");
     } finally {
