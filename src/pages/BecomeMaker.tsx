@@ -50,7 +50,7 @@ const STEPS = [
     n: "03",
     icon: <Zap className="h-5 w-5" />,
     title: "Get matched automatically",
-    body: "When a nearby customer uploads a file (STL, SVG, DST, STEP…), we match them to you based on craft, size, and tier.",
+    body: "When a nearby customer uploads a file (STL, SVG, DST…), we match them to you based on craft, size, and tier.",
   },
   {
     n: "04",
@@ -123,7 +123,7 @@ const TESTIMONIALS = [
 const FAQ = [
   {
     q: "What kinds of makers can join?",
-    a: "Any craft we support: 3D printing (FDM/resin), laser cutting & engraving, machine embroidery, CNC milling/routing, and vinyl/sticker cutting. More crafts are coming soon.",
+    a: "Any craft we support: 3D printing (FDM/resin), laser cutting & engraving, machine embroidery, and vinyl/sticker cutting. More crafts are coming soon.",
   },
   {
     q: "How much does it cost to list?",
@@ -409,7 +409,7 @@ const BecomeMaker = () => {
     : "Become a Maker — Earn With Your Workshop | PrintLoco";
   const seoDesc = onRoute
     ? `Turn your ${service.shortName.toLowerCase()} into income. Get matched with neighbors on PrintLoco — paid upfront, free to list.`
-    : "Turn your 3D printer, laser cutter, embroidery machine, or vinyl cutter into income. List on PrintLoco and get matched with neighbors.";
+    : "Turn your 3D printer, laser cutter, embroidery machine or vinyl cutter into income. List on PrintLoco and get matched with neighbors.";
   const seoPath = onRoute ? `/become-a-maker/${service.id}` : "/become-a-maker";
 
   return (

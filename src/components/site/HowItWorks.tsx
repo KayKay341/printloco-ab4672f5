@@ -11,7 +11,7 @@ const steps = [
     n: "02",
     icon: MapPin,
     title: "Pick a local maker",
-    body: "Browse verified makers within 10 miles for 3D print, laser cut, embroidery, CNC, or vinyl. Compare ratings, materials, and turnaround.",
+    body: "Browse verified makers within 10 miles for 3D print, laser cut, embroidery, or vinyl. Compare ratings, materials, and turnaround.",
   },
   {
     n: "03",
