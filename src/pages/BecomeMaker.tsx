@@ -200,18 +200,7 @@ const ECON: Record<ServiceId, EarningsModel> = {
     rateHintLow: "Starter ($0.30)",
     rateHintHigh: "Premium ($2.50)",
   },
-  cnc: {
-    unitLabel: "min/job",
-    defaultRate: 2.5,
-    minRate: 1,
-    maxRate: 6,
-    step: 0.1,
-    rateLabel: "Price per machine minute",
-    rateFormat: (v) => `$${v.toFixed(2)}`,
-    grossPerHour: (rate) => 60 * rate * 0.6, // CNC is slower / more setup
-    rateHintLow: "Hobby ($1.00)",
-    rateHintHigh: "Pro ($6.00)",
-  },
+  // (cnc removed)
   vinyl: {
     unitLabel: "sq.ft/hr",
     defaultRate: 6,
@@ -748,12 +737,7 @@ function sampleOrdersFor(id: ServiceId) {
         { name: "Luis M.", file: "tote-monogram.pes", price: 14, status: "Ready" },
         { name: "Aya K.", file: "team-patch.dst", price: 38, status: "Picked up" },
       ];
-    case "cnc":
-      return [
-        { name: "Ravi S.", file: "phone-jig.step", price: 64, status: "Milling" },
-        { name: "Nora H.", file: "address-sign.dxf", price: 48, status: "Ready" },
-        { name: "Kai O.", file: "knob-aluminum.stl", price: 92, status: "Picked up" },
-      ];
+    // cnc removed
     case "vinyl":
       return [
         { name: "Mina T.", file: "shop-window.svg", price: 35, status: "Cutting" },
