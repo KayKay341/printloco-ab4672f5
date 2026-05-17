@@ -44,7 +44,7 @@ const MakerOnboardingImages = () => {
   return (
     <div className="container py-24 flex justify-center items-center min-h-screen">
       <MotionWrapper className="w-full max-w-lg">
-        <OnboardingSteps currentStep={2} />
+        <OnboardingSteps currentStep={3} />
         <Card className="rounded-3xl border border-border shadow-card p-6">
           <CardHeader className="text-center pb-6">
             <CardTitle className="font-display text-4xl font-semibold tracking-tight">Machine Verification</CardTitle>

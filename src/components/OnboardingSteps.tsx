@@ -1,16 +1,23 @@
-const steps = ["Profile", "Machine", "Completion"];
+const steps = ["Role", "Machine", "Verify", "Done"];
 
 export const OnboardingSteps = ({ currentStep }: { currentStep: number }) => {
   return (
-    <div className="flex justify-center gap-4 mb-8">
-      {steps.map((step, index) => (
-        <div key={step} className={`flex items-center gap-2 ${index + 1 <= currentStep ? "text-primary" : "text-muted-foreground"}`}>
-          <div className={`flex items-center justify-center h-8 w-8 rounded-full border-2 ${index + 1 <= currentStep ? "border-primary bg-primary/10" : "border-muted"}`}>
-            {index + 1}
+    <div className="flex justify-between items-center mb-10 w-full max-w-lg mx-auto px-4">
+      {steps.map((step, index) => {
+        const isActive = index + 1 === currentStep;
+        const isCompleted = index + 1 < currentStep;
+        return (
+          <div key={step} className="flex flex-col items-center gap-2">
+            <div className={`flex items-center justify-center h-10 w-10 rounded-full border-2 text-sm font-bold transition-all ${
+              isActive ? "border-primary bg-primary text-primary-foreground shadow-lg" : 
+              isCompleted ? "border-primary bg-primary/20 text-primary" : "border-border bg-card text-muted-foreground"
+            }`}>
+              {isCompleted ? "✓" : index + 1}
+            </div>
+            <span className={`text-xs font-semibold ${isActive ? "text-foreground" : "text-muted-foreground"}`}>{step}</span>
           </div>
-          <span className="font-semibold text-sm">{step}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
