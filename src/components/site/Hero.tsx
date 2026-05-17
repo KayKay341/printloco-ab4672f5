@@ -9,7 +9,6 @@ const ROTATING = [
   { word: "3D printed.", color: "text-primary" },
   { word: "laser cut.", color: "text-accent" },
   { word: "embroidered.", color: "text-primary" },
-  { word: "CNC machined.", color: "text-accent" },
   { word: "vinyl cut.", color: "text-primary" },
 ];
 
@@ -73,7 +72,7 @@ const Hero = () => {
           className="mt-6 max-w-xl text-lg text-muted-foreground text-balance"
         >
           PrintLoco is the hyperlocal marketplace for 3D printing, laser cutting,
-          embroidery, CNC, and vinyl. Upload your file, get a fair quote in seconds, and
+          embroidery, and vinyl. Upload your file, get a fair quote in seconds, and
           pick up from a maker around the corner — not a warehouse across the country.
         </motion.p>
 

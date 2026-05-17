@@ -12,7 +12,7 @@ export default function Services() {
     <div className="min-h-screen bg-background">
       <SEO
         title="Make Anything Locally — 3D Print, Laser Cut, Embroidery & More | PrintLoco"
-        description="Upload your file and get matched with a local maker for 3D printing, laser cutting, embroidery, CNC milling, or vinyl cutting. Real quotes in seconds."
+        description="Upload your file and get matched with a local maker for 3D printing, laser cutting, embroidery, or vinyl cutting. Real quotes in seconds."
         path="/services"
       />
       <Navbar />

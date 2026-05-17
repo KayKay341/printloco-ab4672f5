@@ -7,17 +7,16 @@ import {
   Flame,
   Scissors,
   Sparkles,
-  Cog,
   type LucideIcon,
 } from "lucide-react";
 
-export type ServiceId = "3d-print" | "laser-cut" | "embroidery" | "cnc" | "vinyl";
+export type ServiceId = "3d-print" | "laser-cut" | "embroidery" | "vinyl";
 export type PreviewKind = "stl" | "svg" | "embroidery";
 
 export type ServiceDef = {
   id: ServiceId;
   /** Maps to DB enum value */
-  dbKey: "3d_print" | "laser_cut" | "embroidery" | "cnc" | "vinyl";
+  dbKey: "3d_print" | "laser_cut" | "embroidery" | "vinyl";
   name: string;
   shortName: string;
   tagline: string;
@@ -95,26 +94,6 @@ export const SERVICES: ServiceDef[] = [
     ],
     previewKind: "embroidery",
     gradient: "from-pink-500/20 via-fuchsia-500/10 to-purple-500/20",
-    startingPriceCents: 200,
-  },
-  {
-    id: "cnc",
-    dbKey: "cnc",
-    name: "CNC Milling",
-    shortName: "CNC",
-    tagline: "Real machined metal & hardwood.",
-    description: "Send a STEP or STL. We'll mill it from aluminum, brass, or hardwood. Ideal for jigs, mounts, signs, and one-off parts.",
-    icon: Cog,
-    emoji: "⚙️",
-    acceptedFiles: [".step", ".stp", ".stl", ".dxf"],
-    fileHint: "STEP, STL or DXF (2.5D)",
-    materials: ["Aluminum 6061", "Brass", "Walnut", "Maple", "Delrin / POM", "HDPE"],
-    qualityPresets: [
-      { id: "rough", name: "Roughing", description: "Fast, visible tool marks", emoji: "⚡" },
-      { id: "finish", name: "Finishing", description: "Smooth, tight tolerances", emoji: "💎" },
-    ],
-    previewKind: "stl",
-    gradient: "from-slate-500/20 via-zinc-500/10 to-stone-500/20",
     startingPriceCents: 200,
   },
   {

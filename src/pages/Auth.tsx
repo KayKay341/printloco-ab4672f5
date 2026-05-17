@@ -146,7 +146,7 @@ const Auth = () => {
     <div className="min-h-screen bg-gradient-hero">
       <SEO
         title="Sign in to PrintLoco"
-        description="Sign in or create your PrintLoco account to order 3D prints, laser cutting, embroidery, CNC, and vinyl — or list your own machine."
+        description="Sign in or create your PrintLoco account to order 3D prints, laser cutting, embroidery, and vinyl — or list your own machine."
         path="/auth"
         noindex
       />
@@ -217,7 +217,7 @@ const Auth = () => {
                         <div className="font-semibold">{r === "maker" ? "I have a machine" : "I want something made"}</div>
                         <div className="text-xs text-muted-foreground">
                           {r === "maker"
-                            ? "3D printer, laser, embroidery, CNC or vinyl"
+                            ? "3D printer, laser, embroidery or vinyl"
                             : "Order prints, cuts, patches & more"}
                         </div>
                       </button>

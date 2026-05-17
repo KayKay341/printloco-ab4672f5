@@ -179,7 +179,7 @@ function defaultSpecs(s: ServiceDef): Specs {
       sourceUnit: "mm",
     };
   if (s.id === "embroidery") return { ...base, stitchCount: 8000 };
-  if (s.id === "cnc") return { ...base, machineMinutes: 30, thicknessMm: 12 };
+  // (cnc removed)
   return base;
 }
 
@@ -833,18 +833,7 @@ function SpecsPanel({
         </>
       )}
 
-      {service.id === "cnc" && (
-        <>
-          <Pair>
-            <NumField label="Width (mm)" value={specs.widthMm} onChange={(v) => onChange({ widthMm: v })} />
-            <NumField label="Height (mm)" value={specs.heightMm} onChange={(v) => onChange({ heightMm: v })} />
-          </Pair>
-          <Pair>
-            <NumField label="Stock thickness (mm)" value={specs.thicknessMm ?? 0} onChange={(v) => onChange({ thicknessMm: v })} />
-            <NumField label="Est. machine time (min)" value={specs.machineMinutes ?? 0} onChange={(v) => onChange({ machineMinutes: v })} />
-          </Pair>
-        </>
-      )}
+      {/* CNC removed */}
 
       {service.id === "vinyl" && (
         <Pair>
@@ -969,14 +958,7 @@ function localEstimateCents(
       total += stitchC + hoopC;
       break;
     }
-    case "cnc": {
-      const machineC = Math.round((s.machineMinutes ?? 0) * 25); // $0.25/min
-      const stockC = Math.round(((s.widthMm * s.heightMm * (s.thicknessMm ?? 1)) / 1000) * 8);
-      breakdown.push({ label: "Machine time", cents: machineC });
-      breakdown.push({ label: `Stock (${s.material})`, cents: stockC });
-      total += machineC + stockC;
-      break;
-    }
+    // cnc removed
     case "vinyl": {
       const areaCm2 = (s.widthMm * s.heightMm) / 100;
       const mediaC = Math.round(areaCm2 * 4);
