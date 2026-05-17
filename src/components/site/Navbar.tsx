@@ -1,13 +1,19 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import { Button } from "@/components/ui/button";
 import Logo from "./Logo";
-import { LogOut, ShieldCheck, Sparkles, ChevronDown } from "lucide-react";
+import { LogOut, ShieldCheck, Sparkles, ChevronDown, User, LayoutDashboard, Settings } from "lucide-react";
 import { SERVICES } from "@/lib/services";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const baseLinks = [
   { label: "Gift Cards", to: "/gift-cards" },
@@ -20,7 +26,6 @@ const Navbar = () => {
   const { isAdmin } = useIsAdmin();
   const { isDemo } = useDemoMode();
   const navigate = useNavigate();
-  const [makeOpen, setMakeOpen] = useState(false);
 
   // Smart toggle: makers see "Find a Printer"; everyone else sees "Become a Maker".
   const primaryLink = profile?.role === "maker"
@@ -43,58 +48,36 @@ const Navbar = () => {
         </div>
         <nav className="hidden items-center gap-6 md:flex">
           {/* Make something dropdown */}
-          <div
-            className="relative"
-            onMouseEnter={() => setMakeOpen(true)}
-            onMouseLeave={() => setMakeOpen(false)}
-          >
-            <button
-              type="button"
-              onClick={() => setMakeOpen((v) => !v)}
-              className="inline-flex items-center gap-1 text-sm font-semibold text-accent transition-colors hover:text-accent/80"
-            >
+          <DropdownMenu>
+            <DropdownMenuTrigger className="inline-flex items-center gap-1 text-sm font-semibold text-accent transition-colors hover:text-accent/80">
               Make something
-              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${makeOpen ? "rotate-180" : ""}`} />
-            </button>
-            <AnimatePresence>
-              {makeOpen && (
-                <motion.div
-                  initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 4 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute left-1/2 top-full z-50 mt-2 w-72 -translate-x-1/2 overflow-hidden rounded-2xl border border-border bg-popover p-2 shadow-card"
-                >
-                  {SERVICES.map((s) => {
-                    const Icon = s.icon;
-                    return (
-                      <Link
-                        key={s.id}
-                        to={`/order/${s.id}`}
-                        onClick={() => setMakeOpen(false)}
-                        className="flex items-start gap-3 rounded-xl p-2.5 transition-colors hover:bg-muted/60"
-                      >
-                        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="text-sm font-semibold">{s.name}</div>
-                          <div className="truncate text-xs text-muted-foreground">{s.tagline}</div>
-                        </div>
-                      </Link>
-                    );
-                  })}
-                  <Link
-                    to="/services"
-                    onClick={() => setMakeOpen(false)}
-                    className="mt-1 flex items-center justify-center gap-1 rounded-xl border-t border-border p-2.5 text-xs font-semibold text-primary transition-colors hover:bg-muted/40"
-                  >
-                    Browse all services →
-                  </Link>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+              <ChevronDown className="h-3.5 w-3.5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-72 rounded-2xl p-2 shadow-card border border-border">
+              {SERVICES.map((s) => {
+                const Icon = s.icon;
+                return (
+                  <DropdownMenuItem key={s.id} asChild>
+                    <Link to={`/order/${s.id}`} className="flex items-start gap-3 rounded-xl p-2.5">
+                      <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold">{s.name}</div>
+                        <div className="truncate text-xs text-muted-foreground">{s.tagline}</div>
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
+                );
+              })}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link to="/services" className="flex items-center justify-center p-2.5 text-xs font-semibold text-primary">
+                  Browse all services →
+                </Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <Link
             to={primaryLink.to}
@@ -114,19 +97,30 @@ const Navbar = () => {
         </nav>
         <div className="flex items-center gap-2">
           {user ? (
-            <>
-              {isAdmin && (
-                <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-                  <Link to="/admin"><ShieldCheck className="h-4 w-4" /> Admin</Link>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="gap-2">
+                  <User className="h-4 w-4" />
+                  {profile?.full_name || "Account"}
                 </Button>
-              )}
-              <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
-                <Link to="/dashboard">{profile?.full_name || "Dashboard"}</Link>
-              </Button>
-              <Button variant="default" size="sm" onClick={async () => { await signOut(); navigate("/"); }}>
-                <LogOut className="h-4 w-4" /> Sign out
-              </Button>
-            </>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56 rounded-2xl p-2 shadow-card border border-border">
+                <DropdownMenuLabel>My Account</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/dashboard"><LayoutDashboard className="mr-2 h-4 w-4" /> Dashboard</Link>
+                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/admin"><ShieldCheck className="mr-2 h-4 w-4" /> Admin</Link>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={async () => { await signOut(); navigate("/"); }} className="text-destructive focus:text-destructive">
+                  <LogOut className="mr-2 h-4 w-4" /> Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <>
               <Button variant="ghost" size="sm" asChild className="hidden sm:inline-flex">
