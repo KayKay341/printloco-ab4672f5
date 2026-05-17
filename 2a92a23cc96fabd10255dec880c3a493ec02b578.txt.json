@@ -1,0 +1,20 @@
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "",
+    "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "nvidia/nemotron-3-super-120b-a12b:free",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "nvidia/nemotron-3-super-120b-a12b:free",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "nvidia/nemotron-3-super-120b-a12b:free"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app@latest *)",
+      "Bash(mkdir -p /tmp/printloco_temp)",
+      "Read(//tmp/**)",
+      "Bash(npx tailwindcss *)",
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(docker run *)"
+    ]
+  }
+}

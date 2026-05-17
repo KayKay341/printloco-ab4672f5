@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
 import SEO from "@/components/SEO";
-import { Plus, Upload, Printer, FileBox, Sparkles, ShieldCheck, Star, AlertCircle, TrendingUp, ShieldAlert } from "lucide-react";
+import { Plus, Upload, Printer, FileBox, Sparkles, ShieldCheck, Star, AlertCircle, TrendingUp, ShieldAlert, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { useDemoMode } from "@/hooks/useDemoMode";
 import { getSamplePrinters, getSampleStlFiles } from "@/lib/sampleData";
@@ -62,6 +62,47 @@ const Dashboard = () => {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [usingSample, setUsingSample] = useState(false);
   const [disputeOrder, setDisputeOrder] = useState<{ id: string; maker_id: string } | null>(null);
+  
+  // Profile settings state
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileData, setProfileData] = useState({
+    full_name: profile?.full_name || "",
+    phone: profile?.phone || "",
+    address_line1: (profile as any)?.address_line1 || "",
+    address_line2: (profile as any)?.address_line2 || "",
+    city: (profile as any)?.city || "",
+    state: (profile as any)?.state || "",
+    zip_code: profile?.zip_code || "",
+  });
+
+  useEffect(() => {
+    if (profile) {
+      setProfileData({
+        full_name: profile.full_name || "",
+        phone: profile.phone || "",
+        address_line1: (profile as any).address_line1 || "",
+        address_line2: (profile as any).address_line2 || "",
+        city: (profile as any).city || "",
+        state: (profile as any).state || "",
+        zip_code: profile.zip_code || "",
+      });
+    }
+  }, [profile]);
+
+  const saveProfile = async () => {
+    if (!user) return;
+    const { error } = await supabase
+      .from("profiles")
+      .update(profileData)
+      .eq("id", user.id);
+    
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Profile updated");
+      setEditingProfile(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -131,15 +172,26 @@ const Dashboard = () => {
 
   if (loading) return <div className="container py-24">Loading…</div>;
   if (!user) return <Navigate to="/auth?mode=signin" replace />;
-  if (!profile || !profile.role) return <Navigate to="/onboarding/role" replace />;
-  if (profile.role === "maker" && printers.length === 0 && !usingSample) return <Navigate to="/onboarding/maker" replace />;
 
   // Maker rollups
-  const totalEarningsCents = printers.reduce((sum, p) => sum + Math.round(p.successful_orders * Number(p.price_per_gram) * 38 * 0.9 * 100), 0);
-  const successRate = printers.reduce((acc, p) => acc + p.total_orders, 0) > 0
-    ? Math.round((printers.reduce((acc, p) => acc + p.successful_orders, 0) / printers.reduce((acc, p) => acc + p.total_orders, 0)) * 100)
+  const totalEarningsCents = printers.reduce((sum, p) => {
+    try {
+      const orders = Number(p.successful_orders) || 0;
+      const ppg = Number(p.price_per_gram) || 0;
+      return sum + Math.round(orders * ppg * 38 * 0.9 * 100);
+    } catch {
+      return sum;
+    }
+  }, 0);
+  const totalOrders = printers.reduce((acc, p) => acc + (Number(p.total_orders) || 0), 0);
+  const totalSuccessful = printers.reduce((acc, p) => acc + (Number(p.successful_orders) || 0), 0);
+  const successRate = totalOrders > 0
+    ? Math.round((totalSuccessful / totalOrders) * 100)
     : null;
-  const avgRating = printers.filter((p) => p.rating_count > 0).reduce((sum, p, _, arr) => sum + p.avg_rating / arr.length, 0);
+  const printersWithRatings = printers.filter((p) => (Number(p.rating_count) || 0) > 0);
+  const avgRating = printersWithRatings.length > 0 
+    ? printersWithRatings.reduce((sum, p) => sum + (Number(p.avg_rating) || 0), 0) / printersWithRatings.length
+    : 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -151,7 +203,7 @@ const Dashboard = () => {
             {profile?.role === "maker" ? "Maker Dashboard" : "Customer Dashboard"}
           </div>
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
-            Hi{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""} 👋
+            Hi{profile?.full_name ? `, ${profile.full_name.toString().split(" ")[0]}` : ""} 👋
           </h1>
           {usingSample && (
             <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs text-accent">
@@ -176,7 +228,7 @@ const Dashboard = () => {
                   icon={<Star className="h-4 w-4" />}
                   label="Average rating"
                   value={avgRating > 0 ? avgRating.toFixed(1) : "—"}
-                  hint={`${printers.reduce((s, p) => s + p.rating_count, 0)} ratings`}
+                  hint={`${printers.reduce((s, p) => s + (p.rating_count || 0), 0)} ratings`}
                 />
                 <StatCard
                   icon={<ShieldCheck className="h-4 w-4" />}
@@ -188,17 +240,17 @@ const Dashboard = () => {
             )}
 
             <div className="mb-6 flex items-center justify-between">
-              <h2 className="font-display text-2xl font-semibold">Your printers</h2>
+              <h2 className="font-display text-2xl font-semibold">Your machines</h2>
               <Button variant="hero" asChild>
-                <Link to="/printers/new"><Plus className="h-4 w-4" /> Add printer</Link>
+                <Link to="/printers/new"><Plus className="h-4 w-4" /> Add machine</Link>
               </Button>
             </div>
             {printers.length === 0 ? (
               <EmptyState
                 icon={<Printer className="h-8 w-8" />}
-                title="No printers listed yet"
-                desc="Add your first printer to start accepting orders."
-                cta={<Button variant="hero" asChild><Link to="/printers/new">Add your first printer</Link></Button>}
+                title="No machines listed yet"
+                desc="Add your first machine to start accepting orders."
+                cta={<Button variant="hero" asChild><Link to="/printers/new">Add your first machine</Link></Button>}
               />
             ) : (
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -206,10 +258,16 @@ const Dashboard = () => {
                   const tier: Tier = (p.tier as Tier) ?? tierFromScore(p.quality_score ?? 50);
                   const inactive = p.hidden_for_inactivity || (p.last_order_at && Date.now() - new Date(p.last_order_at).getTime() > 1000 * 60 * 60 * 24 * 30);
                   const needsVerification = p.verification_status !== "verified";
+                  const s = SERVICES.find(sv => sv.dbKey === (p as any).service_type) || SERVICES[0];
+                  const Icon = s.icon;
+
                   return (
-                    <div key={p.id} className="rounded-2xl border border-border bg-card p-6 shadow-soft">
+                    <div key={p.id} className="group relative rounded-2xl border border-border bg-card p-6 shadow-soft transition-all hover:shadow-card">
                       <div className="flex items-start justify-between">
-                        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{p.neighborhood || "—"}</div>
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          <Icon className="h-3.5 w-3.5" />
+                          {p.neighborhood || "—"}
+                        </div>
                         <TierBadge tier={tier} score={p.quality_score} showScore />
                       </div>
                       <div className="mt-1 font-display text-xl font-semibold">{p.brand} {p.model}</div>
@@ -251,21 +309,26 @@ const Dashboard = () => {
                             <AlertCircle className="h-3.5 w-3.5" /> How to rank higher
                           </div>
                           <ul className="mt-1 space-y-0.5 pl-1 text-muted-foreground">
-                            {needsVerification && <li>• Finish verification (printer photo + 3 sample prints)</li>}
-                            {p.quality_score < 60 && <li>• Add more sample prints and material spec sheets</li>}
+                            {needsVerification && <li>• Finish verification ({s.shortName === '3D Print' ? 'printer' : 'machine'} photo + 3 sample pieces)</li>}
+                            {p.quality_score < 60 && <li>• Add more sample pieces and material specs</li>}
                             {inactive && <li>• Accept an order this month so we keep showing you</li>}
                           </ul>
                         </div>
                       )}
 
-                      <div className="mt-4 text-sm text-muted-foreground">
-                        From <strong className="text-foreground">${Number(p.price_per_gram).toFixed(2)}</strong> / gram
+                      <div className="mt-6 flex items-center justify-between gap-3">
+                        <div className="text-sm text-muted-foreground">
+                          From <strong className="text-foreground">${Number(p.price_per_gram).toFixed(2)}</strong> / {s.id === '3d-print' ? 'g' : s.id === 'laser-cut' ? 'min' : '1k st'}
+                        </div>
+                        <Button variant="outline" size="sm" asChild className="h-8 px-3 text-[10px] font-bold uppercase tracking-widest">
+                          <Link to={`/printers/edit/${p.id}`}>Edit</Link>
+                        </Button>
                       </div>
                     </div>
                   );
                 })}
               </div>
-            )}
+            ) }
 
             {/* Incoming orders for makers */}
             <div className="mt-12">
@@ -320,6 +383,118 @@ const Dashboard = () => {
                 </table>
               </div>
             )}
+
+            {/* Become a Maker CTA */}
+            <div className="mt-10 overflow-hidden rounded-[2.5rem] bg-gradient-deep p-8 text-primary-foreground shadow-card sm:p-10">
+              <div className="relative grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full bg-white/15 px-3 py-1 text-[10px] font-bold uppercase tracking-wider">
+                    <Sparkles className="h-3.5 w-3.5 text-accent" /> New Opportunity
+                  </div>
+                  <h2 className="mt-4 font-display text-3xl font-semibold leading-tight tracking-tight sm:text-4xl">
+                    Have a 3D printer or laser? <br />
+                    <span className="italic text-accent">Turn it into income.</span>
+                  </h2>
+                  <p className="mt-4 max-w-xl text-primary-foreground/70">
+                    List your machines on PrintLoco and start accepting jobs from your neighbors. 
+                    Makers earn an average of $450/month in their first season.
+                  </p>
+                </div>
+                <Button size="lg" variant="secondary" asChild className="h-14 rounded-2xl px-8 text-base font-bold shadow-card transition-transform hover:scale-105 active:scale-95">
+                  <Link to="/become-a-maker">
+                    Open your shop <ArrowRight className="ml-2 h-5 w-5" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+
+            {/* Profile / Delivery Settings */}
+            <div className="mt-10 rounded-3xl border border-border bg-card p-6 shadow-soft">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-display text-2xl font-semibold text-foreground">Delivery profile</h2>
+                  <p className="text-sm text-muted-foreground">Keep your address updated for smooth home delivery from local makers.</p>
+                </div>
+                <Button 
+                  variant={editingProfile ? "hero" : "outline"} 
+                  onClick={() => editingProfile ? saveProfile() : setEditingProfile(true)}
+                >
+                  {editingProfile ? "Save changes" : "Edit profile"}
+                </Button>
+              </div>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Full Name</label>
+                  <Input 
+                    value={profileData.full_name} 
+                    onChange={(e) => setProfileData(d => ({ ...d, full_name: e.target.value }))}
+                    disabled={!editingProfile}
+                    className="bg-muted/30"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Phone</label>
+                  <Input 
+                    value={profileData.phone} 
+                    onChange={(e) => setProfileData(d => ({ ...d, phone: e.target.value }))}
+                    disabled={!editingProfile}
+                    placeholder="+1 (555) 000-0000"
+                    className="bg-muted/30"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Address Line 1</label>
+                  <Input 
+                    value={profileData.address_line1} 
+                    onChange={(e) => setProfileData(d => ({ ...d, address_line1: e.target.value }))}
+                    disabled={!editingProfile}
+                    placeholder="123 Printing Way"
+                    className="bg-muted/30"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Address Line 2 (Optional)</label>
+                  <Input 
+                    value={profileData.address_line2} 
+                    onChange={(e) => setProfileData(d => ({ ...d, address_line2: e.target.value }))}
+                    disabled={!editingProfile}
+                    placeholder="Apt 4B"
+                    className="bg-muted/30"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">City</label>
+                  <Input 
+                    value={profileData.city} 
+                    onChange={(e) => setProfileData(d => ({ ...d, city: e.target.value }))}
+                    disabled={!editingProfile}
+                    className="bg-muted/30"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">State</label>
+                    <Input 
+                      value={profileData.state} 
+                      onChange={(e) => setProfileData(d => ({ ...d, state: e.target.value }))}
+                      disabled={!editingProfile}
+                      placeholder="CA"
+                      className="bg-muted/30"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">ZIP Code</label>
+                    <Input 
+                      value={profileData.zip_code} 
+                      onChange={(e) => setProfileData(d => ({ ...d, zip_code: e.target.value }))}
+                      disabled={!editingProfile}
+                      className="bg-muted/30"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Recent orders with reprint guarantee + dispute access */}
             {orders.length > 0 && (

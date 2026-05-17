@@ -62,6 +62,47 @@ const Dashboard = () => {
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [usingSample, setUsingSample] = useState(false);
   const [disputeOrder, setDisputeOrder] = useState<{ id: string; maker_id: string } | null>(null);
+  
+  // Profile settings state
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileData, setProfileData] = useState({
+    full_name: profile?.full_name || "",
+    phone: profile?.phone || "",
+    address_line1: (profile as any)?.address_line1 || "",
+    address_line2: (profile as any)?.address_line2 || "",
+    city: (profile as any)?.city || "",
+    state: (profile as any)?.state || "",
+    zip_code: profile?.zip_code || "",
+  });
+
+  useEffect(() => {
+    if (profile) {
+      setProfileData({
+        full_name: profile.full_name || "",
+        phone: profile.phone || "",
+        address_line1: (profile as any).address_line1 || "",
+        address_line2: (profile as any).address_line2 || "",
+        city: (profile as any).city || "",
+        state: (profile as any).state || "",
+        zip_code: profile.zip_code || "",
+      });
+    }
+  }, [profile]);
+
+  const saveProfile = async () => {
+    if (!user) return;
+    const { error } = await supabase
+      .from("profiles")
+      .update(profileData)
+      .eq("id", user.id);
+    
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success("Profile updated");
+      setEditingProfile(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -131,15 +172,18 @@ const Dashboard = () => {
 
   if (loading) return <div className="container py-24">Loading…</div>;
   if (!user) return <Navigate to="/auth?mode=signin" replace />;
-  if (!profile || !profile.role) return <Navigate to="/onboarding/role" replace />;
-  if (profile.role === "maker" && printers.length === 0 && !usingSample) return <Navigate to="/onboarding/maker" replace />;
 
   // Maker rollups
-  const totalEarningsCents = printers.reduce((sum, p) => sum + Math.round(p.successful_orders * Number(p.price_per_gram) * 38 * 0.9 * 100), 0);
-  const successRate = printers.reduce((acc, p) => acc + p.total_orders, 0) > 0
-    ? Math.round((printers.reduce((acc, p) => acc + p.successful_orders, 0) / printers.reduce((acc, p) => acc + p.total_orders, 0)) * 100)
+  const totalEarningsCents = printers.reduce((sum, p) => sum + Math.round((p.successful_orders || 0) * (Number(p.price_per_gram) || 0) * 38 * 0.9 * 100), 0);
+  const totalOrders = printers.reduce((acc, p) => acc + (p.total_orders || 0), 0);
+  const totalSuccessful = printers.reduce((acc, p) => acc + (p.successful_orders || 0), 0);
+  const successRate = totalOrders > 0
+    ? Math.round((totalSuccessful / totalOrders) * 100)
     : null;
-  const avgRating = printers.filter((p) => p.rating_count > 0).reduce((sum, p, _, arr) => sum + p.avg_rating / arr.length, 0);
+  const printersWithRatings = printers.filter((p) => (p.rating_count || 0) > 0);
+  const avgRating = printersWithRatings.length > 0 
+    ? printersWithRatings.reduce((sum, p) => sum + (p.avg_rating || 0), 0) / printersWithRatings.length
+    : 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -320,6 +364,94 @@ const Dashboard = () => {
                 </table>
               </div>
             )}
+
+            {/* Profile / Delivery Settings */}
+            <div className="mt-10 rounded-3xl border border-border bg-card p-6 shadow-soft">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="font-display text-2xl font-semibold text-foreground">Delivery profile</h2>
+                  <p className="text-sm text-muted-foreground">Keep your address updated for smooth home delivery from local makers.</p>
+                </div>
+                <Button 
+                  variant={editingProfile ? "hero" : "outline"} 
+                  onClick={() => editingProfile ? saveProfile() : setEditingProfile(true)}
+                >
+                  {editingProfile ? "Save changes" : "Edit profile"}
+                </Button>
+              </div>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Full Name</label>
+                  <Input 
+                    value={profileData.full_name} 
+                    onChange={(e) => setProfileData(d => ({ ...d, full_name: e.target.value }))}
+                    disabled={!editingProfile}
+                    className="bg-muted/30"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Phone</label>
+                  <Input 
+                    value={profileData.phone} 
+                    onChange={(e) => setProfileData(d => ({ ...d, phone: e.target.value }))}
+                    disabled={!editingProfile}
+                    placeholder="+1 (555) 000-0000"
+                    className="bg-muted/30"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Address Line 1</label>
+                  <Input 
+                    value={profileData.address_line1} 
+                    onChange={(e) => setProfileData(d => ({ ...d, address_line1: e.target.value }))}
+                    disabled={!editingProfile}
+                    placeholder="123 Printing Way"
+                    className="bg-muted/30"
+                  />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Address Line 2 (Optional)</label>
+                  <Input 
+                    value={profileData.address_line2} 
+                    onChange={(e) => setProfileData(d => ({ ...d, address_line2: e.target.value }))}
+                    disabled={!editingProfile}
+                    placeholder="Apt 4B"
+                    className="bg-muted/30"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">City</label>
+                  <Input 
+                    value={profileData.city} 
+                    onChange={(e) => setProfileData(d => ({ ...d, city: e.target.value }))}
+                    disabled={!editingProfile}
+                    className="bg-muted/30"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">State</label>
+                    <Input 
+                      value={profileData.state} 
+                      onChange={(e) => setProfileData(d => ({ ...d, state: e.target.value }))}
+                      disabled={!editingProfile}
+                      placeholder="CA"
+                      className="bg-muted/30"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">ZIP Code</label>
+                    <Input 
+                      value={profileData.zip_code} 
+                      onChange={(e) => setProfileData(d => ({ ...d, zip_code: e.target.value }))}
+                      disabled={!editingProfile}
+                      className="bg-muted/30"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Recent orders with reprint guarantee + dispute access */}
             {orders.length > 0 && (

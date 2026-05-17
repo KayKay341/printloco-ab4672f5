@@ -19,20 +19,14 @@ const Auth = () => {
   const [params] = useSearchParams();
   const { user } = useAuth();
   const initialMode = (params.get("mode") as Mode) === "signin" ? "signin" : "signup";
-  const initialRole = params.get("role") === "maker" ? "maker" : "customer";
 
   const [mode, setMode] = useState<Mode>(initialMode);
-  const [role, setRole] = useState<"customer" | "maker">(initialRole);
-  const [machines, setMachines] = useState<ServiceId[]>([]);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-
-  const toggleMachine = (id: ServiceId) =>
-    setMachines((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
 
   useEffect(() => {
     if (user) navigate("/dashboard", { replace: true });
@@ -43,17 +37,12 @@ const Auth = () => {
     setSubmitting(true);
     try {
       if (mode === "signup") {
-        if (role === "maker" && machines.length === 0) {
-          toast.error("Pick at least one machine you can run.");
-          setSubmitting(false);
-          return;
-        }
         const { error } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/dashboard`,
-            data: { full_name: fullName, role, machines: role === "maker" ? machines : [] },
+            data: { full_name: fullName },
           },
         });
         if (error) throw error;
@@ -201,63 +190,10 @@ const Auth = () => {
           ) : (
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               {mode === "signup" && (
-                <>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["customer", "maker"] as const).map((r) => (
-                      <button
-                        type="button"
-                        key={r}
-                        onClick={() => setRole(r)}
-                        className={`rounded-2xl border p-3 text-left text-sm transition-all ${
-                          role === r
-                            ? "border-primary bg-primary/5 shadow-soft"
-                            : "border-border hover:border-foreground/30"
-                        }`}
-                      >
-                        <div className="font-semibold">{r === "maker" ? "I have a machine" : "I want something made"}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {r === "maker"
-                            ? "3D printer, laser, embroidery or vinyl"
-                            : "Order prints, cuts, patches & more"}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  {role === "maker" && (
-                    <div className="space-y-2">
-                      <Label>Which machines do you run?</Label>
-                      <p className="text-xs text-muted-foreground">Pick all that apply — you can add more later.</p>
-                      <div className="grid grid-cols-2 gap-2">
-                        {SERVICES.map((s) => {
-                          const Icon = s.icon;
-                          const active = machines.includes(s.id);
-                          return (
-                            <button
-                              type="button"
-                              key={s.id}
-                              onClick={() => toggleMachine(s.id)}
-                              className={`flex items-start gap-2 rounded-2xl border p-3 text-left text-sm transition-all ${
-                                active
-                                  ? "border-primary bg-primary/5 shadow-soft"
-                                  : "border-border hover:border-foreground/30"
-                              }`}
-                            >
-                              <Icon className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                              <div className="min-w-0">
-                                <div className="font-semibold leading-tight">{s.shortName}</div>
-                                <div className="truncate text-xs text-muted-foreground">{s.tagline}</div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  <div>
-                    <Label htmlFor="fullName">Full name</Label>
-                    <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
-                  </div>
-                </>
+                <div>
+                  <Label htmlFor="fullName">Full name</Label>
+                  <Input id="fullName" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+                </div>
               )}
               <div>
                 <Label htmlFor="email">Email</Label>

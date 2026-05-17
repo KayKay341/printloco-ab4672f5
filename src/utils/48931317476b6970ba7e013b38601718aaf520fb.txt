@@ -1,0 +1,110 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700;9..144,800&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* PrintLoco design system. All colors HSL. */
+
+@layer base {
+  :root {
+    /* Brand */
+    --background: 38 40% 97%;
+    --foreground: 215 45% 14%;
+
+    --surface: 36 35% 94%;
+    --surface-deep: 215 50% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 45% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 45% 14%;
+
+    /* Primary: PrintLoco Blue #2E75B6 */
+    --primary: 209 60% 45%;
+    --primary-foreground: 38 40% 97%;
+    --primary-deep: 215 60% 22%;
+
+    /* Accent: PrintLoco Orange #FF8C42 */
+    --accent: 22 100% 63%;
+    --accent-foreground: 215 50% 11%;
+    --accent-soft: 22 90% 92%;
+
+    --secondary: 36 30% 90%;
+    --secondary-foreground: 215 45% 14%;
+
+    --muted: 36 25% 92%;
+    --muted-foreground: 215 15% 40%;
+
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 38 40% 97%;
+
+    --border: 36 20% 86%;
+    --input: 36 20% 86%;
+    --ring: 209 60% 45%;
+
+    --radius: 1rem;
+
+    /* Gradients & shadows */
+    --gradient-warm: linear-gradient(135deg, hsl(38 50% 95%), hsl(22 80% 92%));
+    --gradient-hero: linear-gradient(180deg, hsl(38 45% 96%) 0%, hsl(36 35% 94%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(22 100% 63%), hsl(14 95% 58%));
+    --gradient-deep: linear-gradient(135deg, hsl(215 55% 14%), hsl(209 50% 22%));
+
+    --shadow-soft: 0 2px 12px -2px hsl(215 30% 20% / 0.08);
+    --shadow-card: 0 12px 40px -12px hsl(215 40% 20% / 0.18);
+    --shadow-glow: 0 20px 60px -20px hsl(22 100% 63% / 0.45);
+
+    --transition-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+
+    /* Technical slicer workspace */
+    --slicer-background: 0 0% 10%;
+    --slicer-foreground: 0 0% 96%;
+    --slicer-panel: 220 18% 13%;
+    --slicer-panel-strong: 220 22% 17%;
+    --slicer-border: 210 16% 26%;
+    --slicer-muted: 215 12% 68%;
+    --slicer-cyan: 190 100% 50%;
+    --slicer-green: 110 100% 54%;
+    --slicer-warning: 45 100% 58%;
+    --slicer-danger: 0 84% 62%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-feature-settings: 'ss01', 'cv11';
+  }
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Fraunces', Georgia, serif;
+    font-optical-sizing: auto;
+    letter-spacing: -0.02em;
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .vertical-text { writing-mode: vertical-rl; transform: rotate(180deg); }
+  .grain {
+    background-image: radial-gradient(hsl(215 30% 20% / 0.04) 1px, transparent 1px);
+    background-size: 4px 4px;
+  }
+  .marquee {
+    animation: marquee 40s linear infinite;
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @keyframes float-up {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  .animate-float { animation: float-up 4s ease-in-out infinite; }
+}
