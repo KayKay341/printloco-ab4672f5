@@ -2,11 +2,11 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { OnboardingSteps } from "@/components/OnboardingSteps";
 import { MotionWrapper } from "@/components/ui/MotionWrapper";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { ShoppingBag, Wrench, ArrowRight } from "lucide-react";
 
 const RoleSelection = () => {
   const { user, refreshProfile } = useAuth();
@@ -40,26 +40,51 @@ const RoleSelection = () => {
   };
 
   return (
-    <div className="container py-24 flex justify-center items-center min-h-screen">
-      <MotionWrapper className="w-full max-w-lg">
+    <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20 py-24 flex justify-center items-center">
+      <MotionWrapper className="w-full max-w-2xl px-4">
         <OnboardingSteps currentStep={1} />
-        <Card className="rounded-3xl border border-border shadow-card p-6">
-          <CardHeader className="text-center pb-6">
-            <CardTitle className="font-display text-4xl font-semibold tracking-tight">Welcome!</CardTitle>
-            <CardDescription className="text-muted-foreground mt-2">What are you here for?</CardDescription>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4">
-            <Button onClick={() => selectRole("customer")} disabled={loading} variant="outline" className="h-32 text-lg">
-              I want to order things
-            </Button>
-            <Button onClick={() => selectRole("maker")} disabled={loading} variant="outline" className="h-32 text-lg">
-              I want to be a maker
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="text-center mb-12">
+          <h1 className="font-display text-5xl font-semibold tracking-tight text-foreground">Welcome to PrintLoco</h1>
+          <p className="text-xl text-muted-foreground mt-4">Let's get you set up. What is your primary goal?</p>
+        </div>
+        <div className="grid md:grid-cols-2 gap-6">
+          <Card 
+            className="cursor-pointer group hover:border-primary transition-all duration-300 rounded-3xl border-2 shadow-lg hover:shadow-primary/20"
+            onClick={() => selectRole("customer")}
+          >
+            <CardHeader className="text-center items-center pt-8">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform mb-4">
+                <ShoppingBag size={32} />
+              </div>
+              <CardTitle className="font-display text-2xl">I want to order parts</CardTitle>
+              <CardDescription className="text-base mt-2">Bring your ideas to life with our network of local makers.</CardDescription>
+              <Button className="mt-6 gap-2 w-full">
+                Get started <ArrowRight size={16} />
+              </Button>
+            </CardHeader>
+          </Card>
+          
+          <Card 
+            className="cursor-pointer group hover:border-primary transition-all duration-300 rounded-3xl border-2 shadow-lg hover:shadow-primary/20"
+            onClick={() => selectRole("maker")}
+          >
+            <CardHeader className="text-center items-center pt-8">
+              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform mb-4">
+                <Wrench size={32} />
+              </div>
+              <CardTitle className="font-display text-2xl">I want to be a maker</CardTitle>
+              <CardDescription className="text-base mt-2">List your machines and start taking orders in your area.</CardDescription>
+              <Button className="mt-6 gap-2 w-full">
+                Join now <ArrowRight size={16} />
+              </Button>
+            </CardHeader>
+          </Card>
+        </div>
       </MotionWrapper>
     </div>
   );
 };
+
+export default RoleSelection;
 
 export default RoleSelection;
