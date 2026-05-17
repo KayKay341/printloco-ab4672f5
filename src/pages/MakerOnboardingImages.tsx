@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { motion } from "framer-motion";
+import { OnboardingSteps } from "@/components/OnboardingSteps";
 import { MotionWrapper } from "@/components/ui/MotionWrapper";
 
 const MakerOnboardingImages = () => {
@@ -33,7 +33,7 @@ const MakerOnboardingImages = () => {
         .eq("owner_id", user?.id);
 
       toast.success("Photos uploaded! Awaiting admin verification.");
-      navigate("/dashboard");
+      navigate("/onboarding/complete");
     } catch (error) {
       toast.error("Failed to upload images.");
     } finally {
@@ -44,9 +44,10 @@ const MakerOnboardingImages = () => {
   return (
     <div className="container py-24 flex justify-center items-center min-h-screen">
       <MotionWrapper className="w-full max-w-lg">
+        <OnboardingSteps currentStep={2} />
         <Card className="rounded-3xl border border-border shadow-card p-6">
           <CardHeader className="text-center pb-6">
-            <CardTitle className="font-display text-4xl font-semibold tracking-tight">Verification</CardTitle>
+            <CardTitle className="font-display text-4xl font-semibold tracking-tight">Machine Verification</CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
               Upload at least 3 photos of your machine, including one showing the serial number or a screenshot of your proof of purchase.
             </CardDescription>

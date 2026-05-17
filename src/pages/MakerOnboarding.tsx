@@ -79,6 +79,7 @@ const MakerOnboarding = () => {
         transition={{ duration: 0.5 }}
         className="w-full max-w-lg"
       >
+        <OnboardingSteps currentStep={2} />
         <Card className="rounded-3xl border border-border shadow-card p-6">
           <CardHeader className="text-center pb-6">
             <CardTitle className="font-display text-4xl font-semibold tracking-tight">Complete your profile</CardTitle>
