@@ -215,6 +215,143 @@ const ECON: Record<ServiceId, EarningsModel> = {
   },
 };
 
+/** Per-craft content overrides — used when on /become-a-maker/:service. */
+type CraftContent = {
+  heroTitle: string;
+  heroBody: string;
+  steps: { n: string; icon: React.ReactNode; title: string; body: string }[];
+  perks: { icon: React.ReactNode; title: string; body: string }[];
+  testimonials: { name: string; city: string; machine: string; rating: number; quote: string }[];
+  faq: { q: string; a: string }[];
+};
+
+const CRAFT_CONTENT: Record<ServiceId, CraftContent> = {
+  "3d-print": {
+    heroTitle: "Turn your 3D printer into a neighborhood print shop.",
+    heroBody:
+      "Whether you run a Bambu, Prusa, Voron, or resin printer — local makers are earning $200–$1,200/month printing phone stands, RC parts, cosplay props, and replacement parts for neighbors. List in 5 minutes.",
+    steps: [
+      { n: "01", icon: <Camera className="h-5 w-5" />, title: "Photo of your printer + 3 prints", body: "Show us your machine and 3 sample prints (any material). We verify in under 24h." },
+      { n: "02", icon: <Package className="h-5 w-5" />, title: "List your filaments & price per gram", body: "PLA, PETG, ABS, TPU, PLA+. Set your $/gram and minimum charge — we suggest fair rates." },
+      { n: "03", icon: <Zap className="h-5 w-5" />, title: "We auto-slice & match", body: "When a neighbor uploads an STL/3MF, we pre-slice it and match by bed size, material, and tier." },
+      { n: "04", icon: <DollarSign className="h-5 w-5" />, title: "Print, hand off, get paid", body: "Print on your schedule. Customer pays upfront, picks up with a code, payout next day." },
+    ],
+    perks: [
+      { icon: <Shield className="h-5 w-5" />, title: "Failed prints? Covered.", body: "Our 7-day remake guarantee splits cost on print failures — you're not on the hook alone." },
+      { icon: <Users className="h-5 w-5" />, title: "Local pickup, no shipping", body: "Customers pick up within 10 miles. No packing, no postage labels, no lost parcels." },
+      { icon: <Star className="h-5 w-5" />, title: "Quality tiers reward you", body: "Bronze → Silver → Gold tiers based on rating and dimensional accuracy — higher tier = more jobs." },
+      { icon: <Clock className="h-5 w-5" />, title: "Print queue control", body: "Set how many bed-hours/week you can take. Pause for vacations or filament restocks." },
+      { icon: <HeartHandshake className="h-5 w-5" />, title: "STL support when stuck", body: "Tricky model? Our team helps with orientation, supports, and slicer settings." },
+      { icon: <Wrench className="h-5 w-5" />, title: "Free pre-slicer + ETA", body: "We give customers a real weight/time estimate before they order — fewer surprises for both sides." },
+    ],
+    testimonials: [
+      { name: "Marcus T.", city: "Echo Park, LA", machine: "Bambu X1C", rating: 4.9, quote: "Made $640 my first month printing stuff for neighbors I'd never have met. My X1C pays for itself every quarter." },
+      { name: "Sara M.", city: "Portland, OR", machine: "Prusa MK4 ×3", rating: 5.0, quote: "I run a 3-printer farm in my garage. PrintLoco keeps all 3 busy without me chasing customers." },
+      { name: "Devin H.", city: "Austin, TX", machine: "Elegoo Saturn 4", rating: 4.8, quote: "Resin minis used to be a money pit. Now it's a side income — and I love seeing my prints painted up." },
+    ],
+    faq: [
+      { q: "Which printers qualify?", a: "Any FDM or resin printer in good condition: Bambu, Prusa, Voron, Creality, Elegoo, Anycubic, etc. We just need to see your machine and 3 sample prints." },
+      { q: "Do I need to slice files myself?", a: "No — we pre-slice every STL/3MF with PrusaSlicer in the cloud and give the customer a real weight/time estimate before they order. You can re-slice with your own profile if you prefer." },
+      { q: "What if a print fails halfway?", a: "Log the failure in your dashboard. Our 7-day remake guarantee covers the filament + a fair share of your time on legitimate print failures." },
+      { q: "Can I refuse jobs?", a: "Yes. You can decline any job within 2 hours — bad geometry, missing supports, too-big-for-bed, anything." },
+      { q: "How fast do I get paid?", a: "1–2 business days after the customer picks up and confirms." },
+    ],
+  },
+  "laser-cut": {
+    heroTitle: "Make your laser cutter pay for itself in months.",
+    heroBody:
+      "xTool, Glowforge, Boss, OMTech, Thunder, Epilog — if you can cut and engrave, neighbors need your machine for wedding signs, jewelry, packaging prototypes, and gifts. Most laser makers hit $400–$1,500/month.",
+    steps: [
+      { n: "01", icon: <Camera className="h-5 w-5" />, title: "Photo of your laser + 3 cuts", body: "Show your machine and 3 sample cuts/engraves on different materials. Verified in under 24h." },
+      { n: "02", icon: <Package className="h-5 w-5" />, title: "Stock your material shelf", body: "List sheet sizes & thicknesses you keep on hand — plywood, acrylic, MDF, cardboard, leather." },
+      { n: "03", icon: <Zap className="h-5 w-5" />, title: "Files come ready to cut", body: "We parse SVG/DXF/PDF/xCS/LBRN files, auto-detect cut vs engrave layers, and pack to your bed." },
+      { n: "04", icon: <DollarSign className="h-5 w-5" />, title: "Cut, hand off, get paid", body: "Customer pays upfront based on machine time + sheet usage. Payout 1–2 days after pickup." },
+    ],
+    perks: [
+      { icon: <Shield className="h-5 w-5" />, title: "Material waste is paid", body: "Sheets are priced per cost — you're never eating scrap on a small job." },
+      { icon: <Users className="h-5 w-5" />, title: "Pickup-only, no shipping", body: "Flat pieces ship awkwardly. Local pickup means no broken-acrylic horror stories." },
+      { icon: <Star className="h-5 w-5" />, title: "Engrave & cut both priced", body: "Our estimator separates cut length from engrave area so multi-op jobs are fair." },
+      { icon: <Clock className="h-5 w-5" />, title: "Set your bed hours", body: "Cap how many hours of cut time you take per week. Ventilation breaks built-in." },
+      { icon: <HeartHandshake className="h-5 w-5" />, title: "Smoke & char support", body: "We coach customers on material choice so you don't get stuck with awful files." },
+      { icon: <Wrench className="h-5 w-5" />, title: "Free sheet-packing math", body: "We auto-nest parts onto your sheet size to minimize waste before you accept." },
+    ],
+    testimonials: [
+      { name: "Priya R.", city: "Brooklyn, NY", machine: "Glowforge Pro", rating: 5.0, quote: "Verified pickup codes and upfront payment make it feel safe. My Glowforge pays for itself every 3 months now." },
+      { name: "Jess L.", city: "Denver, CO", machine: "xTool P2 55W", rating: 4.9, quote: "Weddings & holidays are insane. PrintLoco filters out the bad files before they hit my queue." },
+      { name: "Tom B.", city: "Seattle, WA", machine: "OMTech 80W CO2", rating: 4.8, quote: "I do a lot of acrylic. The sheet-packing math means I'm not losing money on tiny orders anymore." },
+    ],
+    faq: [
+      { q: "Which lasers qualify?", a: "Diode (xTool, Glowforge), CO2 (Boss, OMTech, Thunder, Epilog), and fiber lasers. Any wattage. We verify with photos of your machine and sample work." },
+      { q: "What file types do you accept?", a: "SVG, DXF, PDF, AI, EPS, xTool .xcs, LightBurn .lbrn/.lbrn2, DWG, and raster (PNG/JPG) for engraving. We auto-detect red = cut, others = engrave by default but customers can override per layer." },
+      { q: "How is pricing calculated?", a: "Sheet usage (parts auto-packed to your bed) + machine time (cut length / cut speed + engrave area / engrave speed) + electricity at your kWh rate. Customers see the full breakdown." },
+      { q: "Can I reject sketchy files?", a: "Yes. Decline within 2 hours if a file has bad geometry, open paths, or material that won't cut safely." },
+      { q: "Do I need ventilation/MSDS?", a: "Yes — verified makers confirm they have appropriate ventilation. PVC and other chlorinated materials are blocked by default." },
+    ],
+  },
+  embroidery: {
+    heroTitle: "Stitch logos, patches & monograms for your neighborhood.",
+    heroBody:
+      "Brother, Janome, Bernina, Tajima, Melco, Ricoma — multi-needle or single-head, your embroidery machine can earn $300–$1,800/month doing logos for local cafés, sports teams, wedding gifts, and custom hats.",
+    steps: [
+      { n: "01", icon: <Camera className="h-5 w-5" />, title: "Photo of your machine + 3 patches", body: "Show your embroidery setup and 3 sample stitch-outs on different fabrics." },
+      { n: "02", icon: <Package className="h-5 w-5" />, title: "List hoop sizes & thread colors", body: "Tell us your hoops (4×4, 5×7, 6×10…) and Madeira/Isacord colors you keep stocked." },
+      { n: "03", icon: <Zap className="h-5 w-5" />, title: "We parse DST/PES & estimate", body: "Upload DST/PES/EXP and we count stitches, runtime, and thread changes. Art files are auto-digitized." },
+      { n: "04", icon: <DollarSign className="h-5 w-5" />, title: "Stitch, hand off, get paid", body: "Customer pays per 1,000 stitches + hoop fee. Payout 1–2 days after pickup." },
+    ],
+    perks: [
+      { icon: <Shield className="h-5 w-5" />, title: "Digitizing is on us", body: "Customers upload PNG/SVG and we digitize to DST before it reaches your queue — no rework." },
+      { icon: <Users className="h-5 w-5" />, title: "Garments stay local", body: "Customers drop off blanks and pick up finished — no liability for shipping fabric." },
+      { icon: <Star className="h-5 w-5" />, title: "Thread color matching", body: "We auto-map customer colors to your stocked spools. Out-of-stock = you decline, no penalty." },
+      { icon: <Clock className="h-5 w-5" />, title: "Hoop-time scheduling", body: "Set total hoop hours/week. Multi-needle makers can take rush orders for extra pay." },
+      { icon: <HeartHandshake className="h-5 w-5" />, title: "Bobbin & backing covered", body: "Standard backings + bobbin thread bundled into the hoop fee — no nickel-and-diming." },
+      { icon: <Wrench className="h-5 w-5" />, title: "Stitch-count auto-detect", body: "DST/PES files have stitch count read directly — no manual entry, no underpaying yourself." },
+    ],
+    testimonials: [
+      { name: "Diego F.", city: "Mission, SF", machine: "Brother PR1055X", rating: 4.8, quote: "Went from 3 patches/month for friends to 30+ paid orders. The tier system rewards doing it right." },
+      { name: "Aya K.", city: "Chicago, IL", machine: "Tajima 6-head", rating: 5.0, quote: "I'm a 6-head shop. PrintLoco fills the gaps between my big contracts with local hats and totes." },
+      { name: "Luis M.", city: "Miami, FL", machine: "Janome MB-4S", rating: 4.7, quote: "Monogrammed wedding gifts are my bread and butter now. Customers love the local turnaround." },
+    ],
+    faq: [
+      { q: "Which embroidery machines qualify?", a: "Any commercial or hobby embroidery machine: Brother, Janome, Bernina, Tajima, Melco, Ricoma, SWF, Happy. Single-needle is fine — multi-needle takes more jobs." },
+      { q: "What file types do you accept?", a: "DST, PES, EXP, JEF, VP3, XXX. We also accept PNG/SVG/AI art — our team digitizes to DST before it hits your queue (digitizing fee is on the customer)." },
+      { q: "Do I have to provide blanks?", a: "No. Customers drop off their own shirts/hats/patches. You only supply thread and backing. You can optionally stock blanks for extra margin." },
+      { q: "What if I run out of a thread color?", a: "Decline within 2 hours and we re-route the job. No penalty to your tier." },
+      { q: "How is the price calculated?", a: "$ per 1,000 stitches (your rate) + hoop fee + thread color count. Customers see the breakdown before they pay." },
+    ],
+  },
+  vinyl: {
+    heroTitle: "Turn your vinyl cutter into a sticker & sign business.",
+    heroBody:
+      "Cricut, Silhouette, Roland, Graphtec, USCutter — local makers earn $150–$900/month cutting decals, heat-transfer for shirts, shop window vinyl, and print-and-cut stickers. Low-overhead, high-margin work.",
+    steps: [
+      { n: "01", icon: <Camera className="h-5 w-5" />, title: "Photo of your cutter + 3 cuts", body: "Show your machine and 3 sample cuts (adhesive, HTV, or print+cut). Verified in 24h." },
+      { n: "02", icon: <Package className="h-5 w-5" />, title: "List rolls & vinyl types", body: "Adhesive, HTV, reflective, glitter HTV, print+cut stock. Tell us what colors you stock." },
+      { n: "03", icon: <Zap className="h-5 w-5" />, title: "SVG/PDF in, decal out", body: "Customers upload SVG/PDF, we measure area and match to your roll widths." },
+      { n: "04", icon: <DollarSign className="h-5 w-5" />, title: "Cut, weed, hand off, get paid", body: "Weed, transfer-tape if needed, hand off with pickup code. Payout 1–2 days later." },
+    ],
+    perks: [
+      { icon: <Shield className="h-5 w-5" />, title: "Weeding time is paid", body: "Tiny intricate cuts take forever to weed — our estimator factors that into your payout." },
+      { icon: <Users className="h-5 w-5" />, title: "Drop-off / pickup only", body: "Vinyl ships terribly — local pickup means no creased decals or peeled transfer tape in the mail." },
+      { icon: <Star className="h-5 w-5" />, title: "Color & finish match", body: "Customers pick from your stocked colors only — no chasing a shade you don't carry." },
+      { icon: <Clock className="h-5 w-5" />, title: "Quick turnaround = bonus", body: "Same-day cuts get a rush fee bonus split with you. Sticker work moves fast." },
+      { icon: <HeartHandshake className="h-5 w-5" />, title: "HTV pressing optional", body: "If you have a heat press, opt in for shirt orders at a higher rate. Press-less makers do decals only." },
+      { icon: <Wrench className="h-5 w-5" />, title: "Free transfer-tape math", body: "We size transfer tape and waste into the quote so you never lose money on small jobs." },
+    ],
+    testimonials: [
+      { name: "Mina T.", city: "Nashville, TN", machine: "Roland GS-24", rating: 4.9, quote: "Shop window vinyl and laptop decals all day. PrintLoco brings me orders I'd never have hustled for." },
+      { name: "Pablo R.", city: "Phoenix, AZ", machine: "Cricut Maker 3 + heat press", rating: 4.8, quote: "Team shirts are seasonal gold. The platform handles invoicing and I just press and hand off." },
+      { name: "Kim D.", city: "Boston, MA", machine: "Silhouette Cameo 5", rating: 4.7, quote: "Started as a hobby. Now it covers my rent half the year. Sticker-pack orders are the best." },
+    ],
+    faq: [
+      { q: "Which vinyl cutters qualify?", a: "Cricut, Silhouette, Brother ScanNCut, Roland, Graphtec, USCutter, Vevor — any cutter in good condition. Print+cut requires a compatible printer too." },
+      { q: "What file types do you accept?", a: "SVG, PDF, PNG. Single-color cuts are easiest; multi-color and print+cut are priced separately." },
+      { q: "Do I need a heat press for shirts?", a: "Only if you opt into HTV/shirt orders. Decal-only makers can ignore the heat press category." },
+      { q: "How is pricing calculated?", a: "Area of vinyl used + material cost (per your roll prices) + weeding complexity. Print+cut adds ink/laminate fees." },
+      { q: "What about color matching?", a: "Customers pick from your stocked colors only. If they want a shade you don't have, the order routes to another maker." },
+    ],
+  },
+};
+
 const BecomeMaker = () => {
   const { user, profile } = useAuth();
   const isAlreadyMaker = profile?.role === "maker";
