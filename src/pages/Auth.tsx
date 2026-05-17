@@ -21,8 +21,10 @@ const Auth = () => {
   const initialMode = (params.get("mode") as Mode) === "signin" ? "signin" : "signup";
 
   const [mode, setMode] = useState<Mode>(initialMode);
+  const [method, setMethod] = useState<'email' | 'phone'>('email');
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
@@ -68,19 +70,23 @@ const Auth = () => {
   };
 
   const sendOtp = async () => {
-    if (!email) {
+    if (method === 'email' && !email) {
       toast.error("Enter your email first");
+      return;
+    }
+    if (method === 'phone' && !phone) {
+      toast.error("Enter your phone number first");
       return;
     }
     setSubmitting(true);
     try {
       const { error } = await supabase.auth.signInWithOtp({
-        email,
+        ...(method === 'email' ? { email } : { phone }),
         options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/dashboard` },
       });
       if (error) throw error;
       setOtpSent(true);
-      toast.success("Code sent! Check your email.");
+      toast.success("Code sent!");
     } catch (err: any) {
       toast.error(err.message ?? "Failed to send code");
     } finally {
@@ -107,7 +113,11 @@ const Auth = () => {
     if (otp.length !== 6) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({ email, token: otp, type: "email" });
+      const { error } = await supabase.auth.verifyOtp({ 
+        ...(method === 'email' ? { email } : { phone }), 
+        token: otp, 
+        type: method === 'email' ? "email" : "sms" 
+      });
       if (error) throw error;
       toast.success("Signed in.");
       navigate("/dashboard", { replace: true });
@@ -147,13 +157,20 @@ const Auth = () => {
 
           {mode === "otp" ? (
             <div className="mt-6 space-y-4">
+              <div className="flex rounded-lg bg-muted p-1">
+                <button className={`flex-1 rounded-md py-1.5 text-sm font-medium ${method === 'email' ? 'bg-background shadow-sm' : ''}`} onClick={() => {setMethod('email'); setOtpSent(false);}}>Email</button>
+                <button className={`flex-1 rounded-md py-1.5 text-sm font-medium ${method === 'phone' ? 'bg-background shadow-sm' : ''}`} onClick={() => {setMethod('phone'); setOtpSent(false);}}>Phone</button>
+              </div>
               <div>
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="contact">{method === 'email' ? 'Email' : 'Phone (+1...)'}</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => { setEmail(e.target.value); setOtpSent(false); }}
+                  id="contact"
+                  type={method === 'email' ? 'email' : 'tel'}
+                  value={method === 'email' ? email : phone}
+                  onChange={(e) => { 
+                    method === 'email' ? setEmail(e.target.value) : setPhone(e.target.value); 
+                    setOtpSent(false); 
+                  }}
                   required
                 />
               </div>
