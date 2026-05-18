@@ -26,5 +26,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/misc", "src/utils/**/*.txt*", "src/pages/**/*.txt*", "src/components/**/*.txt*", "src/lib/**/*.txt*"]
 }
