@@ -73,12 +73,7 @@ const MakerOnboarding = () => {
 
   return (
     <div className="container py-24 flex justify-center items-center min-h-screen">
-      <MotionWrapper
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-lg"
-      >
+      <MotionWrapper className="w-full max-w-lg">
         <OnboardingSteps currentStep={2} />
         <Card className="rounded-3xl border border-border shadow-card p-6">
           <CardHeader className="text-center pb-6">

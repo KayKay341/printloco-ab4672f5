@@ -113,14 +113,13 @@ const Auth = () => {
     if (otp.length !== 6) return;
     setSubmitting(true);
     try {
-      const { error } = await supabase.auth.verifyOtp({ 
-        ...(method === 'email' ? { email } : { phone }), 
-        token: otp, 
-        type: method === 'email' ? "email" : "sms" 
-      });
+      const params: any = method === 'email'
+        ? { email, token: otp, type: 'email' }
+        : { phone, token: otp, type: 'sms' };
+      const { error } = await supabase.auth.verifyOtp(params);
       if (error) throw error;
       toast.success("Signed in.");
-      navigate("/dashboard", { replace: true });
+      navigate("/onboarding/role", { replace: true });
     } catch (err: any) {
       toast.error(err.message ?? "Invalid code");
     } finally {
