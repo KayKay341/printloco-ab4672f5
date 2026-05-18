@@ -27,5 +27,12 @@
     }
   },
   "include": ["src"],
-  "exclude": ["src/misc", "src/utils/**/*.txt*", "src/pages/**/*.txt*", "src/components/**/*.txt*", "src/lib/**/*.txt*"]
+  "exclude": [
+    "src/misc",
+    "src/utils/**/*.txt*",
+    "src/pages/**/*.txt*",
+    "src/components/**/*.txt*",
+    "src/lib/**/*.txt*",
+    "src/**/[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].*"
+  ]
 }
