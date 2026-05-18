@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,9 +9,20 @@ import { Button } from "@/components/ui/button";
 import { ShoppingBag, Wrench, ArrowRight } from "lucide-react";
 
 const RoleSelection = () => {
-  const { user, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      navigate("/auth?mode=signin", { replace: true });
+      return;
+    }
+    if (profile?.role) {
+      navigate(profile.role === "maker" ? "/dashboard" : "/services", { replace: true });
+    }
+  }, [user, profile?.role, navigate]);
+
 
   const selectRole = async (role: "customer" | "maker") => {
     if (!user) return;
