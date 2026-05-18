@@ -31,7 +31,7 @@ const Auth = () => {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (user) navigate("/dashboard", { replace: true });
+    if (user) navigate("/onboarding/role", { replace: true });
   }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -43,18 +43,18 @@ const Auth = () => {
           email,
           password,
           options: {
-            emailRedirectTo: `${window.location.origin}/dashboard`,
+            emailRedirectTo: `${window.location.origin}/onboarding/role`,
             data: { full_name: fullName },
           },
         });
         if (error) throw error;
         toast.success("Welcome to PrintLoco!");
-        navigate("/dashboard", { replace: true });
+        navigate("/onboarding/role", { replace: true });
       } else if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Signed in.");
-        navigate("/dashboard", { replace: true });
+        navigate("/onboarding/role", { replace: true });
       } else if (mode === "forgot") {
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
           redirectTo: `${window.location.origin}/reset-password`,
@@ -82,7 +82,7 @@ const Auth = () => {
     try {
       const { error } = await supabase.auth.signInWithOtp({
         ...(method === 'email' ? { email } : { phone }),
-        options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/dashboard` },
+        options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/onboarding/role` },
       });
       if (error) throw error;
       setOtpSent(true);
@@ -98,11 +98,11 @@ const Auth = () => {
     setSubmitting(true);
     try {
       const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: `${window.location.origin}/dashboard`,
+        redirect_uri: `${window.location.origin}/onboarding/role`,
       });
       if (result.error) throw new Error(result.error.message ?? "Google sign-in failed");
       if (result.redirected) return;
-      navigate("/dashboard", { replace: true });
+      navigate("/onboarding/role", { replace: true });
     } catch (err: any) {
       toast.error(err.message ?? "Google sign-in failed");
       setSubmitting(false);
