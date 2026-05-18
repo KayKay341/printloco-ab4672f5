@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { OnboardingSteps } from "@/components/OnboardingSteps";
+import { OnboardingSteps, MAKER_STEPS } from "@/components/OnboardingSteps";
 import { MotionWrapper } from "@/components/ui/MotionWrapper";
 
 const MakerOnboardingImages = () => {
@@ -32,8 +32,8 @@ const MakerOnboardingImages = () => {
         .update({ verification_status: "pending" })
         .eq("owner_id", user?.id);
 
-      toast.success("Photos uploaded! Awaiting admin verification.");
-      navigate("/onboarding/complete");
+      toast.success("Photos uploaded! Now send your info for review.");
+      navigate("/onboarding/review");
     } catch (error) {
       toast.error("Failed to upload images.");
     } finally {
@@ -44,7 +44,7 @@ const MakerOnboardingImages = () => {
   return (
     <div className="container py-24 flex justify-center items-center min-h-screen">
       <MotionWrapper className="w-full max-w-lg">
-        <OnboardingSteps currentStep={3} />
+        <OnboardingSteps currentStep={3} steps={MAKER_STEPS} />
         <Card className="rounded-3xl border border-border shadow-card p-6">
           <CardHeader className="text-center pb-6">
             <CardTitle className="font-display text-4xl font-semibold tracking-tight">Upload Machine Files</CardTitle>

@@ -155,7 +155,7 @@ const Dashboard = () => {
       <main className="container py-12">
         <div className="mb-10">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-            {profile?.role === "maker" ? "Maker Dashboard" : "Customer Dashboard"}
+            {(profile?.role as string) === "maker" ? "Maker Dashboard" : "Customer Dashboard"}
           </div>
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
             Hi{profile?.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""} 👋
@@ -163,12 +163,12 @@ const Dashboard = () => {
           {usingSample && (
             <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/10 px-3 py-1 text-xs text-accent">
               <Sparkles className="h-3 w-3" />
-              Sample data — your real {profile?.role === "maker" ? "printers" : "uploads"} appear here once you add them.
+              Sample data — your real {(profile?.role as string) === "maker" ? "printers" : "uploads"} appear here once you add them.
             </div>
           )}
         </div>
 
-        {profile?.role === "maker" ? (
+        {(profile?.role as string) === "maker" ? (
           <section>
             {/* Quality + earnings rollup */}
             {printers.length > 0 && (
