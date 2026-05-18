@@ -133,9 +133,8 @@ const Dashboard = () => {
   if (!user) return <Navigate to="/auth?mode=signin" replace />;
   if (!profile || !profile.role) return <Navigate to="/onboarding/role" replace />;
   
-  if (profile.role === "maker") {
-    // Only redirect to selector if we are at the dashboard root and haven't selected anything yet
-    // Or if they are on a maker account, forward to the selector
+  if (profile.role === "maker" && window.location.pathname !== "/maker/dashboard-selector") {
+    // Forward makers to the selector, but don't redirect if already there to avoid loop
     return <Navigate to="/maker/dashboard-selector" replace />;
   }
   
