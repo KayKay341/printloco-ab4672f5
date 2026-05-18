@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { OnboardingSteps } from "@/components/OnboardingSteps";
 import { MotionWrapper } from "@/components/ui/MotionWrapper";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { ShoppingBag, Wrench, ArrowRight } from "lucide-react";
 
 const RoleSelection = () => {
@@ -19,21 +19,18 @@ const RoleSelection = () => {
     try {
       const { error } = await supabase
         .from("profiles")
-        .upsert({ id: user.id, role: role });
-      
+        .upsert({ id: user.id, role });
       if (error) throw error;
-      
       await refreshProfile();
-      toast.success("Role saved!");
-      
+      toast.success("Welcome aboard!");
       if (role === "maker") {
         navigate("/onboarding/maker");
       } else {
-        navigate("/dashboard");
+        navigate("/services");
       }
-    } catch (error) {
+    } catch (err) {
       toast.error("Failed to save role.");
-      console.error(error);
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -42,40 +39,39 @@ const RoleSelection = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background to-secondary/20 py-24 flex justify-center items-center">
       <MotionWrapper className="w-full max-w-2xl px-4">
-        <OnboardingSteps currentStep={1} />
         <div className="text-center mb-12">
           <h1 className="font-display text-5xl font-semibold tracking-tight text-foreground">Welcome to PrintLoco</h1>
-          <p className="text-xl text-muted-foreground mt-4">Let's get you set up. What is your primary goal?</p>
+          <p className="text-xl text-muted-foreground mt-4">What brings you here?</p>
         </div>
         <div className="grid md:grid-cols-2 gap-6">
-          <Card 
+          <Card
             className="cursor-pointer group hover:border-primary transition-all duration-300 rounded-3xl border-2 shadow-lg hover:shadow-primary/20"
-            onClick={() => selectRole("customer")}
+            onClick={() => !loading && selectRole("customer")}
           >
-            <CardHeader className="text-center items-center pt-8">
+            <CardHeader className="text-center items-center pt-8 pb-8">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform mb-4">
                 <ShoppingBag size={32} />
               </div>
               <CardTitle className="font-display text-2xl">I want to order parts</CardTitle>
-              <CardDescription className="text-base mt-2">Bring your ideas to life with our network of local makers.</CardDescription>
-              <Button className="mt-6 gap-2 w-full">
-                Get started <ArrowRight size={16} />
+              <CardDescription className="text-base mt-2">Pick a service, upload your file, choose a local maker, check out.</CardDescription>
+              <Button className="mt-6 gap-2 w-full" disabled={loading}>
+                Start an order <ArrowRight size={16} />
               </Button>
             </CardHeader>
           </Card>
-          
-          <Card 
+
+          <Card
             className="cursor-pointer group hover:border-primary transition-all duration-300 rounded-3xl border-2 shadow-lg hover:shadow-primary/20"
-            onClick={() => selectRole("maker")}
+            onClick={() => !loading && selectRole("maker")}
           >
-            <CardHeader className="text-center items-center pt-8">
+            <CardHeader className="text-center items-center pt-8 pb-8">
               <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center text-primary group-hover:scale-110 transition-transform mb-4">
                 <Wrench size={32} />
               </div>
               <CardTitle className="font-display text-2xl">I want to be a maker</CardTitle>
-              <CardDescription className="text-base mt-2">List your machines and start taking orders in your area.</CardDescription>
-              <Button className="mt-6 gap-2 w-full">
-                Join now <ArrowRight size={16} />
+              <CardDescription className="text-base mt-2">Register your machine, get verified, submit for review, then set up payouts.</CardDescription>
+              <Button className="mt-6 gap-2 w-full" disabled={loading}>
+                Become a maker <ArrowRight size={16} />
               </Button>
             </CardHeader>
           </Card>
@@ -84,7 +80,5 @@ const RoleSelection = () => {
     </div>
   );
 };
-
-export default RoleSelection;
 
 export default RoleSelection;
