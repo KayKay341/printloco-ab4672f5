@@ -2,6 +2,8 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
+const AUTH_INIT_TIMEOUT_MS = 4500;
+
 type Profile = {
   id: string;
   full_name: string | null;
@@ -38,8 +40,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
+    let mounted = true;
+    const finishLoading = () => {
+      if (mounted) setLoading(false);
+    };
+
     // CRITICAL: set up listener first, then check existing session
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!mounted) return;
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
@@ -50,14 +58,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
+    const timeout = window.setTimeout(finishLoading, AUTH_INIT_TIMEOUT_MS);
+
     supabase.auth.getSession().then(({ data: { session: existing } }) => {
+      if (!mounted) return;
       setSession(existing);
       setUser(existing?.user ?? null);
       if (existing?.user) loadProfile(existing.user.id);
-      setLoading(false);
-    });
+      finishLoading();
+    }).catch(() => {
+      if (!mounted) return;
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      finishLoading();
+    }).finally(() => window.clearTimeout(timeout));
 
-    return () => sub.subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      window.clearTimeout(timeout);
+      sub.subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
