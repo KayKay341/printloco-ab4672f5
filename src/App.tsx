@@ -154,24 +154,31 @@ const AnimatedRoutes = () => {
 
 const App = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AuthProvider>
-            <AppContent />
-          </AuthProvider>
-        </BrowserRouter>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <AppErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AuthProvider>
+              <AppContent />
+            </AuthProvider>
+          </BrowserRouter>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </AppErrorBoundary>
   );
 };
 
 const AppContent = () => {
-  const { profile } = useAuth();
+  const { profile, loading } = useAuth();
   // Mock verification check until backend field is added
   const isVerified = profile ? true : true; 
+
+  if (loading) {
+    return <RouteLoadingWithTimeout />;
+  }
+
   return (
     <>
       <VerificationBanner isVisible={!isVerified} />
