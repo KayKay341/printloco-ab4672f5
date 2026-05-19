@@ -1,4 +1,4 @@
-export const MAKER_STEPS = ["Role", "Machine", "Verify", "Done"];
+export const MAKER_STEPS = ["Sign up", "Machine", "Verify", "Review", "Financials"];
 
 export const OnboardingSteps = ({ currentStep, steps = MAKER_STEPS }: { currentStep: number, steps?: string[] }) => {
   return (
