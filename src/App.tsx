@@ -39,38 +39,115 @@ const Order = lazy(() => import("./pages/Order.tsx"));
 
 const queryClient = new QueryClient();
 
+const RouteLoadingFallback = ({ timedOut = false }: { timedOut?: boolean }) => (
+  <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
+    <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card" aria-live="polite">
+      <div className="mb-6 flex items-center gap-3">
+        <div className="h-10 w-10 animate-pulse rounded-full bg-primary/20" />
+        <div>
+          <p className="font-display text-2xl font-semibold">PrintLoco</p>
+          <p className="text-sm text-muted-foreground">{timedOut ? "Still loading the page…" : "Loading your page…"}</p>
+        </div>
+      </div>
+      <div className="space-y-3">
+        <div className="h-4 w-3/4 animate-pulse rounded-full bg-muted" />
+        <div className="h-4 w-full animate-pulse rounded-full bg-muted" />
+        <div className="h-4 w-2/3 animate-pulse rounded-full bg-muted" />
+      </div>
+      {timedOut && (
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-6 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground"
+        >
+          Reload page
+        </button>
+      )}
+    </section>
+  </main>
+);
+
+const RouteLoadingWithTimeout = () => {
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setTimedOut(true), 6000);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  return <RouteLoadingFallback timedOut={timedOut} />;
+};
+
+class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("App render failed", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
+          <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
+            <h1 className="font-display text-3xl font-semibold">Something didn’t load</h1>
+            <p className="mt-3 text-sm text-muted-foreground">Reload the page to try again.</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-6 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
+            >
+              Reload page
+            </button>
+          </section>
+        </main>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 const AnimatedRoutes = () => {
   const location = useLocation();
   return (
     <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<Index />} />
-        <Route path="/auth" element={<Auth />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/printers" element={<Printers />} />
-        <Route path="/printers/new" element={<NewPrinter />} />
-        <Route path="/upload" element={<Upload />} />
-        <Route path="/services" element={<Services />} />
-        <Route path="/order/:service" element={<Order />} />
-        <Route path="/waitlist" element={<Waitlist />} />
-        <Route path="/invest" element={<Invest />} />
-        <Route path="/checkout/return" element={<CheckoutReturn />} />
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/unsubscribe" element={<Unsubscribe />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/gift-cards" element={<GiftCards />} />
-        <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
-        <Route path="/gift-cards/return" element={<GiftCardReturn />} />
-        <Route path="/become-a-maker" element={<BecomeMaker />} />
-        <Route path="/become-a-maker/:service" element={<BecomeMaker />} />
-        <Route path="/onboarding/maker" element={<MakerOnboarding />} />
-        <Route path="/onboarding/images" element={<MakerOnboardingImages />} />
-        <Route path="/onboarding/complete" element={<MakerOnboardingComplete />} />
-        <Route path="/maker/dashboard-selector" element={<MakerDashboardSelector />} />
-        <Route path="/onboarding/role" element={<RoleSelection />} />
-        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <Suspense fallback={<RouteLoadingWithTimeout />}>
+        <Routes location={location} key={location.pathname}>
+          <Route path="/" element={<Index />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/printers" element={<Printers />} />
+          <Route path="/printers/new" element={<NewPrinter />} />
+          <Route path="/upload" element={<Upload />} />
+          <Route path="/services" element={<Services />} />
+          <Route path="/order/:service" element={<Order />} />
+          <Route path="/waitlist" element={<Waitlist />} />
+          <Route path="/invest" element={<Invest />} />
+          <Route path="/checkout/return" element={<CheckoutReturn />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="/unsubscribe" element={<Unsubscribe />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/gift-cards" element={<GiftCards />} />
+          <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
+          <Route path="/gift-cards/return" element={<GiftCardReturn />} />
+          <Route path="/become-a-maker" element={<BecomeMaker />} />
+          <Route path="/become-a-maker/:service" element={<BecomeMaker />} />
+          <Route path="/onboarding/maker" element={<MakerOnboarding />} />
+          <Route path="/onboarding/images" element={<MakerOnboardingImages />} />
+          <Route path="/onboarding/review" element={<MakerOnboardingReview />} />
+          <Route path="/onboarding/financials" element={<MakerOnboardingFinancials />} />
+          <Route path="/onboarding/complete" element={<MakerOnboardingComplete />} />
+          <Route path="/maker/dashboard-selector" element={<MakerDashboardSelector />} />
+          <Route path="/onboarding/role" element={<RoleSelection />} />
+          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
     </AnimatePresence>
   );
 };
