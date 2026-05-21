@@ -1,4 +1,4 @@
-import { Component, Suspense, lazy, useEffect, useState, type ErrorInfo, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
@@ -9,74 +9,34 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
 import { VerificationBanner } from "@/components/VerificationBanner";
-
-const Index = lazy(() => import("./pages/Index.tsx"));
-const NotFound = lazy(() => import("./pages/NotFound.tsx"));
-const Auth = lazy(() => import("./pages/Auth.tsx"));
-const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
-const Printers = lazy(() => import("./pages/Printers.tsx"));
-const NewPrinter = lazy(() => import("./pages/NewPrinter.tsx"));
-const Upload = lazy(() => import("./pages/Upload.tsx"));
-const Waitlist = lazy(() => import("./pages/Waitlist.tsx"));
-const Invest = lazy(() => import("./pages/Invest.tsx"));
-const CheckoutReturn = lazy(() => import("./pages/CheckoutReturn.tsx"));
-const Admin = lazy(() => import("./pages/Admin.tsx"));
-const Unsubscribe = lazy(() => import("./pages/Unsubscribe.tsx"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword.tsx"));
-const GiftCards = lazy(() => import("./pages/GiftCards.tsx"));
-const RedeemGiftCard = lazy(() => import("./pages/RedeemGiftCard.tsx"));
-const GiftCardReturn = lazy(() => import("./pages/GiftCardReturn.tsx"));
-const BecomeMaker = lazy(() => import("./pages/BecomeMaker.tsx"));
-const MakerOnboarding = lazy(() => import("./pages/MakerOnboarding.tsx"));
-const MakerOnboardingImages = lazy(() => import("./pages/MakerOnboardingImages.tsx"));
-const MakerOnboardingReview = lazy(() => import("./pages/MakerOnboardingReview.tsx"));
-const MakerOnboardingFinancials = lazy(() => import("./pages/MakerOnboardingFinancials.tsx"));
-const MakerOnboardingComplete = lazy(() => import("./pages/MakerOnboardingComplete.tsx"));
-const MakerDashboardSelector = lazy(() => import("./pages/MakerDashboardSelector.tsx"));
-const RoleSelection = lazy(() => import("./pages/RoleSelection.tsx"));
-const Services = lazy(() => import("./pages/Services.tsx"));
-const Order = lazy(() => import("./pages/Order.tsx"));
+import Index from "./pages/Index.tsx";
+import NotFound from "./pages/NotFound.tsx";
+import Auth from "./pages/Auth.tsx";
+import Dashboard from "./pages/Dashboard.tsx";
+import Printers from "./pages/Printers.tsx";
+import NewPrinter from "./pages/NewPrinter.tsx";
+import Upload from "./pages/Upload.tsx";
+import Waitlist from "./pages/Waitlist.tsx";
+import Invest from "./pages/Invest.tsx";
+import CheckoutReturn from "./pages/CheckoutReturn.tsx";
+import Admin from "./pages/Admin.tsx";
+import Unsubscribe from "./pages/Unsubscribe.tsx";
+import ResetPassword from "./pages/ResetPassword.tsx";
+import GiftCards from "./pages/GiftCards.tsx";
+import RedeemGiftCard from "./pages/RedeemGiftCard.tsx";
+import GiftCardReturn from "./pages/GiftCardReturn.tsx";
+import BecomeMaker from "./pages/BecomeMaker.tsx";
+import MakerOnboarding from "./pages/MakerOnboarding.tsx";
+import MakerOnboardingImages from "./pages/MakerOnboardingImages.tsx";
+import MakerOnboardingReview from "./pages/MakerOnboardingReview.tsx";
+import MakerOnboardingFinancials from "./pages/MakerOnboardingFinancials.tsx";
+import MakerOnboardingComplete from "./pages/MakerOnboardingComplete.tsx";
+import MakerDashboardSelector from "./pages/MakerDashboardSelector.tsx";
+import RoleSelection from "./pages/RoleSelection.tsx";
+import Services from "./pages/Services.tsx";
+import Order from "./pages/Order.tsx";
 
 const queryClient = new QueryClient();
-
-const RouteLoadingFallback = ({ timedOut = false }: { timedOut?: boolean }) => (
-  <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
-    <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card" aria-live="polite">
-      <div className="mb-6 flex items-center gap-3">
-        <div className="h-10 w-10 animate-pulse rounded-full bg-primary/20" />
-        <div>
-          <p className="font-display text-2xl font-semibold">PrintLoco</p>
-          <p className="text-sm text-muted-foreground">{timedOut ? "Still loading the page…" : "Loading your page…"}</p>
-        </div>
-      </div>
-      <div className="space-y-3">
-        <div className="h-4 w-3/4 animate-pulse rounded-full bg-muted" />
-        <div className="h-4 w-full animate-pulse rounded-full bg-muted" />
-        <div className="h-4 w-2/3 animate-pulse rounded-full bg-muted" />
-      </div>
-      {timedOut && (
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="mt-6 w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-primary-foreground"
-        >
-          Reload page
-        </button>
-      )}
-    </section>
-  </main>
-);
-
-const RouteLoadingWithTimeout = () => {
-  const [timedOut, setTimedOut] = useState(false);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setTimedOut(true), 6000);
-    return () => window.clearTimeout(timeout);
-  }, []);
-
-  return <RouteLoadingFallback timedOut={timedOut} />;
-};
 
 class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
@@ -116,38 +76,36 @@ const AnimatedRoutes = () => {
   const location = useLocation();
   return (
     <AnimatePresence mode="wait">
-      <Suspense fallback={<RouteLoadingWithTimeout />}>
-        <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/printers" element={<Printers />} />
-          <Route path="/printers/new" element={<NewPrinter />} />
-          <Route path="/upload" element={<Upload />} />
-          <Route path="/services" element={<Services />} />
-          <Route path="/order/:service" element={<Order />} />
-          <Route path="/waitlist" element={<Waitlist />} />
-          <Route path="/invest" element={<Invest />} />
-          <Route path="/checkout/return" element={<CheckoutReturn />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/unsubscribe" element={<Unsubscribe />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/gift-cards" element={<GiftCards />} />
-          <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
-          <Route path="/gift-cards/return" element={<GiftCardReturn />} />
-          <Route path="/become-a-maker" element={<BecomeMaker />} />
-          <Route path="/become-a-maker/:service" element={<BecomeMaker />} />
-          <Route path="/onboarding/maker" element={<MakerOnboarding />} />
-          <Route path="/onboarding/images" element={<MakerOnboardingImages />} />
-          <Route path="/onboarding/review" element={<MakerOnboardingReview />} />
-          <Route path="/onboarding/financials" element={<MakerOnboardingFinancials />} />
-          <Route path="/onboarding/complete" element={<MakerOnboardingComplete />} />
-          <Route path="/maker/dashboard-selector" element={<MakerDashboardSelector />} />
-          <Route path="/onboarding/role" element={<RoleSelection />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<Index />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/printers" element={<Printers />} />
+        <Route path="/printers/new" element={<NewPrinter />} />
+        <Route path="/upload" element={<Upload />} />
+        <Route path="/services" element={<Services />} />
+        <Route path="/order/:service" element={<Order />} />
+        <Route path="/waitlist" element={<Waitlist />} />
+        <Route path="/invest" element={<Invest />} />
+        <Route path="/checkout/return" element={<CheckoutReturn />} />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="/unsubscribe" element={<Unsubscribe />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/gift-cards" element={<GiftCards />} />
+        <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
+        <Route path="/gift-cards/return" element={<GiftCardReturn />} />
+        <Route path="/become-a-maker" element={<BecomeMaker />} />
+        <Route path="/become-a-maker/:service" element={<BecomeMaker />} />
+        <Route path="/onboarding/maker" element={<MakerOnboarding />} />
+        <Route path="/onboarding/images" element={<MakerOnboardingImages />} />
+        <Route path="/onboarding/review" element={<MakerOnboardingReview />} />
+        <Route path="/onboarding/financials" element={<MakerOnboardingFinancials />} />
+        <Route path="/onboarding/complete" element={<MakerOnboardingComplete />} />
+        <Route path="/maker/dashboard-selector" element={<MakerDashboardSelector />} />
+        <Route path="/onboarding/role" element={<RoleSelection />} />
+        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
     </AnimatePresence>
   );
 };
@@ -171,13 +129,9 @@ const App = () => {
 };
 
 const AppContent = () => {
-  const { profile, loading } = useAuth();
+  const { profile } = useAuth();
   // Mock verification check until backend field is added
   const isVerified = profile ? true : true; 
-
-  if (loading) {
-    return <RouteLoadingWithTimeout />;
-  }
 
   return (
     <>
