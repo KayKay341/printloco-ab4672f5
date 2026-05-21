@@ -29,10 +29,12 @@ const Auth = () => {
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [awaitingConfirm, setAwaitingConfirm] = useState(false);
 
   useEffect(() => {
     if (user) navigate("/onboarding/role", { replace: true });
   }, [user, navigate]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
