@@ -41,7 +41,7 @@ const Auth = () => {
     setSubmitting(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -50,9 +50,15 @@ const Auth = () => {
           },
         });
         if (error) throw error;
-        toast.success("Welcome to PrintLoco!");
-        navigate("/onboarding/role", { replace: true });
+        if (data.session) {
+          toast.success("Welcome to PrintLoco!");
+          navigate("/onboarding/role", { replace: true });
+        } else {
+          setAwaitingConfirm(true);
+          toast.success("Check your email to confirm your account.");
+        }
       } else if (mode === "signin") {
+
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
         toast.success("Signed in.");
