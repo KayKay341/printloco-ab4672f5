@@ -76,38 +76,36 @@ const AnimatedRoutes = () => {
   const location = useLocation();
   return (
     <AnimatePresence mode="wait">
-      <Suspense fallback={<RouteLoadingWithTimeout />}>
-        <Routes location={location} key={location.pathname}>
-          <Route path="/" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/printers" element={<Printers />} />
-          <Route path="/printers/new" element={<NewPrinter />} />
-          <Route path="/upload" element={<Upload />} />
-          <Route path="/services" element={<Services />} />
-          <Route path="/order/:service" element={<Order />} />
-          <Route path="/waitlist" element={<Waitlist />} />
-          <Route path="/invest" element={<Invest />} />
-          <Route path="/checkout/return" element={<CheckoutReturn />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/unsubscribe" element={<Unsubscribe />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/gift-cards" element={<GiftCards />} />
-          <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
-          <Route path="/gift-cards/return" element={<GiftCardReturn />} />
-          <Route path="/become-a-maker" element={<BecomeMaker />} />
-          <Route path="/become-a-maker/:service" element={<BecomeMaker />} />
-          <Route path="/onboarding/maker" element={<MakerOnboarding />} />
-          <Route path="/onboarding/images" element={<MakerOnboardingImages />} />
-          <Route path="/onboarding/review" element={<MakerOnboardingReview />} />
-          <Route path="/onboarding/financials" element={<MakerOnboardingFinancials />} />
-          <Route path="/onboarding/complete" element={<MakerOnboardingComplete />} />
-          <Route path="/maker/dashboard-selector" element={<MakerDashboardSelector />} />
-          <Route path="/onboarding/role" element={<RoleSelection />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<Index />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/printers" element={<Printers />} />
+        <Route path="/printers/new" element={<NewPrinter />} />
+        <Route path="/upload" element={<Upload />} />
+        <Route path="/services" element={<Services />} />
+        <Route path="/order/:service" element={<Order />} />
+        <Route path="/waitlist" element={<Waitlist />} />
+        <Route path="/invest" element={<Invest />} />
+        <Route path="/checkout/return" element={<CheckoutReturn />} />
+        <Route path="/admin" element={<Admin />} />
+        <Route path="/unsubscribe" element={<Unsubscribe />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/gift-cards" element={<GiftCards />} />
+        <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
+        <Route path="/gift-cards/return" element={<GiftCardReturn />} />
+        <Route path="/become-a-maker" element={<BecomeMaker />} />
+        <Route path="/become-a-maker/:service" element={<BecomeMaker />} />
+        <Route path="/onboarding/maker" element={<MakerOnboarding />} />
+        <Route path="/onboarding/images" element={<MakerOnboardingImages />} />
+        <Route path="/onboarding/review" element={<MakerOnboardingReview />} />
+        <Route path="/onboarding/financials" element={<MakerOnboardingFinancials />} />
+        <Route path="/onboarding/complete" element={<MakerOnboardingComplete />} />
+        <Route path="/maker/dashboard-selector" element={<MakerDashboardSelector />} />
+        <Route path="/onboarding/role" element={<RoleSelection />} />
+        {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
     </AnimatePresence>
   );
 };
@@ -131,13 +129,9 @@ const App = () => {
 };
 
 const AppContent = () => {
-  const { profile, loading } = useAuth();
+  const { profile } = useAuth();
   // Mock verification check until backend field is added
   const isVerified = profile ? true : true; 
-
-  if (loading) {
-    return <RouteLoadingWithTimeout />;
-  }
 
   return (
     <>
