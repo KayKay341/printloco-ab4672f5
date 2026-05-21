@@ -11,8 +11,9 @@ export default function Services() {
   return (
     <div className="min-h-screen bg-background">
       <SEO
-        title="Make Anything Locally — 3D Print, Laser Cut, Embroidery & More | PrintLoco"
+        title="Make Anything Locally — PrintLoco"
         description="Upload your file and get matched with a local maker for 3D printing, laser cutting, embroidery, or vinyl cutting. Real quotes in seconds."
+
         path="/services"
       />
       <Navbar />
