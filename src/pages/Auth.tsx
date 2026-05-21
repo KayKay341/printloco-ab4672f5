@@ -162,12 +162,35 @@ const Auth = () => {
           <h1 className="font-display text-3xl font-semibold tracking-tight">{titleMap[mode]}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{subtitleMap[mode]}</p>
 
-          {mode === "otp" ? (
+          {awaitingConfirm ? (
+            <div className="mt-6 space-y-4 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-2xl">📬</div>
+              <h2 className="font-display text-xl font-semibold">Confirm your email</h2>
+              <p className="text-sm text-muted-foreground">
+                We sent a confirmation link to <span className="font-medium text-foreground">{email}</span>.
+                Click it to verify your account.
+              </p>
+              <p className="rounded-lg bg-muted p-3 text-sm text-foreground">
+                Once you confirm your email, <span className="font-semibold">refresh this page</span> to continue to onboarding.
+              </p>
+              <Button type="button" variant="hero" size="lg" className="w-full" onClick={() => window.location.reload()}>
+                I've confirmed — refresh now
+              </Button>
+              <button
+                type="button"
+                onClick={() => { setAwaitingConfirm(false); }}
+                className="block w-full text-center text-xs text-muted-foreground hover:text-foreground"
+              >
+                Use a different email
+              </button>
+            </div>
+          ) : mode === "otp" ? (
             <div className="mt-6 space-y-4">
               <div className="flex rounded-lg bg-muted p-1">
                 <button className={`flex-1 rounded-md py-1.5 text-sm font-medium ${method === 'email' ? 'bg-background shadow-sm' : ''}`} onClick={() => {setMethod('email'); setOtpSent(false);}}>Email</button>
                 <button className={`flex-1 rounded-md py-1.5 text-sm font-medium ${method === 'phone' ? 'bg-background shadow-sm' : ''}`} onClick={() => {setMethod('phone'); setOtpSent(false);}}>Phone</button>
               </div>
+
               <div>
                 <Label htmlFor="contact">{method === 'email' ? 'Email' : 'Phone (+1...)'}</Label>
                 <Input
