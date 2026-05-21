@@ -218,13 +218,25 @@ const Waitlist = () => {
     toast.success("Referral link copied — share to bump your city up");
   };
 
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQS.map((f) => ({
+      "@type": "Question",
+      name: f.q,
+      acceptedAnswer: { "@type": "Answer", text: f.a },
+    })),
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <SEO
         title="Join the PrintLoco Waitlist — Local 3D Printing Coming Soon"
         description="Be first when PrintLoco opens in your neighborhood. Drop your zip — we'll email you the moment a verified 3D printer maker within 10 miles is live."
         path="/waitlist"
+        jsonLd={faqJsonLd}
       />
+
       <Navbar />
       <main>
         {/* HERO */}
