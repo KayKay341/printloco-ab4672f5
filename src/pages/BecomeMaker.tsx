@@ -412,9 +412,20 @@ const BecomeMaker = () => {
     : "Turn your 3D printer, laser cutter, embroidery machine or vinyl cutter into income. List on PrintLoco and get matched with neighbors.";
   const seoPath = onRoute ? `/become-a-maker/${service.id}` : "/become-a-maker";
 
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faq.map((f) => ({
+      "@type": "Question",
+      name: f.q,
+      acceptedAnswer: { "@type": "Answer", text: f.a },
+    })),
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      <SEO title={seoTitle} description={seoDesc} path={seoPath} />
+      <SEO title={seoTitle} description={seoDesc} path={seoPath} jsonLd={faqJsonLd} />
+
       <Navbar />
 
       <main>

@@ -12,7 +12,7 @@ export default function GiftCardReturn() {
 
   return (
     <div className="min-h-screen bg-background">
-      <SEO title="Gift Sent — PrintLoco" description="Your PrintLoco gift card purchase is confirmed." path="/gift-cards/return" noindex />
+      <SEO title="Gift Sent — PrintLoco" description="Your PrintLoco gift card purchase is confirmed. The recipient will receive their code by email and can redeem it on any local 3D printing, laser cutting, or embroidery order." path="/gift-cards/return" noindex />
       <Navbar />
       <main className="container max-w-2xl py-20 text-center">
         <div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl bg-accent/10 text-accent">
