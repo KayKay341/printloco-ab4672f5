@@ -22,7 +22,7 @@ const MakerOnboarding = () => {
     model: "",
     serviceId: "",
   });
-  const [photo, setPhoto] = useState<File | null>(null);
+  
 
   const brands = useMemo(() => {
     if (!formData.serviceId || !MACHINE_PRESETS[formData.serviceId]) return [];
