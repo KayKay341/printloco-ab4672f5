@@ -37,6 +37,22 @@ import Order from "./pages/Order.tsx";
 
 const queryClient = new QueryClient();
 
+const AppFallback = () => (
+  <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
+    <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
+      <h1 className="font-display text-3xl font-semibold">Something didn’t load</h1>
+      <p className="mt-3 text-sm text-muted-foreground">Reload the page to try again.</p>
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="mt-6 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
+      >
+        Reload page
+      </button>
+    </section>
+  </main>
+);
+
 class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
 
@@ -50,21 +66,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
 
   render() {
     if (this.state.hasError) {
-      return (
-        <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
-          <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
-            <h1 className="font-display text-3xl font-semibold">Something didn’t load</h1>
-            <p className="mt-3 text-sm text-muted-foreground">Reload the page to try again.</p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="mt-6 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
-            >
-              Reload page
-            </button>
-          </section>
-        </main>
-      );
+      return <AppFallback />;
     }
 
     return this.props.children;
