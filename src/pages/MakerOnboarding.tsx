@@ -17,11 +17,28 @@ const MakerOnboarding = () => {
   const { user, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
+  const storageKey = user ? `onboarding:machine:${user.id}` : "";
   const [formData, setFormData] = useState({
     brand: "",
     model: "",
     serviceId: "",
   });
+
+  // Restore saved progress
+  useEffect(() => {
+    if (!storageKey) return;
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) setFormData(JSON.parse(saved));
+    } catch {}
+  }, [storageKey]);
+
+  // Save progress on every change
+  useEffect(() => {
+    if (!storageKey) return;
+    localStorage.setItem(storageKey, JSON.stringify(formData));
+  }, [formData, storageKey]);
+
   
 
   const brands = useMemo(() => {
