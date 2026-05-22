@@ -9,17 +9,36 @@ import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { OnboardingSteps, MAKER_STEPS } from "@/components/OnboardingSteps";
 import { MotionWrapper } from "@/components/ui/MotionWrapper";
+import { X, Upload, Camera } from "lucide-react";
 
 const MakerOnboardingImages = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [files, setFiles] = useState<FileList | null>(null);
+  const [photos, setPhotos] = useState<File[]>([]);
   const [email, setEmail] = useState("");
 
   useEffect(() => {
     if (user?.email) setEmail(user.email);
   }, [user?.email]);
+
+  const addFiles = (incoming: FileList | null) => {
+    if (!incoming || incoming.length === 0) return;
+    const next = [...photos];
+    Array.from(incoming).forEach((f) => {
+      if (!f.type.startsWith("image/")) return;
+      // dedupe by name+size
+      if (!next.some((p) => p.name === f.name && p.size === f.size)) {
+        next.push(f);
+      }
+    });
+    setPhotos(next);
+    toast.success(`${incoming.length} photo${incoming.length > 1 ? "s" : ""} added`);
+  };
+
+  const removePhoto = (idx: number) => {
+    setPhotos(photos.filter((_, i) => i !== idx));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,24 +47,22 @@ const MakerOnboardingImages = () => {
       toast.error("Please enter a valid contact email.");
       return;
     }
-    if (!files || files.length < 3) {
+    if (photos.length < 3) {
       toast.error("Please upload at least 3 photos.");
       return;
     }
     setLoading(true);
 
     try {
-      // Save contact email on profile
       const { error: profileErr } = await supabase
         .from("profiles")
         .update({ contact_email: email })
         .eq("id", user.id);
       if (profileErr) throw profileErr;
 
-      // Upload each photo to storage
       const urls: string[] = [];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < photos.length; i++) {
+        const file = photos[i];
         const ext = file.name.split(".").pop() || "jpg";
         const path = `${user.id}/verify-${Date.now()}-${i}.${ext}`;
         const { error: uploadErr } = await supabase.storage
@@ -56,7 +73,6 @@ const MakerOnboardingImages = () => {
         urls.push(pub.publicUrl);
       }
 
-      // Attach URLs and mark pending on the maker's latest printer
       const { data: printers } = await supabase
         .from("printers")
         .select("id, sample_print_urls")
@@ -91,11 +107,11 @@ const MakerOnboardingImages = () => {
           <CardHeader className="text-center pb-6">
             <CardTitle className="font-display text-4xl font-semibold tracking-tight">Verify your machine</CardTitle>
             <CardDescription className="text-muted-foreground mt-2">
-              Confirm your contact email and upload at least 3 photos of your machine, including one showing the serial number or proof of purchase.
+              Confirm your contact email and upload at least 3 photos of your machine.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="contact-email">Contact email</Label>
                 <Input
@@ -108,18 +124,81 @@ const MakerOnboardingImages = () => {
                 />
                 <p className="text-xs text-muted-foreground">We'll use this to reach you about verification and orders.</p>
               </div>
-              <div className="space-y-2">
+
+              <div className="space-y-3">
                 <Label>Machine photos (3+ required)</Label>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  capture="environment"
-                  onChange={(e) => setFiles(e.target.files)}
-                  required
-                />
+                <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-2">
+                  <p className="text-sm font-medium">Please include photos of:</p>
+                  <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-5">
+                    <li>The full machine (clearly visible)</li>
+                    <li>The serial number, barcode, or model label</li>
+                    <li>A recent sample print you made on it</li>
+                    <li>Proof of purchase (receipt, order page) is a plus</li>
+                  </ul>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <label
+                    htmlFor="file-upload"
+                    className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-background p-4 text-center cursor-pointer hover:bg-muted transition"
+                  >
+                    <Upload className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium">Upload files</span>
+                    <span className="text-xs text-muted-foreground">Choose multiple</span>
+                    <input
+                      id="file-upload"
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+                    />
+                  </label>
+                  <label
+                    htmlFor="camera-upload"
+                    className="flex flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border bg-background p-4 text-center cursor-pointer hover:bg-muted transition"
+                  >
+                    <Camera className="h-5 w-5 text-muted-foreground" />
+                    <span className="text-sm font-medium">Take photo</span>
+                    <span className="text-xs text-muted-foreground">Use your camera</span>
+                    <input
+                      id="camera-upload"
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+                    />
+                  </label>
+                </div>
+
+                {photos.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    {photos.map((file, i) => (
+                      <div key={`${file.name}-${i}`} className="relative group">
+                        <img
+                          src={URL.createObjectURL(file)}
+                          alt={file.name}
+                          className="h-24 w-full rounded-md object-cover border border-border"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(i)}
+                          aria-label="Remove photo"
+                          className="absolute -top-2 -right-2 bg-background border border-border rounded-full p-1 shadow"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {photos.length} of 3+ photos added
+                </p>
               </div>
-              <Button type="submit" className="w-full mt-6" disabled={loading || !files || files.length < 3 || !email}>
+
+              <Button type="submit" className="w-full mt-2" disabled={loading || photos.length < 3 || !email}>
                 {loading ? "Uploading..." : "Submit for verification"}
               </Button>
             </form>
