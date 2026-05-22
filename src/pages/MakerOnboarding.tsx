@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+
 import { SERVICES } from "@/lib/services";
 import { MACHINE_PRESETS } from "@/lib/machinePresets";
 import { toast } from "sonner";
