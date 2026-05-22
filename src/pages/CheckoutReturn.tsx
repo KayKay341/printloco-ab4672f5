@@ -17,7 +17,7 @@ const CheckoutReturn = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <SEO title="Order Confirmed — PrintLoco" description="Thanks! Your PrintLoco order is confirmed. Your local maker will start work shortly and we'll keep you posted on progress and pickup details." path="/checkout/return" noindex />
+      <SEO title="Order Confirmed — PrintLoco" description="Your order is confirmed." path="/checkout/return" noindex />
       <Navbar />
       <main className="container max-w-2xl py-20 text-center">
         <div className="mx-auto grid h-20 w-20 place-items-center rounded-3xl bg-primary/10 text-primary">

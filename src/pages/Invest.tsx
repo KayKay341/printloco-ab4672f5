@@ -145,24 +145,12 @@ const Invest = () => {
     { n: metrics.savings_multiple?.value_text ?? "—", label: "Cheaper than Shapeways" },
   ];
 
-
-  const faqJsonLd = {
-    "@context": "https://schema.org",
-    "@type": "FAQPage",
-    mainEntity: FAQ.map((f) => ({
-      "@type": "Question",
-      name: f.q,
-      acceptedAnswer: { "@type": "Answer", text: f.a },
-    })),
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <SEO
         title="Invest in PrintLoco — The Hyperlocal 3D Printing Marketplace"
         description="PrintLoco is the Airbnb of local 3D printing — turning idle neighborhood printers into a same-day supply chain. Read the deck and back the seed round."
         path="/invest"
-        jsonLd={faqJsonLd}
       />
 
       <Navbar />
