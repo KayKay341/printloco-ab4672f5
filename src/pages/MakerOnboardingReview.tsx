@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +20,33 @@ const MakerOnboardingReview = () => {
   const [zip, setZip] = useState("");
   const [experience, setExperience] = useState("");
   const [cert, setCert] = useState<File | null>(null);
+
+  const expKey = user ? `onboarding:review:${user.id}` : "";
+
+  // Restore progress from profile + localStorage
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("full_name, phone, zip_code")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (prof?.full_name) setFullName(prof.full_name);
+      if (prof?.phone) setPhone(prof.phone);
+      if (prof?.zip_code) setZip(prof.zip_code);
+      try {
+        const saved = localStorage.getItem(expKey);
+        if (saved) setExperience(saved);
+      } catch {}
+    })();
+  }, [user, expKey]);
+
+  useEffect(() => {
+    if (!expKey) return;
+    localStorage.setItem(expKey, experience);
+  }, [experience, expKey]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
