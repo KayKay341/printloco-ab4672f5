@@ -16,11 +16,31 @@ const MakerOnboardingImages = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [existingUrls, setExistingUrls] = useState<string[]>([]);
   const [email, setEmail] = useState("");
 
+  // Restore email + previously uploaded photos from DB
   useEffect(() => {
-    if (user?.email) setEmail(user.email);
-  }, [user?.email]);
+    if (!user) return;
+    (async () => {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("contact_email")
+        .eq("id", user.id)
+        .maybeSingle();
+      setEmail(prof?.contact_email || user.email || "");
+
+      const { data: printers } = await supabase
+        .from("printers")
+        .select("sample_print_urls")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const urls = printers?.[0]?.sample_print_urls || [];
+      setExistingUrls(urls);
+    })();
+  }, [user]);
+
 
   const addFiles = (incoming: FileList | null) => {
     if (!incoming || incoming.length === 0) return;
