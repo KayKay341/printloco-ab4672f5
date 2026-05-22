@@ -155,6 +155,16 @@ const Admin = () => {
     );
   };
 
+  const setMakerStatus = async (printerId: string, status: "verified" | "rejected") => {
+    const { error } = await supabase
+      .from("printers")
+      .update({ verification_status: status, published: status === "verified" })
+      .eq("id", printerId);
+    if (error) return toast.error(error.message);
+    toast.success(`Marked as ${status}`);
+    loadAll();
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <SEO title="Admin | PrintLoco" description="PrintLoco admin console." path="/admin" noindex />
