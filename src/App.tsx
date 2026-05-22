@@ -179,7 +179,7 @@ const App = () => {
         <TooltipProvider>
           <Toaster />
           <Sonner />
-          <BrowserRouter>
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <AuthProvider>
               <AppContent />
             </AuthProvider>
@@ -200,7 +200,9 @@ const AppContent = () => {
       <VerificationBanner isVisible={!isVerified} />
       <PaymentTestModeBanner />
       <DemoModeBanner />
-      <AppRoutes />
+      <Suspense fallback={<PageLoading />}>
+        <AppRoutes />
+      </Suspense>
     </>
   );
 };
