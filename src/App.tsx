@@ -38,11 +38,74 @@ const Order = lazy(() => import("./pages/Order.tsx"));
 
 const queryClient = new QueryClient();
 
+const PageLoading = () => (
+  <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
+    <div className="flex items-center gap-3 text-sm font-semibold text-muted-foreground">
+      <span className="h-3 w-3 animate-pulse rounded-full bg-primary" />
+      Loading PrintLoco…
+    </div>
+  </main>
+);
+
 const AppFallback = () => (
   <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
     <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
-      <h1 className="font-display text-3xl font-semibold">Something didn’t load</h1>
-      <p className="mt-3 text-sm text-muted-foreground">Reload the page to try again.</p>
+      <h1 className="font-display text-3xl font-semibold">This page hit a snag</h1>
+      <p className="mt-3 text-sm text-muted-foreground">The rest of the site is still available. Reload this page or go home.</p>
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
+        >
+          Reload page
+        </button>
+        <a
+          href="/"
+          className="rounded-xl border border-border bg-background px-5 py-3 text-sm font-semibold text-foreground"
+        >
+          Go home
+        </a>
+      </div>
+    </section>
+  </main>
+);
+
+class PageErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("Page render failed", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <AppFallback />;
+    }
+
+    return this.props.children;
+  }
+}
+
+const SafePage = ({ component: Component }: { component: LazyExoticComponent<ComponentType> }) => (
+  <PageErrorBoundary>
+    <Suspense fallback={<PageLoading />}>
+      <Component />
+    </Suspense>
+  </PageErrorBoundary>
+);
+
+const routeElement = (component: LazyExoticComponent<ComponentType>) => <SafePage component={component} />;
+
+const FatalAppFallback = () => (
+  <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
+    <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
+      <h1 className="font-display text-3xl font-semibold">PrintLoco didn’t start</h1>
+      <p className="mt-3 text-sm text-muted-foreground">Reload the app to try again.</p>
       <button
         type="button"
         onClick={() => window.location.reload()}
