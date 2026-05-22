@@ -50,6 +50,17 @@ type Lead = {
   created_at: string;
 };
 
+type MakerSubmission = {
+  id: string;
+  brand: string;
+  model: string;
+  owner_id: string;
+  verification_status: string;
+  sample_print_urls: string[] | null;
+  created_at: string;
+  profiles?: { full_name: string | null; contact_email: string | null; phone: string | null; zip_code: string | null } | null;
+};
+
 const Admin = () => {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: roleLoading } = useIsAdmin();
@@ -57,6 +68,7 @@ const Admin = () => {
   const [signups, setSignups] = useState<Signup[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [metrics, setMetrics] = useState<AppMetric[]>([]);
+  const [makers, setMakers] = useState<MakerSubmission[]>([]);
   const [newCity, setNewCity] = useState({ name: "", slug: "", status: "waitlist" as City["status"] });
 
   const loadAll = async () => {
