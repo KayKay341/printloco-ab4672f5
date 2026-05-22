@@ -16,7 +16,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { ShieldCheck, Mail, Users, Sparkles, Send, Save, Plus, Trash2 } from "lucide-react";
+import { ShieldCheck, Mail, Users, Sparkles, Send, Save, Plus, Trash2, CheckCircle2, XCircle, Factory } from "lucide-react";
 import { format } from "date-fns";
 import { refreshMetrics, type AppMetric } from "@/hooks/useAppMetrics";
 
@@ -50,6 +50,17 @@ type Lead = {
   created_at: string;
 };
 
+type MakerSubmission = {
+  id: string;
+  brand: string;
+  model: string;
+  owner_id: string;
+  verification_status: string;
+  sample_print_urls: string[] | null;
+  created_at: string;
+  profiles?: { full_name: string | null; contact_email: string | null; phone: string | null; zip_code: string | null } | null;
+};
+
 const Admin = () => {
   const { user, loading: authLoading } = useAuth();
   const { isAdmin, loading: roleLoading } = useIsAdmin();
@@ -57,19 +68,33 @@ const Admin = () => {
   const [signups, setSignups] = useState<Signup[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
   const [metrics, setMetrics] = useState<AppMetric[]>([]);
+  const [makers, setMakers] = useState<MakerSubmission[]>([]);
   const [newCity, setNewCity] = useState({ name: "", slug: "", status: "waitlist" as City["status"] });
 
   const loadAll = async () => {
-    const [citiesRes, signupsRes, leadsRes, metricsRes] = await Promise.all([
+    const [citiesRes, signupsRes, leadsRes, metricsRes, printersRes] = await Promise.all([
       supabase.from("cities").select("*").order("signup_count", { ascending: false }),
       supabase.from("waitlist_signups").select("*").order("created_at", { ascending: false }).limit(500),
       supabase.from("investor_leads").select("*").order("created_at", { ascending: false }).limit(200),
       supabase.from("app_metrics").select("*").order("key"),
+      supabase.from("printers")
+        .select("id, brand, model, owner_id, verification_status, sample_print_urls, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200),
     ]);
     if (citiesRes.data) setCities(citiesRes.data as City[]);
     if (signupsRes.data) setSignups(signupsRes.data as Signup[]);
     if (leadsRes.data) setLeads(leadsRes.data as Lead[]);
     if (metricsRes.data) setMetrics(metricsRes.data as AppMetric[]);
+    if (printersRes.data) {
+      const ownerIds = Array.from(new Set(printersRes.data.map((p: any) => p.owner_id)));
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, full_name, contact_email, phone, zip_code")
+        .in("id", ownerIds);
+      const byId = new Map((profs || []).map((p: any) => [p.id, p]));
+      setMakers(printersRes.data.map((p: any) => ({ ...p, profiles: byId.get(p.owner_id) || null })) as MakerSubmission[]);
+    }
   };
 
   useEffect(() => {
@@ -130,6 +155,16 @@ const Admin = () => {
     );
   };
 
+  const setMakerStatus = async (printerId: string, status: "verified" | "rejected") => {
+    const { error } = await supabase
+      .from("printers")
+      .update({ verification_status: status, published: status === "verified" })
+      .eq("id", printerId);
+    if (error) return toast.error(error.message);
+    toast.success(`Marked as ${status}`);
+    loadAll();
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <SEO title="Admin | PrintLoco" description="PrintLoco admin console." path="/admin" noindex />
@@ -153,13 +188,64 @@ const Admin = () => {
           <KpiCard icon={Mail} label="Investor leads" value={leads.length.toLocaleString()} />
         </div>
 
-        <Tabs defaultValue="metrics" className="mt-10">
+        <Tabs defaultValue="makers" className="mt-10">
           <TabsList>
+            <TabsTrigger value="makers">Maker verification</TabsTrigger>
             <TabsTrigger value="metrics">Site numbers</TabsTrigger>
             <TabsTrigger value="cities">Cities</TabsTrigger>
             <TabsTrigger value="signups">Waitlist</TabsTrigger>
             <TabsTrigger value="leads">Investor leads</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="makers" className="mt-6 space-y-4">
+            {makers.length === 0 && (
+              <Card className="p-10 text-center text-muted-foreground">No maker submissions yet.</Card>
+            )}
+            {makers.map((m) => {
+              const photos = m.sample_print_urls || [];
+              const statusColor =
+                m.verification_status === "verified" ? "text-emerald-600" :
+                m.verification_status === "rejected" ? "text-destructive" :
+                m.verification_status === "pending" ? "text-amber-600" : "text-muted-foreground";
+              return (
+                <Card key={m.id} className="p-5 space-y-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Factory className="h-4 w-4 text-muted-foreground" />
+                        <h3 className="font-display text-lg font-semibold">{m.brand} {m.model}</h3>
+                      </div>
+                      <div className="mt-1 text-sm text-muted-foreground">
+                        {m.profiles?.full_name || "(no name)"} · {m.profiles?.contact_email || "(no email)"} · {m.profiles?.phone || "no phone"} · ZIP {m.profiles?.zip_code || "—"}
+                      </div>
+                      <div className={`mt-1 text-xs font-semibold uppercase tracking-wider ${statusColor}`}>
+                        {m.verification_status}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="hero" onClick={() => setMakerStatus(m.id, "verified")}>
+                        <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setMakerStatus(m.id, "rejected")}>
+                        <XCircle className="h-3.5 w-3.5" /> Reject
+                      </Button>
+                    </div>
+                  </div>
+                  {photos.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {photos.map((url, i) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block">
+                          <img src={url} alt={`Photo ${i + 1}`} className="h-32 w-full rounded-md object-cover border border-border" />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">No photos uploaded yet.</p>
+                  )}
+                </Card>
+              );
+            })}
+          </TabsContent>
 
           <TabsContent value="metrics" className="mt-6">
             <Card className="p-6">

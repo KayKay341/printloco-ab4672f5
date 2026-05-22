@@ -16,11 +16,31 @@ const MakerOnboardingImages = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [existingUrls, setExistingUrls] = useState<string[]>([]);
   const [email, setEmail] = useState("");
 
+  // Restore email + previously uploaded photos from DB
   useEffect(() => {
-    if (user?.email) setEmail(user.email);
-  }, [user?.email]);
+    if (!user) return;
+    (async () => {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("contact_email")
+        .eq("id", user.id)
+        .maybeSingle();
+      setEmail(prof?.contact_email || user.email || "");
+
+      const { data: printers } = await supabase
+        .from("printers")
+        .select("sample_print_urls")
+        .eq("owner_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const urls = printers?.[0]?.sample_print_urls || [];
+      setExistingUrls(urls);
+    })();
+  }, [user]);
+
 
   const addFiles = (incoming: FileList | null) => {
     if (!incoming || incoming.length === 0) return;
@@ -47,7 +67,7 @@ const MakerOnboardingImages = () => {
       toast.error("Please enter a valid contact email.");
       return;
     }
-    if (photos.length < 3) {
+    if (photos.length + existingUrls.length < 3) {
       toast.error("Please upload at least 3 photos.");
       return;
     }
@@ -172,8 +192,18 @@ const MakerOnboardingImages = () => {
                   </label>
                 </div>
 
-                {photos.length > 0 && (
+                {(photos.length > 0 || existingUrls.length > 0) && (
                   <div className="grid grid-cols-3 gap-2 pt-1">
+                    {existingUrls.map((url, i) => (
+                      <div key={`existing-${i}`} className="relative">
+                        <img
+                          src={url}
+                          alt={`Saved ${i + 1}`}
+                          className="h-24 w-full rounded-md object-cover border border-primary/40"
+                        />
+                        <span className="absolute bottom-1 left-1 rounded bg-primary/90 text-primary-foreground text-[10px] px-1">Saved</span>
+                      </div>
+                    ))}
                     {photos.map((file, i) => (
                       <div key={`${file.name}-${i}`} className="relative group">
                         <img
@@ -194,11 +224,12 @@ const MakerOnboardingImages = () => {
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {photos.length} of 3+ photos added
+                  {photos.length + existingUrls.length} of 3+ photos added
+                  {existingUrls.length > 0 && ` (${existingUrls.length} already saved)`}
                 </p>
               </div>
 
-              <Button type="submit" className="w-full mt-2" disabled={loading || photos.length < 3 || !email}>
+              <Button type="submit" className="w-full mt-2" disabled={loading || (photos.length + existingUrls.length) < 3 || !email}>
                 {loading ? "Uploading..." : "Submit for verification"}
               </Button>
             </form>
