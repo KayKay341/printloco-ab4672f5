@@ -16,7 +16,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { ShieldCheck, Mail, Users, Sparkles, Send, Save, Plus, Trash2 } from "lucide-react";
+import { ShieldCheck, Mail, Users, Sparkles, Send, Save, Plus, Trash2, CheckCircle2, XCircle, Factory } from "lucide-react";
 import { format } from "date-fns";
 import { refreshMetrics, type AppMetric } from "@/hooks/useAppMetrics";
 
