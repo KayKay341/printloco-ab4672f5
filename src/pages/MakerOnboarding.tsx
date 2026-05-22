@@ -139,8 +139,32 @@ const MakerOnboarding = () => {
               </div>
 
               <div className="space-y-2">
-                <Label>Upload machine photo</Label>
-                <Input type="file" accept="image/*" onChange={(e) => setPhoto(e.target.files?.[0] || null)} required />
+                <Label htmlFor="machine-photo">Upload machine photo</Label>
+                <Input
+                  id="machine-photo"
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null;
+                    setPhoto(f);
+                    if (f) toast.success(`Selected: ${f.name}`);
+                  }}
+                />
+                {photo && (
+                  <div className="flex items-center gap-3 rounded-md border border-border bg-muted/30 p-2">
+                    <img
+                      src={URL.createObjectURL(photo)}
+                      alt="Machine preview"
+                      className="h-16 w-16 rounded object-cover"
+                    />
+                    <div className="text-sm">
+                      <p className="font-medium truncate max-w-[16rem]">{photo.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(photo.size / 1024).toFixed(1)} KB · ready to upload
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <Button type="submit" className="w-full mt-6" disabled={loading || !formData.model || !photo}>
