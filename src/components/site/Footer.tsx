@@ -50,7 +50,7 @@ const Footer = () => (
               <div className="font-display text-sm font-semibold">{c.title}</div>
               <ul className="mt-4 space-y-2.5">
                 {c.links.map((l) => (
-                  <li key={l.href}>
+                  <li key={`${c.title}-${l.label}-${l.href}`}>
                     {l.href.startsWith("/") ? (
                       <Link to={l.href} className="text-sm text-muted-foreground transition-colors hover:text-foreground">
                         {l.label}

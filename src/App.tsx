@@ -1,7 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom";
-import { AnimatePresence } from "framer-motion";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -38,6 +37,22 @@ import Order from "./pages/Order.tsx";
 
 const queryClient = new QueryClient();
 
+const AppFallback = () => (
+  <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
+    <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
+      <h1 className="font-display text-3xl font-semibold">Something didn’t load</h1>
+      <p className="mt-3 text-sm text-muted-foreground">Reload the page to try again.</p>
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="mt-6 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
+      >
+        Reload page
+      </button>
+    </section>
+  </main>
+);
+
 class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
 
@@ -51,32 +66,16 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
 
   render() {
     if (this.state.hasError) {
-      return (
-        <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
-          <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
-            <h1 className="font-display text-3xl font-semibold">Something didn’t load</h1>
-            <p className="mt-3 text-sm text-muted-foreground">Reload the page to try again.</p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="mt-6 rounded-xl bg-primary px-5 py-3 text-sm font-semibold text-primary-foreground"
-            >
-              Reload page
-            </button>
-          </section>
-        </main>
-      );
+      return <AppFallback />;
     }
 
     return this.props.children;
   }
 }
 
-const AnimatedRoutes = () => {
-  const location = useLocation();
+const AppRoutes = () => {
   return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
+      <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/dashboard" element={<Dashboard />} />
@@ -106,7 +105,6 @@ const AnimatedRoutes = () => {
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
-    </AnimatePresence>
   );
 };
 
@@ -138,7 +136,7 @@ const AppContent = () => {
       <VerificationBanner isVisible={!isVerified} />
       <PaymentTestModeBanner />
       <DemoModeBanner />
-      <AnimatedRoutes />
+      <AppRoutes />
     </>
   );
 };
