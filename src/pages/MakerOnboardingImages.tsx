@@ -67,7 +67,7 @@ const MakerOnboardingImages = () => {
       toast.error("Please enter a valid contact email.");
       return;
     }
-    if (photos.length < 3) {
+    if (photos.length + existingUrls.length < 3) {
       toast.error("Please upload at least 3 photos.");
       return;
     }
