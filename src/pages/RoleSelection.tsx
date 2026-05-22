@@ -16,12 +16,8 @@ const RoleSelection = () => {
   useEffect(() => {
     if (!user) {
       navigate("/auth?mode=signin", { replace: true });
-      return;
     }
-    if (profile?.role) {
-      navigate(profile.role === "maker" ? "/dashboard" : "/services", { replace: true });
-    }
-  }, [user, profile?.role, navigate]);
+  }, [user, navigate]);
 
 
   const selectRole = async (role: "customer" | "maker") => {
