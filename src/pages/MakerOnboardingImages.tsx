@@ -192,8 +192,18 @@ const MakerOnboardingImages = () => {
                   </label>
                 </div>
 
-                {photos.length > 0 && (
+                {(photos.length > 0 || existingUrls.length > 0) && (
                   <div className="grid grid-cols-3 gap-2 pt-1">
+                    {existingUrls.map((url, i) => (
+                      <div key={`existing-${i}`} className="relative">
+                        <img
+                          src={url}
+                          alt={`Saved ${i + 1}`}
+                          className="h-24 w-full rounded-md object-cover border border-primary/40"
+                        />
+                        <span className="absolute bottom-1 left-1 rounded bg-primary/90 text-primary-foreground text-[10px] px-1">Saved</span>
+                      </div>
+                    ))}
                     {photos.map((file, i) => (
                       <div key={`${file.name}-${i}`} className="relative group">
                         <img
@@ -214,11 +224,12 @@ const MakerOnboardingImages = () => {
                   </div>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {photos.length} of 3+ photos added
+                  {photos.length + existingUrls.length} of 3+ photos added
+                  {existingUrls.length > 0 && ` (${existingUrls.length} already saved)`}
                 </p>
               </div>
 
-              <Button type="submit" className="w-full mt-2" disabled={loading || photos.length < 3 || !email}>
+              <Button type="submit" className="w-full mt-2" disabled={loading || (photos.length + existingUrls.length) < 3 || !email}>
                 {loading ? "Uploading..." : "Submit for verification"}
               </Button>
             </form>
