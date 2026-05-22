@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+
 import { SERVICES } from "@/lib/services";
 import { MACHINE_PRESETS } from "@/lib/machinePresets";
 import { toast } from "sonner";
@@ -22,7 +22,7 @@ const MakerOnboarding = () => {
     model: "",
     serviceId: "",
   });
-  const [photo, setPhoto] = useState<File | null>(null);
+  
 
   const brands = useMemo(() => {
     if (!formData.serviceId || !MACHINE_PRESETS[formData.serviceId]) return [];
@@ -40,10 +40,6 @@ const MakerOnboarding = () => {
       toast.error("Please fill in all fields.");
       return;
     }
-    if (!photo) {
-      toast.error("Please upload a photo of your machine.");
-      return;
-    }
     setLoading(true);
 
     try {
@@ -52,15 +48,6 @@ const MakerOnboarding = () => {
         .update({ role: "maker" })
         .eq("id", user.id);
 
-      // Upload machine photo to storage
-      const ext = photo.name.split(".").pop() || "jpg";
-      const path = `${user.id}/machine-${Date.now()}.${ext}`;
-      const { error: uploadErr } = await supabase.storage
-        .from("printer-verification")
-        .upload(path, photo, { upsert: true, contentType: photo.type });
-      if (uploadErr) throw uploadErr;
-      const { data: pub } = supabase.storage.from("printer-verification").getPublicUrl(path);
-
       const { error: insertErr } = await supabase
         .from("printers")
         .insert({
@@ -68,7 +55,6 @@ const MakerOnboarding = () => {
           brand: formData.brand,
           model: formData.model,
           materials: ["PLA"],
-          sample_print_urls: [pub.publicUrl],
         });
       if (insertErr) throw insertErr;
 
@@ -138,37 +124,8 @@ const MakerOnboarding = () => {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="machine-photo">Upload machine photo</Label>
-                <Input
-                  id="machine-photo"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] || null;
-                    setPhoto(f);
-                    if (f) toast.success(`Selected: ${f.name}`);
-                  }}
-                />
-                {photo && (
-                  <div className="flex items-center gap-3 rounded-md border border-border bg-muted/30 p-2">
-                    <img
-                      src={URL.createObjectURL(photo)}
-                      alt="Machine preview"
-                      className="h-16 w-16 rounded object-cover"
-                    />
-                    <div className="text-sm">
-                      <p className="font-medium truncate max-w-[16rem]">{photo.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {(photo.size / 1024).toFixed(1)} KB · ready to upload
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <Button type="submit" className="w-full mt-6" disabled={loading || !formData.model || !photo}>
-                {loading ? "Saving..." : "Start my shop"}
+              <Button type="submit" className="w-full mt-6" disabled={loading || !formData.model}>
+                {loading ? "Saving..." : "Continue"}
               </Button>
             </form>
           </CardContent>
