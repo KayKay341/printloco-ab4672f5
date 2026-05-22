@@ -72,16 +72,29 @@ const Admin = () => {
   const [newCity, setNewCity] = useState({ name: "", slug: "", status: "waitlist" as City["status"] });
 
   const loadAll = async () => {
-    const [citiesRes, signupsRes, leadsRes, metricsRes] = await Promise.all([
+    const [citiesRes, signupsRes, leadsRes, metricsRes, printersRes] = await Promise.all([
       supabase.from("cities").select("*").order("signup_count", { ascending: false }),
       supabase.from("waitlist_signups").select("*").order("created_at", { ascending: false }).limit(500),
       supabase.from("investor_leads").select("*").order("created_at", { ascending: false }).limit(200),
       supabase.from("app_metrics").select("*").order("key"),
+      supabase.from("printers")
+        .select("id, brand, model, owner_id, verification_status, sample_print_urls, created_at")
+        .order("created_at", { ascending: false })
+        .limit(200),
     ]);
     if (citiesRes.data) setCities(citiesRes.data as City[]);
     if (signupsRes.data) setSignups(signupsRes.data as Signup[]);
     if (leadsRes.data) setLeads(leadsRes.data as Lead[]);
     if (metricsRes.data) setMetrics(metricsRes.data as AppMetric[]);
+    if (printersRes.data) {
+      const ownerIds = Array.from(new Set(printersRes.data.map((p: any) => p.owner_id)));
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, full_name, contact_email, phone, zip_code")
+        .in("id", ownerIds);
+      const byId = new Map((profs || []).map((p: any) => [p.id, p]));
+      setMakers(printersRes.data.map((p: any) => ({ ...p, profiles: byId.get(p.owner_id) || null })) as MakerSubmission[]);
+    }
   };
 
   useEffect(() => {
