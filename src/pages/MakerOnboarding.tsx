@@ -52,20 +52,32 @@ const MakerOnboarding = () => {
         .update({ role: "maker" })
         .eq("id", user.id);
 
-      await supabase
+      // Upload machine photo to storage
+      const ext = photo.name.split(".").pop() || "jpg";
+      const path = `${user.id}/machine-${Date.now()}.${ext}`;
+      const { error: uploadErr } = await supabase.storage
+        .from("printer-verification")
+        .upload(path, photo, { upsert: true, contentType: photo.type });
+      if (uploadErr) throw uploadErr;
+      const { data: pub } = supabase.storage.from("printer-verification").getPublicUrl(path);
+
+      const { error: insertErr } = await supabase
         .from("printers")
         .insert({
           owner_id: user.id,
           brand: formData.brand,
           model: formData.model,
-          materials: ["PLA"], 
+          materials: ["PLA"],
+          sample_print_urls: [pub.publicUrl],
         });
+      if (insertErr) throw insertErr;
 
       await refreshProfile();
       toast.success("Machine registered! Next: upload verification photos.");
       navigate("/onboarding/images");
-    } catch (error) {
-      toast.error("Failed to complete onboarding.");
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "Failed to complete onboarding.");
     } finally {
       setLoading(false);
     }
