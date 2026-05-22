@@ -130,7 +130,7 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
 
   render() {
     if (this.state.hasError) {
-      return <AppFallback />;
+      return <FatalAppFallback />;
     }
 
     return this.props.children;
@@ -140,34 +140,34 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
 const AppRoutes = () => {
   return (
       <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/auth" element={<Auth />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/printers" element={<Printers />} />
-        <Route path="/printers/new" element={<NewPrinter />} />
-        <Route path="/upload" element={<Upload />} />
-        <Route path="/services" element={<Services />} />
-        <Route path="/order/:service" element={<Order />} />
-        <Route path="/waitlist" element={<Waitlist />} />
-        <Route path="/invest" element={<Invest />} />
-        <Route path="/checkout/return" element={<CheckoutReturn />} />
-        <Route path="/admin" element={<Admin />} />
-        <Route path="/unsubscribe" element={<Unsubscribe />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/gift-cards" element={<GiftCards />} />
-        <Route path="/gift-cards/redeem" element={<RedeemGiftCard />} />
-        <Route path="/gift-cards/return" element={<GiftCardReturn />} />
-        <Route path="/become-a-maker" element={<BecomeMaker />} />
-        <Route path="/become-a-maker/:service" element={<BecomeMaker />} />
-        <Route path="/onboarding/maker" element={<MakerOnboarding />} />
-        <Route path="/onboarding/images" element={<MakerOnboardingImages />} />
-        <Route path="/onboarding/review" element={<MakerOnboardingReview />} />
-        <Route path="/onboarding/financials" element={<MakerOnboardingFinancials />} />
-        <Route path="/onboarding/complete" element={<MakerOnboardingComplete />} />
-        <Route path="/maker/dashboard-selector" element={<MakerDashboardSelector />} />
-        <Route path="/onboarding/role" element={<RoleSelection />} />
+        <Route path="/" element={routeElement(Index)} />
+        <Route path="/auth" element={routeElement(Auth)} />
+        <Route path="/dashboard" element={routeElement(Dashboard)} />
+        <Route path="/printers" element={routeElement(Printers)} />
+        <Route path="/printers/new" element={routeElement(NewPrinter)} />
+        <Route path="/upload" element={routeElement(Upload)} />
+        <Route path="/services" element={routeElement(Services)} />
+        <Route path="/order/:service" element={routeElement(Order)} />
+        <Route path="/waitlist" element={routeElement(Waitlist)} />
+        <Route path="/invest" element={routeElement(Invest)} />
+        <Route path="/checkout/return" element={routeElement(CheckoutReturn)} />
+        <Route path="/admin" element={routeElement(Admin)} />
+        <Route path="/unsubscribe" element={routeElement(Unsubscribe)} />
+        <Route path="/reset-password" element={routeElement(ResetPassword)} />
+        <Route path="/gift-cards" element={routeElement(GiftCards)} />
+        <Route path="/gift-cards/redeem" element={routeElement(RedeemGiftCard)} />
+        <Route path="/gift-cards/return" element={routeElement(GiftCardReturn)} />
+        <Route path="/become-a-maker" element={routeElement(BecomeMaker)} />
+        <Route path="/become-a-maker/:service" element={routeElement(BecomeMaker)} />
+        <Route path="/onboarding/maker" element={routeElement(MakerOnboarding)} />
+        <Route path="/onboarding/images" element={routeElement(MakerOnboardingImages)} />
+        <Route path="/onboarding/review" element={routeElement(MakerOnboardingReview)} />
+        <Route path="/onboarding/financials" element={routeElement(MakerOnboardingFinancials)} />
+        <Route path="/onboarding/complete" element={routeElement(MakerOnboardingComplete)} />
+        <Route path="/maker/dashboard-selector" element={routeElement(MakerDashboardSelector)} />
+        <Route path="/onboarding/role" element={routeElement(RoleSelection)} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-        <Route path="*" element={<NotFound />} />
+        <Route path="*" element={routeElement(NotFound)} />
       </Routes>
   );
 };
