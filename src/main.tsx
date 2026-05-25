@@ -9,6 +9,7 @@ const RETRY_DELAYS_MS = [250, 750, 1500, 3000];
 let root: Root | null = null;
 let retryCount = 0;
 let retryTimer: number | undefined;
+let mountGeneration = 0;
 
 declare global {
   interface Window {
@@ -44,6 +45,8 @@ const isChunkLoadError = (reason: unknown) => {
 
 const mountApp = () => {
   window.clearTimeout(retryTimer);
+  mountGeneration += 1;
+  const generation = mountGeneration;
   const rootEl = ensureRoot();
   rootEl.innerHTML = "";
 
@@ -60,6 +63,9 @@ const mountApp = () => {
       <App />
     </HelmetProvider>
   );
+    window.setTimeout(() => {
+      if (generation === mountGeneration) retryCount = 0;
+    }, 6000);
   } catch (err) {
     scheduleRecover(err);
   }
