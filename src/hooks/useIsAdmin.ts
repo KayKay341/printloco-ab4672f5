@@ -26,6 +26,12 @@ export const useIsAdmin = () => {
           setIsAdmin(!!data);
           setLoading(false);
         }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsAdmin(false);
+          setLoading(false);
+        }
       });
     return () => {
       cancelled = true;
