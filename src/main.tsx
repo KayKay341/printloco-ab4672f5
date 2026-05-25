@@ -1,10 +1,15 @@
+import { useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { HelmetProvider } from "react-helmet-async";
 import App from "./App.tsx";
 import "./index.css";
 
 let reactRoot: Root | null = null;
-let lastRenderAttempt = 0;
+let rootContainer: HTMLElement | null = null;
+let recoveryCheckQueued = false;
+
+const RECOVERY_RELOAD_KEY = "printloco:last-recovery-reload";
+const RECOVERY_RELOAD_COOLDOWN_MS = 10000;
 
 const ensureRootElement = () => {
   let rootElement = document.getElementById("root");
@@ -22,35 +27,63 @@ const renderHardFallback = () => {
   ensureRootElement().innerHTML = '<main data-hard-fallback="true" style="min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif;padding:24px;background:#fff;color:#111"><section style="max-width:420px;text-align:center"><h1>PrintLoco is ready</h1><p>The preview connection paused. Reload if it does not resume automatically.</p><div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap"><button onclick="window.location.reload()" style="padding:12px 18px;border:0;border-radius:12px;background:#111;color:#fff;font-weight:700">Reload page</button><a href="/" style="padding:12px 18px;border:1px solid #ddd;border-radius:12px;color:#111;text-decoration:none;font-weight:700">Go home</a></div></section></main>';
 };
 
-const renderApp = () => {
-  const rootElement = ensureRootElement();
-  lastRenderAttempt = Date.now();
+const RootApp = () => {
+  useEffect(() => {
+    document.documentElement.dataset.printlocoMounted = "true";
+    return () => {
+      delete document.documentElement.dataset.printlocoMounted;
+    };
+  }, []);
 
-  if (!reactRoot) {
-    reactRoot = createRoot(rootElement);
-  }
-
-  reactRoot.render(
-    <HelmetProvider>
-      <App />
-    </HelmetProvider>
+  return (
+    <div data-printloco-app="true">
+      <HelmetProvider>
+        <App />
+      </HelmetProvider>
+    </div>
   );
 };
 
-const rootLooksEmpty = () => {
+const renderApp = () => {
   const rootElement = ensureRootElement();
-  return !rootElement.hasChildNodes() || rootElement.textContent?.trim() === "";
+
+  if (!reactRoot || rootContainer !== rootElement) {
+    reactRoot = createRoot(rootElement);
+    rootContainer = rootElement;
+  }
+
+  reactRoot.render(<RootApp />);
+};
+
+const rootLooksBroken = () => {
+  const rootElement = document.getElementById("root");
+  if (!rootElement || !rootElement.isConnected) return true;
+  if (rootElement.querySelector("[data-hard-fallback='true']")) return true;
+  if (!rootElement.hasChildNodes()) return true;
+  return !rootElement.querySelector("[data-printloco-app='true']");
+};
+
+const reloadToRecover = () => {
+  const now = Date.now();
+  const lastReload = Number(window.sessionStorage.getItem(RECOVERY_RELOAD_KEY) ?? 0);
+
+  if (now - lastReload > RECOVERY_RELOAD_COOLDOWN_MS) {
+    window.sessionStorage.setItem(RECOVERY_RELOAD_KEY, String(now));
+    window.location.reload();
+    return;
+  }
+
+  renderHardFallback();
 };
 
 const recoverIfBlank = () => {
-  const enoughTimePassed = Date.now() - lastRenderAttempt > 1500;
-  if (rootLooksEmpty() && enoughTimePassed) {
-    try {
-      renderApp();
-    } catch {
-      renderHardFallback();
-    }
-  }
+  if (document.visibilityState === "hidden" || recoveryCheckQueued) return;
+
+  recoveryCheckQueued = true;
+  window.setTimeout(() => {
+    recoveryCheckQueued = false;
+    if (rootLooksBroken()) reloadToRecover();
+  }, 300);
 };
 
 window.addEventListener("error", recoverIfBlank);
