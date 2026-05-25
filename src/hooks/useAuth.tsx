@@ -142,8 +142,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useAuth = () => {
+const FALLBACK_AUTH: AuthContextValue = {
+  user: null,
+  session: null,
+  profile: null,
+  loading: false,
+  signOut: async () => {},
+  refreshProfile: async () => {},
+};
+
+export const useAuth = (): AuthContextValue => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
+  // Graceful fallback during HMR or if a consumer renders outside the provider,
+  // so a missing context never produces a blank screen.
+  return ctx ?? FALLBACK_AUTH;
 };
