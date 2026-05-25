@@ -111,18 +111,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let cancelled = false;
+    let refreshInFlight = false;
 
     const refreshAfterResume = async () => {
-      if (document.visibilityState === "hidden") return;
+      if (document.visibilityState === "hidden" || refreshInFlight) return;
+      refreshInFlight = true;
 
       try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        const { data: { session: currentSession } } = await withTimeout(supabase.auth.getSession(), AUTH_RESUME_TIMEOUT_MS);
         if (cancelled) return;
 
         setSession(currentSession);
         setUser(currentSession?.user ?? null);
         if (currentSession?.user) {
-          await loadProfile(currentSession.user.id);
+          await loadProfile(currentSession.user.id, () => !cancelled);
         } else {
           setProfile(null);
         }
@@ -133,6 +135,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setProfile(null);
         }
       } finally {
+        refreshInFlight = false;
         if (!cancelled) setLoading(false);
       }
     };
