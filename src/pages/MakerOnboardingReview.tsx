@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { OnboardingSteps, MAKER_STEPS } from "@/components/OnboardingSteps";
 import { MotionWrapper } from "@/components/ui/MotionWrapper";
@@ -21,9 +22,13 @@ const MakerOnboardingReview = () => {
   const [experience, setExperience] = useState("");
   const [cert, setCert] = useState<File | null>(null);
 
+  // Consent state — captured for proof-of-opt-in (Twilio / email compliance)
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreeNotifications, setAgreeNotifications] = useState(false);
+  const [agreeMarketing, setAgreeMarketing] = useState(false);
+
   const expKey = user ? `onboarding:review:${user.id}` : "";
 
-  // Restore progress from profile + localStorage
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -47,12 +52,15 @@ const MakerOnboardingReview = () => {
     localStorage.setItem(expKey, experience);
   }, [experience, expKey]);
 
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     if (!fullName || !phone || !zip) {
       toast.error("Please fill in all required fields.");
+      return;
+    }
+    if (!agreeTerms || !agreeNotifications) {
+      toast.error("Please agree to the terms and notification consent to continue.");
       return;
     }
     setLoading(true);
@@ -62,7 +70,25 @@ const MakerOnboardingReview = () => {
         .update({ full_name: fullName, phone, zip_code: zip })
         .eq("id", user.id);
 
-      toast.success("Submitted for review! We'll email you once approved.");
+      // Store proof-of-consent locally so it can be exported as Twilio/email
+      // verification evidence (timestamp + IP-less but user-bound).
+      try {
+        const consentRecord = {
+          user_id: user.id,
+          full_name: fullName,
+          phone,
+          agreed_terms: agreeTerms,
+          agreed_notifications: agreeNotifications,
+          agreed_marketing: agreeMarketing,
+          consent_text:
+            "I agree to PrintLoco's terms and confirm I want to receive order status notifications by SMS and email at the phone and email I provided. Message and data rates may apply. Reply STOP to opt out.",
+          captured_at: new Date().toISOString(),
+          user_agent: navigator.userAgent,
+        };
+        localStorage.setItem(`consent:${user.id}`, JSON.stringify(consentRecord));
+      } catch {}
+
+      toast.success("Submitted for review! We'll text & email you once approved.");
       navigate("/onboarding/complete");
     } catch (err) {
       toast.error("Failed to submit for review.");
@@ -108,6 +134,47 @@ const MakerOnboardingReview = () => {
                 <Label>Certification / proof of purchase (optional)</Label>
                 <Input type="file" accept="image/*,application/pdf" onChange={(e) => setCert(e.target.files?.[0] || null)} />
               </div>
+
+              <div className="rounded-2xl border border-border bg-muted/30 p-4 space-y-3 mt-6">
+                <p className="text-sm font-medium">Before you submit</p>
+
+                <label className="flex items-start gap-3 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={agreeTerms}
+                    onCheckedChange={(v) => setAgreeTerms(v === true)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-muted-foreground">
+                    I agree to PrintLoco's maker terms — I'll do my best work, be honest about timelines,
+                    and treat customer files and info with care.
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-3 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={agreeNotifications}
+                    onCheckedChange={(v) => setAgreeNotifications(v === true)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-muted-foreground">
+                    Yes, please reach out to me with notifications about my project status (new orders,
+                    messages, payouts) by SMS and email at the number and email above.
+                    Message &amp; data rates may apply. Reply STOP to opt out anytime.
+                  </span>
+                </label>
+
+                <label className="flex items-start gap-3 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={agreeMarketing}
+                    onCheckedChange={(v) => setAgreeMarketing(v === true)}
+                    className="mt-0.5"
+                  />
+                  <span className="text-muted-foreground">
+                    Optional: send me PrintLoco tips, promotions, and product updates.
+                  </span>
+                </label>
+              </div>
+
               <Button type="submit" className="w-full mt-6" disabled={loading}>
                 {loading ? "Submitting…" : "Submit for review"}
               </Button>
