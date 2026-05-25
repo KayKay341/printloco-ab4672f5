@@ -100,9 +100,7 @@ new MutationObserver(recoverIfBlank).observe(document.body, { childList: true })
 try {
   renderApp();
 
-  window.setTimeout(() => {
-    if (rootLooksEmpty()) renderHardFallback();
-  }, 4000);
+  window.setTimeout(recoverIfBlank, 4000);
 
   window.setInterval(recoverIfBlank, 2500);
 } catch {
