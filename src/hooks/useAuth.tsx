@@ -31,12 +31,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (uid: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, full_name, role, neighborhood, zip_code, phone")
-      .eq("id", uid)
-      .maybeSingle();
-    setProfile((data as Profile) ?? null);
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, full_name, role, neighborhood, zip_code, phone")
+        .eq("id", uid)
+        .maybeSingle();
+      setProfile((data as Profile) ?? null);
+    } catch {
+      setProfile(null);
+    }
   };
 
   useEffect(() => {
@@ -78,6 +82,48 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       mounted = false;
       window.clearTimeout(timeout);
       sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const refreshAfterResume = async () => {
+      if (document.visibilityState === "hidden") return;
+
+      try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (cancelled) return;
+
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        if (currentSession?.user) {
+          await loadProfile(currentSession.user.id);
+        } else {
+          setProfile(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    window.addEventListener("focus", refreshAfterResume);
+    window.addEventListener("online", refreshAfterResume);
+    window.addEventListener("pageshow", refreshAfterResume);
+    document.addEventListener("visibilitychange", refreshAfterResume);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshAfterResume);
+      window.removeEventListener("online", refreshAfterResume);
+      window.removeEventListener("pageshow", refreshAfterResume);
+      document.removeEventListener("visibilitychange", refreshAfterResume);
     };
   }, []);
 
