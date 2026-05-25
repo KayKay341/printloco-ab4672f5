@@ -3,6 +3,7 @@ import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
 const AUTH_INIT_TIMEOUT_MS = 4500;
+const AUTH_RESUME_TIMEOUT_MS = 5000;
 
 type Profile = {
   id: string;
@@ -24,22 +25,35 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const withTimeout = async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error("Auth request timed out")), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = async (uid: string) => {
+  const loadProfile = async (uid: string, isActive: () => boolean = () => true) => {
     try {
       const { data } = await supabase
         .from("profiles")
         .select("id, full_name, role, neighborhood, zip_code, phone")
         .eq("id", uid)
         .maybeSingle();
-      setProfile((data as Profile) ?? null);
+      if (isActive()) setProfile((data as Profile) ?? null);
     } catch {
-      setProfile(null);
+      if (isActive()) setProfile(null);
     }
   };
 
