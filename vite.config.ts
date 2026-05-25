@@ -8,9 +8,10 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
-    hmr: {
-      overlay: false,
-    },
+    // The preview was going blank after laptop sleep/wake because Vite's HMR
+    // websocket can lose connection and force reloads while the dev server is
+    // restarting. Disable HMR for a stable full-page preview session.
+    hmr: false,
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
