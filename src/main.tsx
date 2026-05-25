@@ -17,7 +17,7 @@ let rootContainer: HTMLElement | null = runtime.__printlocoRootContainer ?? null
 let recoveryCheckQueued = false;
 
 const RECOVERY_RELOAD_KEY = "printloco:last-recovery-reload";
-const RECOVERY_RELOAD_COOLDOWN_MS = 10000;
+const RECOVERY_RELOAD_COOLDOWN_MS = 30000;
 
 const ensureRootElement = () => {
   let rootElement = document.getElementById("root");
@@ -29,10 +29,6 @@ const ensureRootElement = () => {
   }
 
   return rootElement;
-};
-
-const renderHardFallback = () => {
-  ensureRootElement().innerHTML = '<main data-hard-fallback="true" style="min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif;padding:24px;background:#fff;color:#111"><section style="max-width:420px;text-align:center"><h1>PrintLoco is ready</h1><p>The preview connection paused. Reload if it does not resume automatically.</p><div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap"><button onclick="window.location.reload()" style="padding:12px 18px;border:0;border-radius:12px;background:#111;color:#fff;font-weight:700">Reload page</button><a href="/" style="padding:12px 18px;border:1px solid #ddd;border-radius:12px;color:#111;text-decoration:none;font-weight:700">Go home</a></div></section></main>';
 };
 
 const RootApp = () => {
@@ -68,22 +64,50 @@ const renderApp = () => {
 const rootLooksBroken = () => {
   const rootElement = document.getElementById("root");
   if (!rootElement || !rootElement.isConnected) return true;
-  if (rootElement.querySelector("[data-hard-fallback='true']")) return true;
   if (!rootElement.hasChildNodes()) return true;
   return !rootElement.querySelector("[data-printloco-app='true']");
 };
 
-const reloadToRecover = () => {
+const reloadToRecover = async () => {
   const now = Date.now();
   const lastReload = Number(window.sessionStorage.getItem(RECOVERY_RELOAD_KEY) ?? 0);
 
-  if (now - lastReload > RECOVERY_RELOAD_COOLDOWN_MS) {
-    window.sessionStorage.setItem(RECOVERY_RELOAD_KEY, String(now));
-    window.location.reload();
+  if (now - lastReload <= RECOVERY_RELOAD_COOLDOWN_MS || document.visibilityState === "hidden") return;
+
+  try {
+    const ready = await fetch("/", {
+      method: "GET",
+      cache: "no-store",
+      headers: { accept: "text/x-vite-ping" },
+    });
+    if (!ready.ok && ready.status !== 204) return;
+  } catch {
     return;
   }
 
-  renderHardFallback();
+  window.sessionStorage.setItem(RECOVERY_RELOAD_KEY, String(now));
+  window.location.reload();
+};
+
+const rerenderToRecover = () => {
+  try {
+    renderApp();
+  } catch {
+    if (reactRoot) {
+      reactRoot.unmount();
+      reactRoot = null;
+      runtime.__printlocoRoot = undefined;
+      renderApp();
+    }
+  }
+};
+
+const repairOrReload = () => {
+  rerenderToRecover();
+
+  window.setTimeout(() => {
+    if (rootLooksBroken()) void reloadToRecover();
+  }, 700);
 };
 
 const recoverIfBlank = () => {
@@ -92,9 +116,23 @@ const recoverIfBlank = () => {
   recoveryCheckQueued = true;
   window.setTimeout(() => {
     recoveryCheckQueued = false;
-    if (rootLooksBroken()) reloadToRecover();
-  }, 300);
+    if (rootLooksBroken()) repairOrReload();
+  }, 500);
 };
+
+try {
+  renderApp();
+
+  window.setTimeout(recoverIfBlank, 4000);
+
+  runtime.__printlocoInterval = window.setInterval(recoverIfBlank, 4000);
+} catch {
+  if (now - lastReload > RECOVERY_RELOAD_COOLDOWN_MS) {
+    window.sessionStorage.setItem(RECOVERY_RELOAD_KEY, String(now));
+    window.location.reload();
+    return;
+  }
+}
 
 runtime.__printlocoBootAbort?.abort();
 runtime.__printlocoObserver?.disconnect();
