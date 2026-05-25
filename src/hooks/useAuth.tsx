@@ -3,6 +3,7 @@ import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
 const AUTH_INIT_TIMEOUT_MS = 4500;
+const AUTH_RESUME_TIMEOUT_MS = 5000;
 
 type Profile = {
   id: string;
@@ -24,91 +25,114 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const withTimeout = async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+  let timeoutId: number | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error("Auth request timed out")), ms);
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = async (uid: string) => {
+  const loadProfile = async (uid: string, isActive: () => boolean = () => true) => {
     try {
       const { data } = await supabase
         .from("profiles")
         .select("id, full_name, role, neighborhood, zip_code, phone")
         .eq("id", uid)
         .maybeSingle();
-      setProfile((data as Profile) ?? null);
+      if (isActive()) setProfile((data as Profile) ?? null);
     } catch {
-      setProfile(null);
+      if (isActive()) setProfile(null);
     }
   };
 
   useEffect(() => {
     let mounted = true;
+    let authSubscription: { unsubscribe: () => void } | null = null;
     const finishLoading = () => {
       if (mounted) setLoading(false);
     };
 
-    // CRITICAL: set up listener first, then check existing session
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      if (!mounted) return;
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-      if (newSession?.user) {
-        // defer to avoid deadlock
-        setTimeout(() => loadProfile(newSession.user.id), 0);
-      } else {
-        setProfile(null);
-      }
-    });
-
     const timeout = window.setTimeout(finishLoading, AUTH_INIT_TIMEOUT_MS);
 
-    supabase.auth.getSession().then(({ data: { session: existing } }) => {
-      if (!mounted) return;
-      setSession(existing);
-      setUser(existing?.user ?? null);
-      if (existing?.user) loadProfile(existing.user.id);
-      finishLoading();
-    }).catch(() => {
-      if (!mounted) return;
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      finishLoading();
-    }).finally(() => window.clearTimeout(timeout));
-
-    return () => {
-      mounted = false;
-      window.clearTimeout(timeout);
-      sub.subscription.unsubscribe();
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const refreshAfterResume = async () => {
-      if (document.visibilityState === "hidden") return;
-
+    const initializeAuth = async () => {
       try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        if (cancelled) return;
+        const { data: { session: existing } } = await withTimeout(supabase.auth.getSession(), AUTH_INIT_TIMEOUT_MS);
+        if (!mounted) return;
 
-        setSession(currentSession);
-        setUser(currentSession?.user ?? null);
-        if (currentSession?.user) {
-          await loadProfile(currentSession.user.id);
-        } else {
-          setProfile(null);
-        }
+        setSession(existing);
+        setUser(existing?.user ?? null);
+        if (existing?.user) await loadProfile(existing.user.id, () => mounted);
       } catch {
-        if (!cancelled) {
+        if (mounted) {
           setSession(null);
           setUser(null);
           setProfile(null);
         }
       } finally {
+        if (mounted) {
+          finishLoading();
+          window.clearTimeout(timeout);
+
+          const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
+            if (!mounted) return;
+            setSession(newSession);
+            setUser(newSession?.user ?? null);
+            if (newSession?.user) {
+              window.setTimeout(() => loadProfile(newSession.user.id, () => mounted), 0);
+            } else {
+              setProfile(null);
+            }
+          });
+          authSubscription = data.subscription;
+        }
+      }
+    };
+
+    void initializeAuth();
+
+    return () => {
+      mounted = false;
+      window.clearTimeout(timeout);
+      authSubscription?.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let refreshInFlight = false;
+
+    const refreshAfterResume = async () => {
+      if (document.visibilityState === "hidden" || refreshInFlight) return;
+      refreshInFlight = true;
+
+      try {
+        const { data: { session: currentSession } } = await withTimeout(supabase.auth.getSession(), AUTH_RESUME_TIMEOUT_MS);
+        if (cancelled) return;
+
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        if (currentSession?.user) {
+          await loadProfile(currentSession.user.id, () => !cancelled);
+        } else {
+          setProfile(null);
+        }
+      } catch {
+        // On laptop sleep/wake, the auth client's storage lock can briefly hang.
+        // Keep the last known auth state instead of blanking the session/profile.
+      } finally {
+        refreshInFlight = false;
         if (!cancelled) setLoading(false);
       }
     };
