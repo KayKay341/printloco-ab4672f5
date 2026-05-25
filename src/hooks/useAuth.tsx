@@ -144,6 +144,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  if (!ctx) {
+    // Graceful fallback (e.g. during HMR when context identity changes)
+    return {
+      user: null,
+      session: null,
+      profile: null,
+      loading: false,
+      signOut: async () => {},
+      refreshProfile: async () => {},
+    } as ReturnType<typeof useContext<typeof AuthContext>> extends infer T ? any : any;
+  }
   return ctx;
 };
