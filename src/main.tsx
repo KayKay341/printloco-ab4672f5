@@ -1,163 +1,34 @@
-import { useEffect } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { HelmetProvider } from "react-helmet-async";
 import App from "./App.tsx";
 import "./index.css";
 
-const runtime = window as typeof window & {
-  __printlocoRoot?: Root;
-  __printlocoRootContainer?: HTMLElement;
-  __printlocoBootAbort?: AbortController;
-  __printlocoObserver?: MutationObserver;
-  __printlocoInterval?: number;
-};
-
-let reactRoot: Root | null = runtime.__printlocoRoot ?? null;
-let rootContainer: HTMLElement | null = runtime.__printlocoRootContainer ?? null;
-let recoveryCheckQueued = false;
-
-const RECOVERY_RELOAD_KEY = "printloco:last-recovery-reload";
-const RECOVERY_RELOAD_COOLDOWN_MS = 30000;
-
-const ensureRootElement = () => {
-  let rootElement = document.getElementById("root");
-
-  if (!rootElement) {
-    rootElement = document.createElement("div");
-    rootElement.id = "root";
-    document.body.prepend(rootElement);
+const ensureRoot = () => {
+  let el = document.getElementById("root");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "root";
+    document.body.prepend(el);
   }
-
-  return rootElement;
+  return el;
 };
 
-const renderTerminalFallback = () => {
-  ensureRootElement().innerHTML = '<main data-printloco-app="true" data-terminal-fallback="true" style="min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif;padding:24px;background:#fff;color:#111"><section style="max-width:420px;text-align:center"><h1>PrintLoco is reconnecting</h1><p>The preview paused while your computer was asleep. Reload when you are back online.</p><button onclick="window.location.reload()" style="padding:12px 18px;border:0;border-radius:12px;background:#111;color:#fff;font-weight:700">Reload page</button></section></main>';
+const renderFallback = (message: string) => {
+  ensureRoot().innerHTML = `<main style="min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif;padding:24px;background:#fff;color:#111"><section style="max-width:420px;text-align:center"><h1 style="font-size:22px;margin:0 0 8px">PrintLoco</h1><p style="margin:0 0 16px;color:#555">${message}</p><button onclick="window.location.reload()" style="padding:12px 18px;border:0;border-radius:12px;background:#111;color:#fff;font-weight:700;cursor:pointer">Reload page</button></section></main>`;
 };
-
-const RootApp = () => {
-  useEffect(() => {
-    document.documentElement.dataset.printlocoMounted = "true";
-    return () => {
-      delete document.documentElement.dataset.printlocoMounted;
-    };
-  }, []);
-
-  return (
-    <div data-printloco-app="true">
-      <HelmetProvider>
-        <App />
-      </HelmetProvider>
-    </div>
-  );
-};
-
-const renderApp = () => {
-  const rootElement = ensureRootElement();
-
-  if (!reactRoot || rootContainer !== rootElement) {
-    reactRoot = createRoot(rootElement);
-    rootContainer = rootElement;
-    runtime.__printlocoRoot = reactRoot;
-    runtime.__printlocoRootContainer = rootElement;
-  }
-
-  reactRoot.render(<RootApp />);
-};
-
-const rootLooksBroken = () => {
-  const rootElement = document.getElementById("root");
-  if (!rootElement || !rootElement.isConnected) return true;
-  if (!rootElement.hasChildNodes()) return true;
-  return !rootElement.querySelector("[data-printloco-app='true']");
-};
-
-const reloadToRecover = async () => {
-  const now = Date.now();
-  const lastReload = Number(window.sessionStorage.getItem(RECOVERY_RELOAD_KEY) ?? 0);
-
-  if (now - lastReload <= RECOVERY_RELOAD_COOLDOWN_MS || document.visibilityState === "hidden") return false;
-
-  try {
-    const ready = await fetch("/", {
-      method: "GET",
-      cache: "no-store",
-      headers: { accept: "text/x-vite-ping" },
-    });
-    if (!ready.ok && ready.status !== 204) return false;
-  } catch {
-    return false;
-  }
-
-  window.sessionStorage.setItem(RECOVERY_RELOAD_KEY, String(now));
-  window.location.reload();
-  return true;
-};
-
-const rerenderToRecover = () => {
-  try {
-    renderApp();
-  } catch {
-    if (reactRoot) {
-      reactRoot.unmount();
-      reactRoot = null;
-      runtime.__printlocoRoot = undefined;
-      renderApp();
-    }
-  }
-};
-
-const repairOrReload = () => {
-  rerenderToRecover();
-
-  window.setTimeout(() => {
-    if (rootLooksBroken()) {
-      void reloadToRecover().then((didReload) => {
-        if (!didReload && rootLooksBroken()) renderTerminalFallback();
-      });
-    }
-  }, 700);
-};
-
-const recoverIfBlank = () => {
-  if (document.visibilityState === "hidden" || recoveryCheckQueued) return;
-
-  recoveryCheckQueued = true;
-  window.setTimeout(() => {
-    recoveryCheckQueued = false;
-    if (rootLooksBroken()) repairOrReload();
-  }, 500);
-};
-
-runtime.__printlocoBootAbort?.abort();
-runtime.__printlocoObserver?.disconnect();
-if (runtime.__printlocoInterval) window.clearInterval(runtime.__printlocoInterval);
-
-const bootAbort = new AbortController();
-runtime.__printlocoBootAbort = bootAbort;
-const bootSignal = bootAbort.signal;
-const recoverOnVisible = () => {
-  if (document.visibilityState === "visible") recoverIfBlank();
-};
-
-window.addEventListener("error", recoverIfBlank, { signal: bootSignal });
-window.addEventListener("unhandledrejection", recoverIfBlank, { signal: bootSignal });
-window.addEventListener("pageshow", recoverIfBlank, { signal: bootSignal });
-window.addEventListener("focus", recoverIfBlank, { signal: bootSignal });
-window.addEventListener("online", recoverIfBlank, { signal: bootSignal });
-document.addEventListener("visibilitychange", recoverOnVisible, { signal: bootSignal });
-
-runtime.__printlocoObserver = new MutationObserver(recoverIfBlank);
-runtime.__printlocoObserver.observe(document.body, { childList: true, subtree: true });
 
 try {
-  renderApp();
-
-  window.setTimeout(recoverIfBlank, 4000);
-
-  runtime.__printlocoInterval = window.setInterval(recoverIfBlank, 4000);
-} catch {
-  void reloadToRecover().then((didReload) => {
-    if (!didReload) renderTerminalFallback();
-  });
+  createRoot(ensureRoot()).render(
+    <HelmetProvider>
+      <App />
+    </HelmetProvider>
+  );
+} catch (err) {
+  console.error("Boot failed", err);
+  renderFallback("Something went wrong loading the app. Please reload.");
 }
+
+// Recover from cached/blank bfcache pages after sleep/wake
+window.addEventListener("pageshow", (e) => {
+  if ((e as PageTransitionEvent).persisted) window.location.reload();
+});
