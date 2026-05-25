@@ -206,6 +206,7 @@ const AppContent = () => {
       <Suspense fallback={<PageLoading />}>
         <AppRoutes />
       </Suspense>
+      <AIHelper />
     </>
   );
 };
