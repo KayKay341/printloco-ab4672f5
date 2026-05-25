@@ -53,7 +53,7 @@ const AppFallback = () => (
   <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
     <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
       <h1 className="font-display text-3xl font-semibold">This page hit a snag</h1>
-      <p className="mt-3 text-sm text-muted-foreground">The rest of the site is still available. Reload this page or go home.</p>
+      <p className="mt-3 text-sm text-muted-foreground">PrintLoco is restarting this page automatically.</p>
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
         <button
           type="button"
@@ -82,6 +82,9 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("Page render failed", error, info);
+    window.setTimeout(() => {
+      (window as Window & { __PRINTLOCO_RECOVER__?: (reason?: unknown) => void }).__PRINTLOCO_RECOVER__?.(error);
+    }, 100);
   }
 
   render() {
@@ -107,7 +110,7 @@ const FatalAppFallback = () => (
   <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
     <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
       <h1 className="font-display text-3xl font-semibold">PrintLoco didn’t start</h1>
-      <p className="mt-3 text-sm text-muted-foreground">Reload the app to try again.</p>
+      <p className="mt-3 text-sm text-muted-foreground">The app is restarting automatically.</p>
       <button
         type="button"
         onClick={() => window.location.reload()}
@@ -128,6 +131,9 @@ class AppErrorBoundary extends Component<{ children: ReactNode }, { hasError: bo
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("App render failed", error, info);
+    window.setTimeout(() => {
+      (window as Window & { __PRINTLOCO_RECOVER__?: (reason?: unknown) => void }).__PRINTLOCO_RECOVER__?.(error);
+    }, 100);
   }
 
   render() {
