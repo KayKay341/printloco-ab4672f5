@@ -59,43 +59,53 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     let mounted = true;
+    let authSubscription: { unsubscribe: () => void } | null = null;
     const finishLoading = () => {
       if (mounted) setLoading(false);
     };
 
-    // CRITICAL: set up listener first, then check existing session
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      if (!mounted) return;
-      setSession(newSession);
-      setUser(newSession?.user ?? null);
-      if (newSession?.user) {
-        // defer to avoid deadlock
-        setTimeout(() => loadProfile(newSession.user.id), 0);
-      } else {
-        setProfile(null);
-      }
-    });
-
     const timeout = window.setTimeout(finishLoading, AUTH_INIT_TIMEOUT_MS);
 
-    supabase.auth.getSession().then(({ data: { session: existing } }) => {
-      if (!mounted) return;
-      setSession(existing);
-      setUser(existing?.user ?? null);
-      if (existing?.user) loadProfile(existing.user.id);
-      finishLoading();
-    }).catch(() => {
-      if (!mounted) return;
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      finishLoading();
-    }).finally(() => window.clearTimeout(timeout));
+    const initializeAuth = async () => {
+      try {
+        const { data: { session: existing } } = await withTimeout(supabase.auth.getSession(), AUTH_INIT_TIMEOUT_MS);
+        if (!mounted) return;
+
+        setSession(existing);
+        setUser(existing?.user ?? null);
+        if (existing?.user) await loadProfile(existing.user.id, () => mounted);
+      } catch {
+        if (mounted) {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+        }
+      } finally {
+        if (mounted) {
+          finishLoading();
+          window.clearTimeout(timeout);
+
+          const { data } = supabase.auth.onAuthStateChange((_event, newSession) => {
+            if (!mounted) return;
+            setSession(newSession);
+            setUser(newSession?.user ?? null);
+            if (newSession?.user) {
+              window.setTimeout(() => loadProfile(newSession.user.id, () => mounted), 0);
+            } else {
+              setProfile(null);
+            }
+          });
+          authSubscription = data.subscription;
+        }
+      }
+    };
+
+    void initializeAuth();
 
     return () => {
       mounted = false;
       window.clearTimeout(timeout);
-      sub.subscription.unsubscribe();
+      authSubscription?.unsubscribe();
     };
   }, []);
 
