@@ -120,20 +120,6 @@ const recoverIfBlank = () => {
   }, 500);
 };
 
-try {
-  renderApp();
-
-  window.setTimeout(recoverIfBlank, 4000);
-
-  runtime.__printlocoInterval = window.setInterval(recoverIfBlank, 4000);
-} catch {
-  if (now - lastReload > RECOVERY_RELOAD_COOLDOWN_MS) {
-    window.sessionStorage.setItem(RECOVERY_RELOAD_KEY, String(now));
-    window.location.reload();
-    return;
-  }
-}
-
 runtime.__printlocoBootAbort?.abort();
 runtime.__printlocoObserver?.disconnect();
 if (runtime.__printlocoInterval) window.clearInterval(runtime.__printlocoInterval);
@@ -160,7 +146,7 @@ try {
 
   window.setTimeout(recoverIfBlank, 4000);
 
-  runtime.__printlocoInterval = window.setInterval(recoverIfBlank, 2500);
+  runtime.__printlocoInterval = window.setInterval(recoverIfBlank, 4000);
 } catch {
-  renderHardFallback();
+  void reloadToRecover();
 }
