@@ -32,6 +32,7 @@ const MakerOnboardingReview = lazy(() => import("./pages/MakerOnboardingReview.t
 const MakerOnboardingFinancials = lazy(() => import("./pages/MakerOnboardingFinancials.tsx"));
 const MakerOnboardingComplete = lazy(() => import("./pages/MakerOnboardingComplete.tsx"));
 const MakerDashboardSelector = lazy(() => import("./pages/MakerDashboardSelector.tsx"));
+const MakerWorkspace = lazy(() => import("./pages/MakerWorkspace.tsx"));
 const RoleSelection = lazy(() => import("./pages/RoleSelection.tsx"));
 const Services = lazy(() => import("./pages/Services.tsx"));
 const Order = lazy(() => import("./pages/Order.tsx"));
