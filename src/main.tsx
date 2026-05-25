@@ -31,6 +31,10 @@ const ensureRootElement = () => {
   return rootElement;
 };
 
+const renderTerminalFallback = () => {
+  ensureRootElement().innerHTML = '<main data-printloco-app="true" data-terminal-fallback="true" style="min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif;padding:24px;background:#fff;color:#111"><section style="max-width:420px;text-align:center"><h1>PrintLoco is reconnecting</h1><p>The preview paused while your computer was asleep. Reload when you are back online.</p><button onclick="window.location.reload()" style="padding:12px 18px;border:0;border-radius:12px;background:#111;color:#fff;font-weight:700">Reload page</button></section></main>';
+};
+
 const RootApp = () => {
   useEffect(() => {
     document.documentElement.dataset.printlocoMounted = "true";
@@ -72,7 +76,7 @@ const reloadToRecover = async () => {
   const now = Date.now();
   const lastReload = Number(window.sessionStorage.getItem(RECOVERY_RELOAD_KEY) ?? 0);
 
-  if (now - lastReload <= RECOVERY_RELOAD_COOLDOWN_MS || document.visibilityState === "hidden") return;
+  if (now - lastReload <= RECOVERY_RELOAD_COOLDOWN_MS || document.visibilityState === "hidden") return false;
 
   try {
     const ready = await fetch("/", {
@@ -80,13 +84,14 @@ const reloadToRecover = async () => {
       cache: "no-store",
       headers: { accept: "text/x-vite-ping" },
     });
-    if (!ready.ok && ready.status !== 204) return;
+    if (!ready.ok && ready.status !== 204) return false;
   } catch {
-    return;
+    return false;
   }
 
   window.sessionStorage.setItem(RECOVERY_RELOAD_KEY, String(now));
   window.location.reload();
+  return true;
 };
 
 const rerenderToRecover = () => {
@@ -106,7 +111,11 @@ const repairOrReload = () => {
   rerenderToRecover();
 
   window.setTimeout(() => {
-    if (rootLooksBroken()) void reloadToRecover();
+    if (rootLooksBroken()) {
+      void reloadToRecover().then((didReload) => {
+        if (!didReload && rootLooksBroken()) renderTerminalFallback();
+      });
+    }
   }, 700);
 };
 
@@ -139,7 +148,7 @@ window.addEventListener("online", recoverIfBlank, { signal: bootSignal });
 document.addEventListener("visibilitychange", recoverOnVisible, { signal: bootSignal });
 
 runtime.__printlocoObserver = new MutationObserver(recoverIfBlank);
-runtime.__printlocoObserver.observe(document.body, { childList: true });
+runtime.__printlocoObserver.observe(document.body, { childList: true, subtree: true });
 
 try {
   renderApp();
@@ -148,5 +157,7 @@ try {
 
   runtime.__printlocoInterval = window.setInterval(recoverIfBlank, 4000);
 } catch {
-  void reloadToRecover();
+  void reloadToRecover().then((didReload) => {
+    if (!didReload) renderTerminalFallback();
+  });
 }
