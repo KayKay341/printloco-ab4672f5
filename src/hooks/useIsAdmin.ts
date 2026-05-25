@@ -15,24 +15,28 @@ export const useIsAdmin = () => {
       return;
     }
     let cancelled = false;
-    supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("role", "admin")
-      .maybeSingle()
-      .then(({ data }) => {
+    const checkAdmin = async () => {
+      try {
+        const { data } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", user.id)
+          .eq("role", "admin")
+          .maybeSingle();
+
         if (!cancelled) {
           setIsAdmin(!!data);
           setLoading(false);
         }
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) {
           setIsAdmin(false);
           setLoading(false);
         }
-      });
+      }
+    };
+
+    void checkAdmin();
     return () => {
       cancelled = true;
     };
