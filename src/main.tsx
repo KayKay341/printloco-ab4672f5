@@ -3,8 +3,8 @@ import { HelmetProvider } from "react-helmet-async";
 import App from "./App.tsx";
 import "./index.css";
 
-const MAX_AUTO_RETRIES = 4;
-const RETRY_DELAYS_MS = [250, 750, 1500, 3000];
+const MAX_AUTO_RETRIES = import.meta.env.DEV ? 8 : 4;
+const RETRY_DELAYS_MS = import.meta.env.DEV ? [250, 750, 1500, 3000, 5000, 8000, 12000, 15000] : [250, 750, 1500, 3000];
 
 let root: Root | null = null;
 let retryCount = 0;
@@ -157,4 +157,6 @@ window.addEventListener("focus", recoverIfRootIsBlank);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") recoverIfRootIsBlank();
 });
-window.setInterval(recoverIfRootIsBlank, 5000);
+if (import.meta.env.DEV) {
+  window.setInterval(recoverIfRootIsBlank, 5000);
+}
