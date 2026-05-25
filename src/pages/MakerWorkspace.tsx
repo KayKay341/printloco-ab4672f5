@@ -117,13 +117,6 @@ const MakerWorkspace = () => {
     })();
   }, [user]);
 
-  if (loading) return <div className="container py-24">Loading…</div>;
-  if (!user) return <Navigate to="/auth?mode=signin" replace />;
-  if (!profile || !profile.role) return <Navigate to="/onboarding/role" replace />;
-  if (profile.role !== "maker") return <Navigate to="/dashboard" replace />;
-  if (!pLoading && printers.length === 0)
-    return <Navigate to="/onboarding/maker" replace />;
-
   const totals = useMemo(() => {
     const earned = orderStats
       .filter((o) => ["completed", "ready", "printing", "accepted"].includes(o.status))
@@ -141,6 +134,13 @@ const MakerWorkspace = () => {
       (s, p, _, a) => s + p.avg_rating / a.length,
       0
     ) || 0;
+
+  if (loading) return <div className="container py-24">Loading…</div>;
+  if (!user) return <Navigate to="/auth?mode=signin" replace />;
+  if (!profile || !profile.role) return <Navigate to="/onboarding/role" replace />;
+  if (profile.role !== "maker") return <Navigate to="/dashboard" replace />;
+  if (!pLoading && printers.length === 0)
+    return <Navigate to="/onboarding/maker" replace />;
 
   return (
     <SidebarProvider>
