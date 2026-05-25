@@ -142,18 +142,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   );
 };
 
-export const useAuth = () => {
+const FALLBACK_AUTH: AuthContextValue = {
+  user: null,
+  session: null,
+  profile: null,
+  loading: false,
+  signOut: async () => {},
+  refreshProfile: async () => {},
+};
+
+export const useAuth = (): AuthContextValue => {
   const ctx = useContext(AuthContext);
-  if (!ctx) {
-    // Graceful fallback (e.g. during HMR when context identity changes)
-    return {
-      user: null,
-      session: null,
-      profile: null,
-      loading: false,
-      signOut: async () => {},
-      refreshProfile: async () => {},
-    } as ReturnType<typeof useContext<typeof AuthContext>> extends infer T ? any : any;
-  }
-  return ctx;
+  // Graceful fallback during HMR or if a consumer renders outside the provider,
+  // so a missing context never produces a blank screen.
+  return ctx ?? FALLBACK_AUTH;
 };
