@@ -129,11 +129,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setProfile(null);
         }
       } catch {
-        if (!cancelled) {
-          setSession(null);
-          setUser(null);
-          setProfile(null);
-        }
+        // On laptop sleep/wake, the auth client's storage lock can briefly hang.
+        // Keep the last known auth state instead of blanking the session/profile.
       } finally {
         refreshInFlight = false;
         if (!cancelled) setLoading(false);
