@@ -96,23 +96,33 @@ const recoverIfBlank = () => {
   }, 300);
 };
 
-window.addEventListener("error", recoverIfBlank);
-window.addEventListener("unhandledrejection", recoverIfBlank);
-window.addEventListener("pageshow", recoverIfBlank);
-window.addEventListener("focus", recoverIfBlank);
-window.addEventListener("online", recoverIfBlank);
-window.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible") recoverIfBlank();
-});
+runtime.__printlocoBootAbort?.abort();
+runtime.__printlocoObserver?.disconnect();
+if (runtime.__printlocoInterval) window.clearInterval(runtime.__printlocoInterval);
 
-new MutationObserver(recoverIfBlank).observe(document.body, { childList: true });
+const bootAbort = new AbortController();
+runtime.__printlocoBootAbort = bootAbort;
+const bootSignal = bootAbort.signal;
+const recoverOnVisible = () => {
+  if (document.visibilityState === "visible") recoverIfBlank();
+};
+
+window.addEventListener("error", recoverIfBlank, { signal: bootSignal });
+window.addEventListener("unhandledrejection", recoverIfBlank, { signal: bootSignal });
+window.addEventListener("pageshow", recoverIfBlank, { signal: bootSignal });
+window.addEventListener("focus", recoverIfBlank, { signal: bootSignal });
+window.addEventListener("online", recoverIfBlank, { signal: bootSignal });
+document.addEventListener("visibilitychange", recoverOnVisible, { signal: bootSignal });
+
+runtime.__printlocoObserver = new MutationObserver(recoverIfBlank);
+runtime.__printlocoObserver.observe(document.body, { childList: true });
 
 try {
   renderApp();
 
   window.setTimeout(recoverIfBlank, 4000);
 
-  window.setInterval(recoverIfBlank, 2500);
+  runtime.__printlocoInterval = window.setInterval(recoverIfBlank, 2500);
 } catch {
   renderHardFallback();
 }
