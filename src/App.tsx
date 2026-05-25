@@ -165,7 +165,8 @@ const AppRoutes = () => {
         <Route path="/onboarding/review" element={routeElement(MakerOnboardingReview)} />
         <Route path="/onboarding/financials" element={routeElement(MakerOnboardingFinancials)} />
         <Route path="/onboarding/complete" element={routeElement(MakerOnboardingComplete)} />
-        <Route path="/maker/dashboard-selector" element={routeElement(MakerDashboardSelector)} />
+        <Route path="/maker" element={routeElement(MakerWorkspace)} />
+        <Route path="/maker/dashboard-selector" element={routeElement(MakerWorkspace)} />
         <Route path="/onboarding/role" element={routeElement(RoleSelection)} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={routeElement(NotFound)} />
