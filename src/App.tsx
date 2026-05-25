@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
 import { VerificationBanner } from "@/components/VerificationBanner";
+import AIHelper from "@/components/AIHelper";
 
 const Index = lazy(() => import("./pages/Index.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
@@ -205,6 +206,7 @@ const AppContent = () => {
       <Suspense fallback={<PageLoading />}>
         <AppRoutes />
       </Suspense>
+      <AIHelper />
     </>
   );
 };
