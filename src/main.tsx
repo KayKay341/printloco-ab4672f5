@@ -4,8 +4,16 @@ import { HelmetProvider } from "react-helmet-async";
 import App from "./App.tsx";
 import "./index.css";
 
-let reactRoot: Root | null = null;
-let rootContainer: HTMLElement | null = null;
+const runtime = window as typeof window & {
+  __printlocoRoot?: Root;
+  __printlocoRootContainer?: HTMLElement;
+  __printlocoBootAbort?: AbortController;
+  __printlocoObserver?: MutationObserver;
+  __printlocoInterval?: number;
+};
+
+let reactRoot: Root | null = runtime.__printlocoRoot ?? null;
+let rootContainer: HTMLElement | null = runtime.__printlocoRootContainer ?? null;
 let recoveryCheckQueued = false;
 
 const RECOVERY_RELOAD_KEY = "printloco:last-recovery-reload";
@@ -50,6 +58,8 @@ const renderApp = () => {
   if (!reactRoot || rootContainer !== rootElement) {
     reactRoot = createRoot(rootElement);
     rootContainer = rootElement;
+    runtime.__printlocoRoot = reactRoot;
+    runtime.__printlocoRootContainer = rootElement;
   }
 
   reactRoot.render(<RootApp />);
