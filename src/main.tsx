@@ -31,6 +31,30 @@ const renderFallback = (message: string, recovering = false) => {
   ensureRoot().innerHTML = `<main style="min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif;padding:24px;background:hsl(var(--background,0 0% 100%));color:hsl(var(--foreground,0 0% 7%))"><section style="max-width:420px;text-align:center;border:1px solid hsl(var(--border,0 0% 90%));border-radius:18px;padding:28px;background:hsl(var(--card,0 0% 100%));box-shadow:0 18px 50px rgba(0,0,0,.08)"><h1 style="font-size:22px;margin:0 0 8px">PrintLoco</h1><p style="margin:0 0 16px;color:hsl(var(--muted-foreground,0 0% 35%))">${message}</p>${recovering ? `<p style="margin:0;color:hsl(var(--muted-foreground,0 0% 35%));font-size:13px">Retry ${Math.min(retryCount, MAX_AUTO_RETRIES)} of ${MAX_AUTO_RETRIES}…</p>` : `<button onclick="window.location.reload()" style="padding:12px 18px;border:0;border-radius:12px;background:hsl(var(--primary,0 0% 7%));color:hsl(var(--primary-foreground,0 0% 100%));font-weight:700;cursor:pointer">Reload page</button>`}</section></main>`;
 };
 
+const storage = {
+  get: (key: string) => {
+    try {
+      return sessionStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set: (key: string, value: string) => {
+    try {
+      sessionStorage.setItem(key, value);
+    } catch {
+      // Recovery must work even when browser storage is blocked or briefly locked.
+    }
+  },
+  remove: (key: string) => {
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      // Ignore storage failures during recovery cleanup.
+    }
+  },
+};
+
 const describeReason = (reason: unknown) => {
   if (reason instanceof Error) return reason.message;
   if (typeof reason === "string") return reason;
@@ -48,13 +72,14 @@ const mountApp = () => {
   mountGeneration += 1;
   const generation = mountGeneration;
   const rootEl = ensureRoot();
-  rootEl.innerHTML = "";
 
   try {
     root?.unmount();
   } catch {
     // If React is already wedged, discard the old tree and create a fresh root.
   }
+
+  rootEl.innerHTML = "";
 
   try {
     root = createRoot(rootEl);
@@ -76,8 +101,8 @@ const scheduleRecover = (reason?: unknown) => {
 
   if (isChunkLoadError(reason)) {
     const reloadedKey = "printloco:chunk-reload-attempted";
-    if (!sessionStorage.getItem(reloadedKey)) {
-      sessionStorage.setItem(reloadedKey, "true");
+    if (!storage.get(reloadedKey)) {
+      storage.set(reloadedKey, "true");
       window.location.reload();
       return;
     }
@@ -120,7 +145,7 @@ const recoverIfRootIsBlank = () => {
 mountApp();
 
 window.setTimeout(() => {
-  sessionStorage.removeItem("printloco:chunk-reload-attempted");
+  storage.remove("printloco:chunk-reload-attempted");
 }, 8000);
 
 // Recover from cached/blank bfcache pages after sleep/wake or reopening a tab.
@@ -132,3 +157,4 @@ window.addEventListener("focus", recoverIfRootIsBlank);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") recoverIfRootIsBlank();
 });
+window.setInterval(recoverIfRootIsBlank, 5000);
