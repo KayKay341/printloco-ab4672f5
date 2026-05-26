@@ -116,6 +116,7 @@ const mountApp = () => {
   const generation = mountGeneration;
   const rootEl = ensureRoot();
   rootEl.dataset.printlocoMounted = "booting";
+  rootEl.dataset.printlocoBootStartedAt = String(Date.now());
 
   try {
     root?.unmount();
@@ -146,7 +147,8 @@ const scheduleRecover = (reason?: unknown) => {
   window.clearTimeout(retryTimer);
 
   if (isChunkLoadError(reason)) {
-    if (reloadOnceForBootFailure()) return;
+    hardReloadForFreshAssets();
+    return;
   }
 
   if (retryCount >= MAX_AUTO_RETRIES) {
