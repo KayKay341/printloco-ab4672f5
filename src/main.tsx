@@ -12,10 +12,19 @@ let retryCount = 0;
 let retryTimer: number | undefined;
 let mountGeneration = 0;
 
+const clearBootRecoveryAttempt = () => {
+  try {
+    sessionStorage.removeItem("printloco:boot-reload-attempted");
+  } catch {
+    // Startup recovery must not depend on storage being available after sleep/wake.
+  }
+};
+
 const markRootHealthy = () => {
   const rootEl = ensureRoot();
   rootEl.dataset.printlocoMounted = "true";
   rootEl.dataset.printlocoLastHealthy = String(Date.now());
+  clearBootRecoveryAttempt();
 };
 
 const RootHealth = ({ children }: { children: ReactNode }) => {
