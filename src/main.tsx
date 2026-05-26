@@ -24,6 +24,7 @@ const markRootHealthy = () => {
   const rootEl = ensureRoot();
   rootEl.dataset.printlocoMounted = "true";
   rootEl.dataset.printlocoLastHealthy = String(Date.now());
+  window.__PRINTLOCO_BOOT_OK__ = true;
   clearBootRecoveryAttempt();
 };
 
@@ -40,6 +41,8 @@ const RootHealth = ({ children }: { children: ReactNode }) => {
 declare global {
   interface Window {
     __PRINTLOCO_RECOVER__?: (reason?: unknown) => void;
+    __PRINTLOCO_BOOT_OK__?: boolean;
+    __PRINTLOCO_ROOT__?: Root | null;
   }
 }
 
@@ -103,23 +106,40 @@ const reloadOnceForBootFailure = () => {
   return false;
 };
 
+const hardReloadForFreshAssets = () => {
+  renderFallback("PrintLoco is reconnecting after your computer woke up.", true);
+  window.setTimeout(() => window.location.reload(), 250);
+};
+
 const mountApp = () => {
   window.clearTimeout(retryTimer);
   mountGeneration += 1;
   const generation = mountGeneration;
-  const rootEl = ensureRoot();
+  root = window.__PRINTLOCO_ROOT__ ?? root;
+  let rootEl = ensureRoot();
   rootEl.dataset.printlocoMounted = "booting";
+  rootEl.dataset.printlocoBootStartedAt = String(Date.now());
 
   try {
     root?.unmount();
   } catch {
     // If React is already wedged, discard the old tree and create a fresh root.
   }
+  root = null;
+  window.__PRINTLOCO_ROOT__ = null;
+
+  const freshRootEl = rootEl.cloneNode(false) as HTMLElement;
+  freshRootEl.id = "root";
+  freshRootEl.dataset.printlocoMounted = "booting";
+  freshRootEl.dataset.printlocoBootStartedAt = String(Date.now());
+  rootEl.replaceWith(freshRootEl);
+  rootEl = freshRootEl;
 
   rootEl.innerHTML = "";
 
   try {
     root = createRoot(rootEl);
+    window.__PRINTLOCO_ROOT__ = root;
     root.render(
       <RootHealth>
         <HelmetProvider>
@@ -139,7 +159,8 @@ const scheduleRecover = (reason?: unknown) => {
   window.clearTimeout(retryTimer);
 
   if (isChunkLoadError(reason)) {
-    if (reloadOnceForBootFailure()) return;
+    hardReloadForFreshAssets();
+    return;
   }
 
   if (retryCount >= MAX_AUTO_RETRIES) {
@@ -193,17 +214,16 @@ window.addEventListener("unhandledrejection", (event) => {
 const recoverIfRootIsBlank = () => {
   window.setTimeout(() => {
     const rootEl = document.getElementById("root");
-    const lastHealthy = Number(rootEl?.dataset.printlocoLastHealthy ?? 0);
-    const staleWhileVisible = document.visibilityState === "visible" && lastHealthy > 0 && Date.now() - lastHealthy > 120000;
-    const bootStalled = rootEl?.dataset.printlocoMounted === "booting" && (!lastHealthy || Date.now() - lastHealthy > 10000);
+    const bootStartedAt = Number(rootEl?.dataset.printlocoBootStartedAt ?? 0);
+    const bootStalled = rootEl?.dataset.printlocoMounted === "booting" && (!bootStartedAt || Date.now() - bootStartedAt > 15000);
     if (!rootEl || rootEl.childElementCount === 0 || !rootEl.textContent?.trim()) {
       if (reloadOnceForBootFailure()) return;
       scheduleRecover("Blank root after page resume");
-    } else if (bootStalled || rootEl.dataset.printlocoMounted !== "true" || staleWhileVisible) {
-      if (staleWhileVisible || bootStalled) {
-        if (reloadOnceForBootFailure()) return;
-      }
+    } else if (bootStalled || rootEl.dataset.printlocoMounted !== "true") {
+      if (bootStalled && reloadOnceForBootFailure()) return;
       scheduleRecover("App heartbeat stopped after page resume");
+    } else {
+      markRootHealthy();
     }
   }, 600);
 };
