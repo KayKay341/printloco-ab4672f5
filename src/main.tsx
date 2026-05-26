@@ -93,6 +93,16 @@ const isChunkLoadError = (reason: unknown) => {
   return /failed to fetch dynamically imported module|importing a module script failed|chunkloaderror|loading chunk/i.test(message);
 };
 
+const reloadOnceForBootFailure = () => {
+  const reloadedKey = "printloco:boot-reload-attempted";
+  if (!storage.get(reloadedKey)) {
+    storage.set(reloadedKey, "true");
+    window.location.reload();
+    return true;
+  }
+  return false;
+};
+
 const mountApp = () => {
   window.clearTimeout(retryTimer);
   mountGeneration += 1;
@@ -129,12 +139,7 @@ const scheduleRecover = (reason?: unknown) => {
   window.clearTimeout(retryTimer);
 
   if (isChunkLoadError(reason)) {
-    const reloadedKey = "printloco:chunk-reload-attempted";
-    if (!storage.get(reloadedKey)) {
-      storage.set(reloadedKey, "true");
-      window.location.reload();
-      return;
-    }
+    if (reloadOnceForBootFailure()) return;
   }
 
   if (retryCount >= MAX_AUTO_RETRIES) {
@@ -182,9 +187,14 @@ const recoverIfRootIsBlank = () => {
     const rootEl = document.getElementById("root");
     const lastHealthy = Number(rootEl?.dataset.printlocoLastHealthy ?? 0);
     const staleWhileVisible = document.visibilityState === "visible" && lastHealthy > 0 && Date.now() - lastHealthy > 120000;
+    const bootStalled = rootEl?.dataset.printlocoMounted === "booting" && (!lastHealthy || Date.now() - lastHealthy > 10000);
     if (!rootEl || rootEl.childElementCount === 0 || !rootEl.textContent?.trim()) {
+      if (reloadOnceForBootFailure()) return;
       scheduleRecover("Blank root after page resume");
-    } else if (rootEl.dataset.printlocoMounted !== "true" || staleWhileVisible) {
+    } else if (bootStalled || rootEl.dataset.printlocoMounted !== "true" || staleWhileVisible) {
+      if (staleWhileVisible || bootStalled) {
+        if (reloadOnceForBootFailure()) return;
+      }
       scheduleRecover("App heartbeat stopped after page resume");
     }
   }, 600);
