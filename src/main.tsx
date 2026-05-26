@@ -202,17 +202,16 @@ window.addEventListener("unhandledrejection", (event) => {
 const recoverIfRootIsBlank = () => {
   window.setTimeout(() => {
     const rootEl = document.getElementById("root");
-    const lastHealthy = Number(rootEl?.dataset.printlocoLastHealthy ?? 0);
-    const staleWhileVisible = document.visibilityState === "visible" && lastHealthy > 0 && Date.now() - lastHealthy > 120000;
-    const bootStalled = rootEl?.dataset.printlocoMounted === "booting" && (!lastHealthy || Date.now() - lastHealthy > 10000);
+    const bootStartedAt = Number(rootEl?.dataset.printlocoBootStartedAt ?? 0);
+    const bootStalled = rootEl?.dataset.printlocoMounted === "booting" && (!bootStartedAt || Date.now() - bootStartedAt > 15000);
     if (!rootEl || rootEl.childElementCount === 0 || !rootEl.textContent?.trim()) {
       if (reloadOnceForBootFailure()) return;
       scheduleRecover("Blank root after page resume");
-    } else if (bootStalled || rootEl.dataset.printlocoMounted !== "true" || staleWhileVisible) {
-      if (staleWhileVisible || bootStalled) {
-        if (reloadOnceForBootFailure()) return;
-      }
+    } else if (bootStalled || rootEl.dataset.printlocoMounted !== "true") {
+      if (bootStalled && reloadOnceForBootFailure()) return;
       scheduleRecover("App heartbeat stopped after page resume");
+    } else {
+      markRootHealthy();
     }
   }, 600);
 };
