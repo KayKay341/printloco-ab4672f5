@@ -1,5 +1,6 @@
 import { createRoot, type Root } from "react-dom/client";
 import { HelmetProvider } from "react-helmet-async";
+import { useEffect, type ReactNode } from "react";
 import App from "./App.tsx";
 import "./index.css";
 
@@ -10,6 +11,22 @@ let root: Root | null = null;
 let retryCount = 0;
 let retryTimer: number | undefined;
 let mountGeneration = 0;
+
+const markRootHealthy = () => {
+  const rootEl = ensureRoot();
+  rootEl.dataset.printlocoMounted = "true";
+  rootEl.dataset.printlocoLastHealthy = String(Date.now());
+};
+
+const RootHealth = ({ children }: { children: ReactNode }) => {
+  useEffect(() => {
+    markRootHealthy();
+    const heartbeat = window.setInterval(markRootHealthy, 30000);
+    return () => window.clearInterval(heartbeat);
+  }, []);
+
+  return children;
+};
 
 declare global {
   interface Window {
@@ -72,6 +89,7 @@ const mountApp = () => {
   mountGeneration += 1;
   const generation = mountGeneration;
   const rootEl = ensureRoot();
+  rootEl.dataset.printlocoMounted = "booting";
 
   try {
     root?.unmount();
@@ -84,10 +102,12 @@ const mountApp = () => {
   try {
     root = createRoot(rootEl);
     root.render(
-    <HelmetProvider>
-      <App />
-    </HelmetProvider>
-  );
+      <RootHealth>
+        <HelmetProvider>
+          <App />
+        </HelmetProvider>
+      </RootHealth>
+    );
     window.setTimeout(() => {
       if (generation === mountGeneration) retryCount = 0;
     }, 6000);
@@ -125,9 +145,24 @@ window.addEventListener("printloco:recover", (event) => {
   scheduleRecover((event as CustomEvent).detail);
 });
 
-window.addEventListener("error", (event) => {
-  if (event.error) scheduleRecover(event.error);
+window.addEventListener("vite:preloadError", (event) => {
+  event.preventDefault();
+  scheduleRecover((event as Event & { payload?: unknown }).payload ?? "Vite preload failed");
 });
+
+window.addEventListener(
+  "error",
+  (event) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.tagName === "SCRIPT" || target?.tagName === "LINK") {
+      const failedUrl = target instanceof HTMLScriptElement ? target.src : target instanceof HTMLLinkElement ? target.href : "unknown resource";
+      scheduleRecover(`Critical app resource failed to load: ${failedUrl}`);
+      return;
+    }
+    if (event.error) scheduleRecover(event.error);
+  },
+  true,
+);
 
 window.addEventListener("unhandledrejection", (event) => {
   if (isChunkLoadError(event.reason)) scheduleRecover(event.reason);
@@ -136,8 +171,12 @@ window.addEventListener("unhandledrejection", (event) => {
 const recoverIfRootIsBlank = () => {
   window.setTimeout(() => {
     const rootEl = document.getElementById("root");
+    const lastHealthy = Number(rootEl?.dataset.printlocoLastHealthy ?? 0);
+    const staleWhileVisible = document.visibilityState === "visible" && lastHealthy > 0 && Date.now() - lastHealthy > 120000;
     if (!rootEl || rootEl.childElementCount === 0 || !rootEl.textContent?.trim()) {
       scheduleRecover("Blank root after page resume");
+    } else if (rootEl.dataset.printlocoMounted !== "true" || staleWhileVisible) {
+      scheduleRecover("App heartbeat stopped after page resume");
     }
   }, 600);
 };
