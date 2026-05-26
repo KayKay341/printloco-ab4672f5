@@ -42,6 +42,7 @@ declare global {
   interface Window {
     __PRINTLOCO_RECOVER__?: (reason?: unknown) => void;
     __PRINTLOCO_BOOT_OK__?: boolean;
+    __PRINTLOCO_ROOT__?: Root | null;
   }
 }
 
@@ -114,7 +115,8 @@ const mountApp = () => {
   window.clearTimeout(retryTimer);
   mountGeneration += 1;
   const generation = mountGeneration;
-  const rootEl = ensureRoot();
+  root = window.__PRINTLOCO_ROOT__ ?? root;
+  let rootEl = ensureRoot();
   rootEl.dataset.printlocoMounted = "booting";
   rootEl.dataset.printlocoBootStartedAt = String(Date.now());
 
@@ -123,11 +125,21 @@ const mountApp = () => {
   } catch {
     // If React is already wedged, discard the old tree and create a fresh root.
   }
+  root = null;
+  window.__PRINTLOCO_ROOT__ = null;
+
+  const freshRootEl = rootEl.cloneNode(false) as HTMLElement;
+  freshRootEl.id = "root";
+  freshRootEl.dataset.printlocoMounted = "booting";
+  freshRootEl.dataset.printlocoBootStartedAt = String(Date.now());
+  rootEl.replaceWith(freshRootEl);
+  rootEl = freshRootEl;
 
   rootEl.innerHTML = "";
 
   try {
     root = createRoot(rootEl);
+    window.__PRINTLOCO_ROOT__ = root;
     root.render(
       <RootHealth>
         <HelmetProvider>
