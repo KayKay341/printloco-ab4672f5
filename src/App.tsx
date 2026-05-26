@@ -85,15 +85,13 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
   }
 }
 
-const SafePage = ({ component: Component }: { component: LazyExoticComponent<ComponentType> }) => (
+const SafePage = ({ component: Component }: { component: ComponentType }) => (
   <PageErrorBoundary>
-    <Suspense fallback={<PageLoading />}>
-      <Component />
-    </Suspense>
+    <Component />
   </PageErrorBoundary>
 );
 
-const routeElement = (component: LazyExoticComponent<ComponentType>) => <SafePage component={component} />;
+const routeElement = (component: ComponentType) => <SafePage component={component} />;
 
 const FatalAppFallback = () => (
   <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
@@ -198,9 +196,7 @@ const AppContent = () => {
       <VerificationBanner isVisible={!isVerified} />
       <PaymentTestModeBanner />
       <DemoModeBanner />
-      <Suspense fallback={<PageLoading />}>
-        <AppRoutes />
-      </Suspense>
+      <AppRoutes />
       <AIHelper />
     </>
   );
