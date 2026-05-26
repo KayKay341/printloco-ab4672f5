@@ -147,7 +147,7 @@ window.addEventListener("printloco:recover", (event) => {
 
 window.addEventListener("vite:preloadError", (event) => {
   event.preventDefault();
-  scheduleRecover((event as CustomEvent).payload ?? "Vite preload failed");
+  scheduleRecover((event as Event & { payload?: unknown }).payload ?? "Vite preload failed");
 });
 
 window.addEventListener(
@@ -155,7 +155,7 @@ window.addEventListener(
   (event) => {
     const target = event.target as HTMLElement | null;
     if (target?.tagName === "SCRIPT" || target?.tagName === "LINK") {
-      const failedUrl = (target as HTMLScriptElement | HTMLLinkElement).src || (target as HTMLLinkElement).href;
+      const failedUrl = target instanceof HTMLScriptElement ? target.src : target instanceof HTMLLinkElement ? target.href : "unknown resource";
       scheduleRecover(`Critical app resource failed to load: ${failedUrl}`);
       return;
     }
