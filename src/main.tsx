@@ -24,6 +24,7 @@ const markRootHealthy = () => {
   const rootEl = ensureRoot();
   rootEl.dataset.printlocoMounted = "true";
   rootEl.dataset.printlocoLastHealthy = String(Date.now());
+  window.__PRINTLOCO_BOOT_OK__ = true;
   clearBootRecoveryAttempt();
 };
 
@@ -40,6 +41,7 @@ const RootHealth = ({ children }: { children: ReactNode }) => {
 declare global {
   interface Window {
     __PRINTLOCO_RECOVER__?: (reason?: unknown) => void;
+    __PRINTLOCO_BOOT_OK__?: boolean;
   }
 }
 
@@ -101,6 +103,11 @@ const reloadOnceForBootFailure = () => {
     return true;
   }
   return false;
+};
+
+const hardReloadForFreshAssets = () => {
+  renderFallback("PrintLoco is reconnecting after your computer woke up.", true);
+  window.setTimeout(() => window.location.reload(), 250);
 };
 
 const mountApp = () => {
