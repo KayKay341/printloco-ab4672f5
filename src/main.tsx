@@ -1,48 +1,13 @@
-import { createRoot, type Root } from "react-dom/client";
+import { createRoot } from "react-dom/client";
 import { HelmetProvider } from "react-helmet-async";
-import { useEffect, type ReactNode } from "react";
 import App from "./App.tsx";
 import "./index.css";
 
-const MAX_AUTO_RETRIES = import.meta.env.DEV ? 8 : 4;
-const RETRY_DELAYS_MS = import.meta.env.DEV ? [250, 750, 1500, 3000, 5000, 8000, 12000, 15000] : [250, 750, 1500, 3000];
-
-let root: Root | null = null;
-let retryCount = 0;
-let retryTimer: number | undefined;
-let mountGeneration = 0;
-
-const clearBootRecoveryAttempt = () => {
-  try {
-    sessionStorage.removeItem("printloco:boot-reload-attempted");
-  } catch {
-    // Startup recovery must not depend on storage being available after sleep/wake.
-  }
-};
-
-const markRootHealthy = () => {
-  const rootEl = ensureRoot();
-  rootEl.dataset.printlocoMounted = "true";
-  rootEl.dataset.printlocoLastHealthy = String(Date.now());
-  window.__PRINTLOCO_BOOT_OK__ = true;
-  clearBootRecoveryAttempt();
-};
-
-const RootHealth = ({ children }: { children: ReactNode }) => {
-  useEffect(() => {
-    markRootHealthy();
-    const heartbeat = window.setInterval(markRootHealthy, 30000);
-    return () => window.clearInterval(heartbeat);
-  }, []);
-
-  return children;
-};
+const RECOVERY_RELOAD_KEY = "printloco:recovery-reload-attempted";
 
 declare global {
   interface Window {
     __PRINTLOCO_RECOVER__?: (reason?: unknown) => void;
-    __PRINTLOCO_BOOT_OK__?: boolean;
-    __PRINTLOCO_ROOT__?: Root | null;
   }
 }
 
@@ -56,8 +21,14 @@ const ensureRoot = () => {
   return el;
 };
 
-const renderFallback = (message: string, recovering = false) => {
-  ensureRoot().innerHTML = `<main style="min-height:100vh;display:grid;place-items:center;font-family:system-ui,sans-serif;padding:24px;background:hsl(var(--background,0 0% 100%));color:hsl(var(--foreground,0 0% 7%))"><section style="max-width:420px;text-align:center;border:1px solid hsl(var(--border,0 0% 90%));border-radius:18px;padding:28px;background:hsl(var(--card,0 0% 100%));box-shadow:0 18px 50px rgba(0,0,0,.08)"><h1 style="font-size:22px;margin:0 0 8px">PrintLoco</h1><p style="margin:0 0 16px;color:hsl(var(--muted-foreground,0 0% 35%))">${message}</p>${recovering ? `<p style="margin:0;color:hsl(var(--muted-foreground,0 0% 35%));font-size:13px">Retry ${Math.min(retryCount, MAX_AUTO_RETRIES)} of ${MAX_AUTO_RETRIES}…</p>` : `<button onclick="window.location.reload()" style="padding:12px 18px;border:0;border-radius:12px;background:hsl(var(--primary,0 0% 7%));color:hsl(var(--primary-foreground,0 0% 100%));font-weight:700;cursor:pointer">Reload page</button>`}</section></main>`;
+const markBooted = () => {
+  const rootEl = ensureRoot();
+  rootEl.dataset.printlocoMounted = "true";
+  try {
+    sessionStorage.removeItem(RECOVERY_RELOAD_KEY);
+  } catch {
+    // Ignore storage failures; rendering should never depend on storage access.
+  }
 };
 
 const storage = {
@@ -96,93 +67,22 @@ const isChunkLoadError = (reason: unknown) => {
   return /failed to fetch dynamically imported module|importing a module script failed|chunkloaderror|loading chunk/i.test(message);
 };
 
-const reloadOnceForBootFailure = () => {
-  const reloadedKey = "printloco:boot-reload-attempted";
-  if (!storage.get(reloadedKey)) {
-    storage.set(reloadedKey, "true");
-    window.location.reload();
+const reloadOnce = () => {
+  if (!storage.get(RECOVERY_RELOAD_KEY)) {
+    storage.set(RECOVERY_RELOAD_KEY, "true");
+    window.location.replace(window.location.href);
     return true;
   }
   return false;
 };
 
-const hardReloadForFreshAssets = () => {
-  renderFallback("PrintLoco is reconnecting after your computer woke up.", true);
-  window.setTimeout(() => window.location.reload(), 250);
-};
-
-const mountApp = () => {
-  window.clearTimeout(retryTimer);
-  mountGeneration += 1;
-  const generation = mountGeneration;
-  root = window.__PRINTLOCO_ROOT__ ?? root;
-  let rootEl = ensureRoot();
-  rootEl.dataset.printlocoMounted = "booting";
-  rootEl.dataset.printlocoBootStartedAt = String(Date.now());
-
-  try {
-    root?.unmount();
-  } catch {
-    // If React is already wedged, discard the old tree and create a fresh root.
-  }
-  root = null;
-  window.__PRINTLOCO_ROOT__ = null;
-
-  const freshRootEl = rootEl.cloneNode(false) as HTMLElement;
-  freshRootEl.id = "root";
-  freshRootEl.dataset.printlocoMounted = "booting";
-  freshRootEl.dataset.printlocoBootStartedAt = String(Date.now());
-  rootEl.replaceWith(freshRootEl);
-  rootEl = freshRootEl;
-
-  rootEl.innerHTML = "";
-
-  try {
-    root = createRoot(rootEl);
-    window.__PRINTLOCO_ROOT__ = root;
-    root.render(
-      <RootHealth>
-        <HelmetProvider>
-          <App />
-        </HelmetProvider>
-      </RootHealth>
-    );
-    window.setTimeout(() => {
-      if (generation === mountGeneration) retryCount = 0;
-    }, 6000);
-  } catch (err) {
-    scheduleRecover(err);
-  }
-};
-
 const scheduleRecover = (reason?: unknown) => {
-  window.clearTimeout(retryTimer);
-
   if (isChunkLoadError(reason)) {
-    hardReloadForFreshAssets();
-    return;
+    reloadOnce();
   }
-
-  if (retryCount >= MAX_AUTO_RETRIES) {
-    renderFallback("The app tried to recover but still could not start. Please reload once.");
-    return;
-  }
-
-  retryCount += 1;
-  renderFallback("PrintLoco is recovering automatically.", true);
-  const delay = RETRY_DELAYS_MS[Math.min(retryCount - 1, RETRY_DELAYS_MS.length - 1)];
-  retryTimer = window.setTimeout(mountApp, delay);
 };
 
 window.__PRINTLOCO_RECOVER__ = scheduleRecover;
-
-window.setTimeout(() => {
-  const rootEl = document.getElementById("root");
-  if (!rootEl || rootEl.dataset.printlocoMounted !== "true" || !rootEl.textContent?.trim()) {
-    if (reloadOnceForBootFailure()) return;
-    scheduleRecover("Initial app boot did not finish");
-  }
-}, 12000);
 
 window.addEventListener("printloco:recover", (event) => {
   scheduleRecover((event as CustomEvent).detail);
@@ -214,31 +114,25 @@ window.addEventListener("unhandledrejection", (event) => {
 const recoverIfRootIsBlank = () => {
   window.setTimeout(() => {
     const rootEl = document.getElementById("root");
-    const bootStartedAt = Number(rootEl?.dataset.printlocoBootStartedAt ?? 0);
-    const bootStalled = rootEl?.dataset.printlocoMounted === "booting" && (!bootStartedAt || Date.now() - bootStartedAt > 15000);
     if (!rootEl || rootEl.childElementCount === 0 || !rootEl.textContent?.trim()) {
-      if (reloadOnceForBootFailure()) return;
-      scheduleRecover("Blank root after page resume");
-    } else if (bootStalled || rootEl.dataset.printlocoMounted !== "true") {
-      if (bootStalled && reloadOnceForBootFailure()) return;
-      scheduleRecover("App heartbeat stopped after page resume");
-    } else {
-      markRootHealthy();
+      reloadOnce();
     }
   }, 600);
 };
 
-mountApp();
+createRoot(ensureRoot()).render(
+  <HelmetProvider>
+    <App />
+  </HelmetProvider>
+);
+window.setTimeout(markBooted, 0);
 
 // Recover from cached/blank bfcache pages after sleep/wake or reopening a tab.
 window.addEventListener("pageshow", (e) => {
-  if ((e as PageTransitionEvent).persisted) scheduleRecover("Restored from browser cache");
+  if ((e as PageTransitionEvent).persisted) recoverIfRootIsBlank();
   recoverIfRootIsBlank();
 });
 window.addEventListener("focus", recoverIfRootIsBlank);
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") recoverIfRootIsBlank();
 });
-if (import.meta.env.DEV) {
-  window.setInterval(recoverIfRootIsBlank, 5000);
-}
