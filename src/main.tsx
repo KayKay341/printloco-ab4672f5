@@ -12,10 +12,19 @@ let retryCount = 0;
 let retryTimer: number | undefined;
 let mountGeneration = 0;
 
+const clearBootRecoveryAttempt = () => {
+  try {
+    sessionStorage.removeItem("printloco:boot-reload-attempted");
+  } catch {
+    // Startup recovery must not depend on storage being available after sleep/wake.
+  }
+};
+
 const markRootHealthy = () => {
   const rootEl = ensureRoot();
   rootEl.dataset.printlocoMounted = "true";
   rootEl.dataset.printlocoLastHealthy = String(Date.now());
+  clearBootRecoveryAttempt();
 };
 
 const RootHealth = ({ children }: { children: ReactNode }) => {
@@ -84,6 +93,16 @@ const isChunkLoadError = (reason: unknown) => {
   return /failed to fetch dynamically imported module|importing a module script failed|chunkloaderror|loading chunk/i.test(message);
 };
 
+const reloadOnceForBootFailure = () => {
+  const reloadedKey = "printloco:boot-reload-attempted";
+  if (!storage.get(reloadedKey)) {
+    storage.set(reloadedKey, "true");
+    window.location.reload();
+    return true;
+  }
+  return false;
+};
+
 const mountApp = () => {
   window.clearTimeout(retryTimer);
   mountGeneration += 1;
@@ -120,12 +139,7 @@ const scheduleRecover = (reason?: unknown) => {
   window.clearTimeout(retryTimer);
 
   if (isChunkLoadError(reason)) {
-    const reloadedKey = "printloco:chunk-reload-attempted";
-    if (!storage.get(reloadedKey)) {
-      storage.set(reloadedKey, "true");
-      window.location.reload();
-      return;
-    }
+    if (reloadOnceForBootFailure()) return;
   }
 
   if (retryCount >= MAX_AUTO_RETRIES) {
@@ -140,6 +154,14 @@ const scheduleRecover = (reason?: unknown) => {
 };
 
 window.__PRINTLOCO_RECOVER__ = scheduleRecover;
+
+window.setTimeout(() => {
+  const rootEl = document.getElementById("root");
+  if (!rootEl || rootEl.dataset.printlocoMounted !== "true" || !rootEl.textContent?.trim()) {
+    if (reloadOnceForBootFailure()) return;
+    scheduleRecover("Initial app boot did not finish");
+  }
+}, 12000);
 
 window.addEventListener("printloco:recover", (event) => {
   scheduleRecover((event as CustomEvent).detail);
@@ -173,19 +195,20 @@ const recoverIfRootIsBlank = () => {
     const rootEl = document.getElementById("root");
     const lastHealthy = Number(rootEl?.dataset.printlocoLastHealthy ?? 0);
     const staleWhileVisible = document.visibilityState === "visible" && lastHealthy > 0 && Date.now() - lastHealthy > 120000;
+    const bootStalled = rootEl?.dataset.printlocoMounted === "booting" && (!lastHealthy || Date.now() - lastHealthy > 10000);
     if (!rootEl || rootEl.childElementCount === 0 || !rootEl.textContent?.trim()) {
+      if (reloadOnceForBootFailure()) return;
       scheduleRecover("Blank root after page resume");
-    } else if (rootEl.dataset.printlocoMounted !== "true" || staleWhileVisible) {
+    } else if (bootStalled || rootEl.dataset.printlocoMounted !== "true" || staleWhileVisible) {
+      if (staleWhileVisible || bootStalled) {
+        if (reloadOnceForBootFailure()) return;
+      }
       scheduleRecover("App heartbeat stopped after page resume");
     }
   }, 600);
 };
 
 mountApp();
-
-window.setTimeout(() => {
-  storage.remove("printloco:chunk-reload-attempted");
-}, 8000);
 
 // Recover from cached/blank bfcache pages after sleep/wake or reopening a tab.
 window.addEventListener("pageshow", (e) => {

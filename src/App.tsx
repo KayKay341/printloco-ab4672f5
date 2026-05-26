@@ -1,4 +1,4 @@
-import { Component, Suspense, lazy, type ComponentType, type ErrorInfo, type LazyExoticComponent, type ReactNode } from "react";
+import { Component, type ComponentType, type ErrorInfo, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -9,45 +9,34 @@ import { PaymentTestModeBanner } from "@/components/PaymentTestModeBanner";
 import { DemoModeBanner } from "@/components/DemoModeBanner";
 import { VerificationBanner } from "@/components/VerificationBanner";
 import AIHelper from "@/components/AIHelper";
-
-const Index = lazy(() => import("./pages/Index.tsx"));
-const NotFound = lazy(() => import("./pages/NotFound.tsx"));
-const Auth = lazy(() => import("./pages/Auth.tsx"));
-const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
-const Printers = lazy(() => import("./pages/Printers.tsx"));
-const NewPrinter = lazy(() => import("./pages/NewPrinter.tsx"));
-const Upload = lazy(() => import("./pages/Upload.tsx"));
-const Waitlist = lazy(() => import("./pages/Waitlist.tsx"));
-const Invest = lazy(() => import("./pages/Invest.tsx"));
-const CheckoutReturn = lazy(() => import("./pages/CheckoutReturn.tsx"));
-const Admin = lazy(() => import("./pages/Admin.tsx"));
-const Unsubscribe = lazy(() => import("./pages/Unsubscribe.tsx"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword.tsx"));
-const GiftCards = lazy(() => import("./pages/GiftCards.tsx"));
-const RedeemGiftCard = lazy(() => import("./pages/RedeemGiftCard.tsx"));
-const GiftCardReturn = lazy(() => import("./pages/GiftCardReturn.tsx"));
-const BecomeMaker = lazy(() => import("./pages/BecomeMaker.tsx"));
-const MakerOnboarding = lazy(() => import("./pages/MakerOnboarding.tsx"));
-const MakerOnboardingImages = lazy(() => import("./pages/MakerOnboardingImages.tsx"));
-const MakerOnboardingReview = lazy(() => import("./pages/MakerOnboardingReview.tsx"));
-const MakerOnboardingFinancials = lazy(() => import("./pages/MakerOnboardingFinancials.tsx"));
-const MakerOnboardingComplete = lazy(() => import("./pages/MakerOnboardingComplete.tsx"));
-const MakerDashboardSelector = lazy(() => import("./pages/MakerDashboardSelector.tsx"));
-const MakerWorkspace = lazy(() => import("./pages/MakerWorkspace.tsx"));
-const RoleSelection = lazy(() => import("./pages/RoleSelection.tsx"));
-const Services = lazy(() => import("./pages/Services.tsx"));
-const Order = lazy(() => import("./pages/Order.tsx"));
+import Index from "./pages/Index.tsx";
+import NotFound from "./pages/NotFound.tsx";
+import Auth from "./pages/Auth.tsx";
+import Dashboard from "./pages/Dashboard.tsx";
+import Printers from "./pages/Printers.tsx";
+import NewPrinter from "./pages/NewPrinter.tsx";
+import Upload from "./pages/Upload.tsx";
+import Waitlist from "./pages/Waitlist.tsx";
+import Invest from "./pages/Invest.tsx";
+import CheckoutReturn from "./pages/CheckoutReturn.tsx";
+import Admin from "./pages/Admin.tsx";
+import Unsubscribe from "./pages/Unsubscribe.tsx";
+import ResetPassword from "./pages/ResetPassword.tsx";
+import GiftCards from "./pages/GiftCards.tsx";
+import RedeemGiftCard from "./pages/RedeemGiftCard.tsx";
+import GiftCardReturn from "./pages/GiftCardReturn.tsx";
+import BecomeMaker from "./pages/BecomeMaker.tsx";
+import MakerOnboarding from "./pages/MakerOnboarding.tsx";
+import MakerOnboardingImages from "./pages/MakerOnboardingImages.tsx";
+import MakerOnboardingReview from "./pages/MakerOnboardingReview.tsx";
+import MakerOnboardingFinancials from "./pages/MakerOnboardingFinancials.tsx";
+import MakerOnboardingComplete from "./pages/MakerOnboardingComplete.tsx";
+import MakerWorkspace from "./pages/MakerWorkspace.tsx";
+import RoleSelection from "./pages/RoleSelection.tsx";
+import Services from "./pages/Services.tsx";
+import Order from "./pages/Order.tsx";
 
 const queryClient = new QueryClient();
-
-const PageLoading = () => (
-  <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
-    <div className="flex items-center gap-3 text-sm font-semibold text-muted-foreground">
-      <span className="h-3 w-3 animate-pulse rounded-full bg-primary" />
-      Loading PrintLoco…
-    </div>
-  </main>
-);
 
 const AppFallback = () => (
   <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
@@ -96,15 +85,13 @@ class PageErrorBoundary extends Component<{ children: ReactNode }, { hasError: b
   }
 }
 
-const SafePage = ({ component: Component }: { component: LazyExoticComponent<ComponentType> }) => (
+const SafePage = ({ component: Component }: { component: ComponentType }) => (
   <PageErrorBoundary>
-    <Suspense fallback={<PageLoading />}>
-      <Component />
-    </Suspense>
+    <Component />
   </PageErrorBoundary>
 );
 
-const routeElement = (component: LazyExoticComponent<ComponentType>) => <SafePage component={component} />;
+const routeElement = (component: ComponentType) => <SafePage component={component} />;
 
 const FatalAppFallback = () => (
   <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
@@ -209,9 +196,7 @@ const AppContent = () => {
       <VerificationBanner isVisible={!isVerified} />
       <PaymentTestModeBanner />
       <DemoModeBanner />
-      <Suspense fallback={<PageLoading />}>
-        <AppRoutes />
-      </Suspense>
+      <AppRoutes />
       <AIHelper />
     </>
   );
