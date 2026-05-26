@@ -155,6 +155,14 @@ const scheduleRecover = (reason?: unknown) => {
 
 window.__PRINTLOCO_RECOVER__ = scheduleRecover;
 
+window.setTimeout(() => {
+  const rootEl = document.getElementById("root");
+  if (!rootEl || rootEl.dataset.printlocoMounted !== "true" || !rootEl.textContent?.trim()) {
+    if (reloadOnceForBootFailure()) return;
+    scheduleRecover("Initial app boot did not finish");
+  }
+}, 12000);
+
 window.addEventListener("printloco:recover", (event) => {
   scheduleRecover((event as CustomEvent).detail);
 });
@@ -201,10 +209,6 @@ const recoverIfRootIsBlank = () => {
 };
 
 mountApp();
-
-window.setTimeout(() => {
-  storage.remove("printloco:chunk-reload-attempted");
-}, 8000);
 
 // Recover from cached/blank bfcache pages after sleep/wake or reopening a tab.
 window.addEventListener("pageshow", (e) => {
