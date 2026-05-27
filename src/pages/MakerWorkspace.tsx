@@ -66,6 +66,7 @@ type PrinterRow = {
   image_url: string | null;
   sample_print_urls: string[] | null;
   has_ams: boolean;
+  material_prices: Record<string, number> | null;
 };
 
 type OrderStat = { status: string; amount_total: number; created_at: string };
@@ -102,7 +103,7 @@ const MakerWorkspace = () => {
       const { data } = await supabase
         .from("printers")
         .select(
-          "id, brand, model, materials, price_per_gram, neighborhood, bio, verification_status, quality_score, tier, avg_rating, rating_count, total_orders, successful_orders, last_order_at, published, hidden_for_inactivity, image_url, sample_print_urls, has_ams"
+          "id, brand, model, materials, price_per_gram, material_prices, neighborhood, bio, verification_status, quality_score, tier, avg_rating, rating_count, total_orders, successful_orders, last_order_at, published, hidden_for_inactivity, image_url, sample_print_urls, has_ams"
         )
         .eq("owner_id", user.id)
         .order("created_at", { ascending: false });
@@ -424,6 +425,13 @@ const ListingsSection = ({
   printers: PrinterRow[];
   setPrinters: (p: PrinterRow[]) => void;
 }) => {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ price_per_gram: string; material_prices: Record<string, string> }>({
+    price_per_gram: "",
+    material_prices: {},
+  });
+  const [saving, setSaving] = useState(false);
+
   const togglePublished = async (id: string, next: boolean) => {
     const { error } = await supabase.from("printers").update({ published: next }).eq("id", id);
     if (error) {
@@ -432,6 +440,53 @@ const ListingsSection = ({
     }
     setPrinters(printers.map((p) => (p.id === id ? { ...p, published: next } : p)));
     toast.success(next ? "Listing is live" : "Listing hidden");
+  };
+
+  const startEdit = (p: PrinterRow) => {
+    setEditingId(p.id);
+    const mp: Record<string, string> = {};
+    for (const m of p.materials || []) {
+      const v = p.material_prices?.[m];
+      mp[m] = v != null ? String(v) : "";
+    }
+    setDraft({ price_per_gram: String(p.price_per_gram ?? ""), material_prices: mp });
+  };
+
+  const savePricing = async (p: PrinterRow) => {
+    const base = parseFloat(draft.price_per_gram);
+    if (!Number.isFinite(base) || base < 0 || base > 5) {
+      toast.error("Base price per gram must be between $0 and $5.");
+      return;
+    }
+    const cleanedMaterialPrices: Record<string, number> = {};
+    for (const [m, raw] of Object.entries(draft.material_prices)) {
+      if (raw === "" || raw == null) continue;
+      const v = parseFloat(raw);
+      if (!Number.isFinite(v) || v < 0 || v > 5) {
+        toast.error(`Price for ${m} must be between $0 and $5.`);
+        return;
+      }
+      cleanedMaterialPrices[m] = v;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from("printers")
+      .update({ price_per_gram: base, material_prices: cleanedMaterialPrices })
+      .eq("id", p.id);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setPrinters(
+      printers.map((row) =>
+        row.id === p.id
+          ? { ...row, price_per_gram: base, material_prices: cleanedMaterialPrices }
+          : row
+      )
+    );
+    setEditingId(null);
+    toast.success("Pricing updated");
   };
 
   return (
@@ -483,6 +538,14 @@ const ListingsSection = ({
                       onCheckedChange={(v) => togglePublished(p.id, v)}
                     />
                   </div>
+                  <Button
+                    variant={editingId === p.id ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => (editingId === p.id ? setEditingId(null) : startEdit(p))}
+                  >
+                    <DollarSign className="h-3.5 w-3.5 mr-1" />
+                    {editingId === p.id ? "Close" : "Edit pricing"}
+                  </Button>
                   <Button variant="outline" size="sm" asChild>
                     <Link to={`/printers?focus=${p.id}`}>
                       <ExternalLink className="h-3.5 w-3.5 mr-1" /> View public
@@ -490,6 +553,68 @@ const ListingsSection = ({
                   </Button>
                 </div>
               </div>
+
+              {editingId === p.id && (
+                <div className="mt-4 rounded-xl border border-border bg-background p-4 space-y-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent">
+                    <DollarSign className="h-3.5 w-3.5" /> Pricing
+                  </div>
+                  <div className="grid gap-2 sm:max-w-xs">
+                    <Label htmlFor={`base-${p.id}`}>Base price per gram ($)</Label>
+                    <Input
+                      id={`base-${p.id}`}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="5"
+                      value={draft.price_per_gram}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, price_per_gram: e.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Most makers charge $0.15–$0.35/g. Used when no per-material override is set.
+                    </p>
+                  </div>
+                  {(p.materials || []).length > 0 && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Per-material overrides ($/g)</div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {p.materials.map((m) => (
+                          <div key={m} className="grid gap-1">
+                            <Label htmlFor={`mat-${p.id}-${m}`} className="text-xs">
+                              {m}
+                            </Label>
+                            <Input
+                              id={`mat-${p.id}-${m}`}
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="5"
+                              placeholder={`Default ${Number(draft.price_per_gram || p.price_per_gram).toFixed(2)}`}
+                              value={draft.material_prices[m] ?? ""}
+                              onChange={(e) =>
+                                setDraft((d) => ({
+                                  ...d,
+                                  material_prices: { ...d.material_prices, [m]: e.target.value },
+                                }))
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="hero" disabled={saving} onClick={() => savePricing(p)}>
+                      {saving ? "Saving…" : "Save pricing"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent">
