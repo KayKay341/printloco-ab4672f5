@@ -1,3 +1,4 @@
+import { Navigate, useSearchParams } from "react-router-dom";
 import Navbar from "@/components/site/Navbar";
 import Hero from "@/components/site/Hero";
 import Marquee from "@/components/site/Marquee";
@@ -10,8 +11,18 @@ import Testimonials from "@/components/site/Testimonials";
 import FinalCTA from "@/components/site/FinalCTA";
 import Footer from "@/components/site/Footer";
 import SEO from "@/components/SEO";
+import { useAuth } from "@/hooks/useAuth";
 
-const Index = () => (
+const Index = () => {
+  const { profile, loading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const stayHome = searchParams.get("home") === "1";
+
+  if (!loading && profile?.role === "maker" && !stayHome) {
+    return <Navigate to="/maker" replace />;
+  }
+
+  return (
   <div className="min-h-screen bg-background">
     <SEO
       title="PrintLoco — Hyperlocal 3D Printing Near You"
@@ -40,6 +51,7 @@ const Index = () => (
     </main>
     <Footer />
   </div>
-);
+  );
+};
 
 export default Index;
