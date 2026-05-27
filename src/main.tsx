@@ -307,7 +307,7 @@ window.addEventListener("pageshow", (e) => {
   if ((e as PageTransitionEvent).persisted) recoverIfRootIsBlank();
   recoverIfRootIsBlank();
 });
-window.addEventListener("focus", recoverIfRootIsBlank);
+window.addEventListener("focus", () => recoverIfRootIsBlank("window focus"));
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") recoverIfRootIsBlank();
 });
