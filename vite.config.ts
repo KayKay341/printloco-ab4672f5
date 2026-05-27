@@ -83,7 +83,11 @@ const hmrHost = process.env.__LOVABLE_PROJECT_ID ? `${process.env.__LOVABLE_PROJ
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+  // Hardcoded publishable fallbacks — these are safe to ship to the client (anon/publishable key)
+  // and guarantee the app boots even if env injection fails in a given build environment.
+  const FALLBACK_SUPABASE_URL = "https://xcrdzmqqrgilysomdrik.supabase.co";
+  const FALLBACK_SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhjcmR6bXFxcmdpbHlzb21kcmlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NzgxMjcsImV4cCI6MjA5MjM1NDEyN30.m53S3gT4bK51EK57x9e1lM59J4GiVMWW7Vgh_mipva0";
+  const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || FALLBACK_SUPABASE_URL;
   const supabasePublishableKey =
     env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     env.SUPABASE_PUBLISHABLE_KEY ||
@@ -91,7 +95,7 @@ export default defineConfig(({ mode }) => {
     process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_PUBLISHABLE_KEY ||
     process.env.SUPABASE_ANON_KEY ||
-    "";
+    FALLBACK_SUPABASE_PUBLISHABLE_KEY;
 
   return {
     define: {
