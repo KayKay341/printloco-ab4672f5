@@ -66,6 +66,7 @@ type PrinterRow = {
   image_url: string | null;
   sample_print_urls: string[] | null;
   has_ams: boolean;
+  material_prices: Record<string, number> | null;
 };
 
 type OrderStat = { status: string; amount_total: number; created_at: string };
