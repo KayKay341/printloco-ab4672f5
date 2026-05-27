@@ -538,6 +538,14 @@ const ListingsSection = ({
                       onCheckedChange={(v) => togglePublished(p.id, v)}
                     />
                   </div>
+                  <Button
+                    variant={editingId === p.id ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => (editingId === p.id ? setEditingId(null) : startEdit(p))}
+                  >
+                    <DollarSign className="h-3.5 w-3.5 mr-1" />
+                    {editingId === p.id ? "Close" : "Edit pricing"}
+                  </Button>
                   <Button variant="outline" size="sm" asChild>
                     <Link to={`/printers?focus=${p.id}`}>
                       <ExternalLink className="h-3.5 w-3.5 mr-1" /> View public
@@ -545,6 +553,68 @@ const ListingsSection = ({
                   </Button>
                 </div>
               </div>
+
+              {editingId === p.id && (
+                <div className="mt-4 rounded-xl border border-border bg-background p-4 space-y-4">
+                  <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent">
+                    <DollarSign className="h-3.5 w-3.5" /> Pricing
+                  </div>
+                  <div className="grid gap-2 sm:max-w-xs">
+                    <Label htmlFor={`base-${p.id}`}>Base price per gram ($)</Label>
+                    <Input
+                      id={`base-${p.id}`}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="5"
+                      value={draft.price_per_gram}
+                      onChange={(e) =>
+                        setDraft((d) => ({ ...d, price_per_gram: e.target.value }))
+                      }
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Most makers charge $0.15–$0.35/g. Used when no per-material override is set.
+                    </p>
+                  </div>
+                  {(p.materials || []).length > 0 && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Per-material overrides ($/g)</div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {p.materials.map((m) => (
+                          <div key={m} className="grid gap-1">
+                            <Label htmlFor={`mat-${p.id}-${m}`} className="text-xs">
+                              {m}
+                            </Label>
+                            <Input
+                              id={`mat-${p.id}-${m}`}
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="5"
+                              placeholder={`Default ${Number(draft.price_per_gram || p.price_per_gram).toFixed(2)}`}
+                              value={draft.material_prices[m] ?? ""}
+                              onChange={(e) =>
+                                setDraft((d) => ({
+                                  ...d,
+                                  material_prices: { ...d.material_prices, [m]: e.target.value },
+                                }))
+                              }
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="hero" disabled={saving} onClick={() => savePricing(p)}>
+                      {saving ? "Saving…" : "Save pricing"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 rounded-xl border border-border bg-muted/30 p-4">
                 <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-accent">
