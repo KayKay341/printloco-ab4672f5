@@ -425,6 +425,13 @@ const ListingsSection = ({
   printers: PrinterRow[];
   setPrinters: (p: PrinterRow[]) => void;
 }) => {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ price_per_gram: string; material_prices: Record<string, string> }>({
+    price_per_gram: "",
+    material_prices: {},
+  });
+  const [saving, setSaving] = useState(false);
+
   const togglePublished = async (id: string, next: boolean) => {
     const { error } = await supabase.from("printers").update({ published: next }).eq("id", id);
     if (error) {
@@ -433,6 +440,53 @@ const ListingsSection = ({
     }
     setPrinters(printers.map((p) => (p.id === id ? { ...p, published: next } : p)));
     toast.success(next ? "Listing is live" : "Listing hidden");
+  };
+
+  const startEdit = (p: PrinterRow) => {
+    setEditingId(p.id);
+    const mp: Record<string, string> = {};
+    for (const m of p.materials || []) {
+      const v = p.material_prices?.[m];
+      mp[m] = v != null ? String(v) : "";
+    }
+    setDraft({ price_per_gram: String(p.price_per_gram ?? ""), material_prices: mp });
+  };
+
+  const savePricing = async (p: PrinterRow) => {
+    const base = parseFloat(draft.price_per_gram);
+    if (!Number.isFinite(base) || base < 0 || base > 5) {
+      toast.error("Base price per gram must be between $0 and $5.");
+      return;
+    }
+    const cleanedMaterialPrices: Record<string, number> = {};
+    for (const [m, raw] of Object.entries(draft.material_prices)) {
+      if (raw === "" || raw == null) continue;
+      const v = parseFloat(raw);
+      if (!Number.isFinite(v) || v < 0 || v > 5) {
+        toast.error(`Price for ${m} must be between $0 and $5.`);
+        return;
+      }
+      cleanedMaterialPrices[m] = v;
+    }
+    setSaving(true);
+    const { error } = await supabase
+      .from("printers")
+      .update({ price_per_gram: base, material_prices: cleanedMaterialPrices })
+      .eq("id", p.id);
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setPrinters(
+      printers.map((row) =>
+        row.id === p.id
+          ? { ...row, price_per_gram: base, material_prices: cleanedMaterialPrices }
+          : row
+      )
+    );
+    setEditingId(null);
+    toast.success("Pricing updated");
   };
 
   return (
