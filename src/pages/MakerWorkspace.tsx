@@ -103,7 +103,7 @@ const MakerWorkspace = () => {
       const { data } = await supabase
         .from("printers")
         .select(
-          "id, brand, model, materials, price_per_gram, neighborhood, bio, verification_status, quality_score, tier, avg_rating, rating_count, total_orders, successful_orders, last_order_at, published, hidden_for_inactivity, image_url, sample_print_urls, has_ams"
+          "id, brand, model, materials, price_per_gram, material_prices, neighborhood, bio, verification_status, quality_score, tier, avg_rating, rating_count, total_orders, successful_orders, last_order_at, published, hidden_for_inactivity, image_url, sample_print_urls, has_ams"
         )
         .eq("owner_id", user.id)
         .order("created_at", { ascending: false });
