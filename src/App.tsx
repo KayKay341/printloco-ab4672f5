@@ -38,11 +38,35 @@ import Order from "./pages/Order.tsx";
 
 const queryClient = new QueryClient();
 
+const RecoveryDiagnostics = () => {
+  const diagnostics = (window as Window & { __PRINTLOCO_DIAGNOSTICS__?: { read: () => Array<{ id: string; time: string; type: string; message: string }> } }).__PRINTLOCO_DIAGNOSTICS__?.read?.() ?? [];
+  const recent = diagnostics.slice(-6).reverse();
+
+  if (!recent.length) return null;
+
+  return (
+    <details className="mt-6 text-left" open>
+      <summary className="cursor-pointer text-sm font-semibold text-foreground">Recent diagnostics</summary>
+      <ul className="mt-3 max-h-64 space-y-3 overflow-auto rounded-xl border border-border bg-background p-4">
+        {recent.map((item) => (
+          <li key={item.id} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground">
+              <span>{item.type}</span>
+              <span className="text-muted-foreground">{new Date(item.time).toLocaleString()}</span>
+            </div>
+            <code className="mt-2 block whitespace-pre-wrap break-words text-xs text-muted-foreground">{item.message}</code>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+};
+
 const AppFallback = () => (
   <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
-    <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
+    <section className="w-full max-w-2xl rounded-3xl border border-border bg-card p-8 shadow-card text-center">
       <h1 className="font-display text-3xl font-semibold">This page hit a snag</h1>
-      <p className="mt-3 text-sm text-muted-foreground">PrintLoco is restarting this page automatically.</p>
+      <p className="mt-3 text-sm text-muted-foreground">The page stayed visible and captured what went wrong below.</p>
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
         <button
           type="button"
@@ -58,6 +82,7 @@ const AppFallback = () => (
           Go home
         </a>
       </div>
+      <RecoveryDiagnostics />
     </section>
   </main>
 );
@@ -95,9 +120,9 @@ const routeElement = (component: ComponentType) => <SafePage component={componen
 
 const FatalAppFallback = () => (
   <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-6">
-    <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 shadow-card text-center">
+    <section className="w-full max-w-2xl rounded-3xl border border-border bg-card p-8 shadow-card text-center">
       <h1 className="font-display text-3xl font-semibold">PrintLoco didn’t start</h1>
-      <p className="mt-3 text-sm text-muted-foreground">The app is restarting automatically.</p>
+      <p className="mt-3 text-sm text-muted-foreground">The app stayed visible and captured startup diagnostics below.</p>
       <button
         type="button"
         onClick={() => window.location.reload()}
@@ -105,6 +130,7 @@ const FatalAppFallback = () => (
       >
         Reload page
       </button>
+      <RecoveryDiagnostics />
     </section>
   </main>
 );
