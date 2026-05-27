@@ -275,11 +275,11 @@ const renderApp = (reason: string) => {
   }
 };
 
-const recoverIfRootIsBlank = () => {
+const recoverIfRootIsBlank = (reason = "root recovery check") => {
   window.setTimeout(() => {
     const rootEl = document.getElementById("root");
     if (!rootEl || rootEl.childElementCount === 0 || !rootEl.textContent?.trim()) {
-      recordDiagnostic("blank-screen", "The React root was empty during a recovery check.");
+      recordDiagnostic("blank-screen", `The React root was empty during ${reason}.`);
       if (remountAttempts < 2) {
         remountAttempts += 1;
         recordDiagnostic("remount-attempt", `Trying React remount ${remountAttempts} of 2.`);
