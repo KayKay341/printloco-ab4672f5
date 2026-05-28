@@ -117,6 +117,17 @@ const Printers = () => {
       });
   }, [isDemo]);
 
+  // Scroll the focused listing into view once data is ready.
+  useEffect(() => {
+    if (!focusId || loading) return;
+    const el = cardRefs.current[focusId];
+    if (el) {
+      setView("grid");
+      requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth", block: "center" }));
+    }
+  }, [focusId, loading, all]);
+
+
   const filtered = useMemo(() => {
     const list = all.filter((p) => {
       const matchesQ = !q ||
