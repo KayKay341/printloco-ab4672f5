@@ -162,7 +162,7 @@ const Printers = () => {
       sorted.sort((a, b) => Number(a.price_per_gram) - Number(b.price_per_gram));
     }
     return sorted;
-  }, [all, q, material, color, amsOnly, bulkOnly, tierFilter, sort]);
+  }, [all, q, serviceFilter, material, color, amsOnly, bulkOnly, tierFilter, sort]);
 
   const allMaterials = useMemo(() => Array.from(new Set(all.flatMap((p) => p.materials))), [all]);
 
