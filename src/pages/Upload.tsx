@@ -13,6 +13,8 @@ import {
   HelpCircle,
   Layers,
   Link as LinkIcon,
+  Palette,
+  Printer,
   Ruler,
   Settings2,
   Sparkles,
@@ -38,7 +40,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { parse3mf } from "@/lib/threeMfParser";
+import { parse3mf, recolorBySlot, type FilamentSlot, type Mfg3mfResult } from "@/lib/threeMfParser";
+import { BUILD_PLATES, DEFAULT_PLATE_ID, getPlate } from "@/lib/buildPlates";
 import {
   DEFAULT_SLICER_SETTINGS,
   MATERIAL_DEFAULTS,
@@ -58,6 +61,10 @@ type ModelFile = {
   name: string;
   extension: "stl" | "obj" | "3mf";
   geometry: THREE.BufferGeometry;
+  /** Populated only for 3MF — drives multi-color preview + slot editor. */
+  filaments?: FilamentSlot[];
+  /** Imported slice settings from the 3MF (for the "imported" banner). */
+  imported?: Mfg3mfResult["sliceSettings"];
 };
 
 const SETTINGS_KEY = "printloco-slicer-settings";
@@ -109,6 +116,10 @@ const Upload = () => {
   const [processing, setProcessing] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [plateId, setPlateId] = useState<string>(DEFAULT_PLATE_ID);
+  /** Bumped whenever a filament color is remapped so the preview re-renders. */
+  const [colorVersion, setColorVersion] = useState(0);
+  const plate = useMemo(() => getPlate(plateId), [plateId]);
 
   useEffect(() => {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -130,7 +141,8 @@ const Upload = () => {
   const previewGeometry = useMemo(() => {
     if (!model) return null;
     return transformGeometryForSlicer(model.geometry, rotation);
-  }, [model, rotation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, rotation, colorVersion]);
 
   const modelInfo: ModelInfo | null = useMemo(() => {
     if (!previewGeometry) return null;
@@ -142,18 +154,28 @@ const Upload = () => {
     [modelInfo, settings],
   );
 
+  /** Does the model fit on the chosen plate? */
+  const plateFit = useMemo(() => {
+    if (!stats) return { overflow: false, axes: [] as string[] };
+    const axes: string[] = [];
+    if (stats.dimensions.width > plate.x) axes.push(`X by ${Math.ceil(stats.dimensions.width - plate.x)}mm`);
+    if (stats.dimensions.depth > plate.y) axes.push(`Y by ${Math.ceil(stats.dimensions.depth - plate.y)}mm`);
+    if (stats.dimensions.height > plate.z) axes.push(`Z by ${Math.ceil(stats.dimensions.height - plate.z)}mm`);
+    return { overflow: axes.length > 0, axes };
+  }, [stats, plate]);
+
   const tips = useMemo(() => {
     const list: string[] = [];
     if (!stats) return list;
     if (stats.printMinutes > 480) list.push("Heads up — this print is over 8 hours. Consider Quick Draft to test first.");
-    if (stats.dimensions.width > 250 || stats.dimensions.depth > 250 || stats.dimensions.height > 250) {
-      list.push("This model is quite large. Make sure your maker's printer can fit it.");
+    if (plateFit.overflow) {
+      list.push(`Won't fit ${plate.brand} ${plate.model} — overflows ${plateFit.axes.join(", ")}. Try a bigger plate or rotate.`);
     }
     if (settings.infill < 10 && settings.material !== "PLA") {
       list.push("Low infill on PETG or ABS can make parts feel hollow.");
     }
     return list;
-  }, [settings, stats]);
+  }, [settings, stats, plate, plateFit]);
 
   const handleFile = async (file: File) => {
     const ext = file.name.toLowerCase().split(".").pop();
@@ -168,17 +190,52 @@ const Upload = () => {
 
     setProcessing(true);
     try {
-      const geometry =
-        ext === "stl" ? await loadStl(file) : ext === "obj" ? await loadObj(file) : await load3mf(file);
-      setModel({ name: file.name, extension: ext as "stl" | "obj" | "3mf", geometry });
+      if (ext === "3mf") {
+        const buffer = await file.arrayBuffer();
+        const result = await parse3mf(buffer);
+        result.geometry.computeVertexNormals();
+        setModel({
+          name: file.name,
+          extension: "3mf",
+          geometry: result.geometry,
+          filaments: result.filaments,
+          imported: result.sliceSettings,
+        });
+        // Apply imported slicer settings if they look sane — beginners just want
+        // their designer's presets to "just work".
+        const importedMat = mapMaterial(result.sliceSettings.material);
+        setSettings((current) => ({
+          ...current,
+          material: importedMat,
+          layerHeight: clamp(result.sliceSettings.layerHeightMm, 0.1, 0.4),
+          infill: clamp(Math.round(result.sliceSettings.infillPct), 0, 100),
+          nozzleTemp: MATERIAL_DEFAULTS[importedMat],
+        }));
+        setActivePreset("imported");
+        const slotMsg = result.filaments.length > 1 ? ` · ${result.filaments.length} colors detected` : "";
+        toast.success(`${file.name} loaded — settings imported${slotMsg}`);
+      } else {
+        const geometry = ext === "stl" ? await loadStl(file) : await loadObj(file);
+        setModel({ name: file.name, extension: ext as "stl" | "obj", geometry });
+        toast.success(`${file.name} loaded`);
+      }
       setRotation({ x: 0, y: 0, z: 0 });
-      toast.success(`${file.name} loaded`);
     } catch (error: any) {
       toast.error(error?.message ?? "Could not load that model.");
     } finally {
       setProcessing(false);
       if (inputRef.current) inputRef.current.value = "";
     }
+  };
+
+  /** Remap a filament slot to a new color, mutate vertex colors in place. */
+  const updateFilamentColor = (slotIndex: number, hex: string) => {
+    if (!model?.filaments) return;
+    const before = model.filaments.map((f) => ({ ...f }));
+    const after = before.map((f, i) => (i === slotIndex ? { ...f, hex } : f));
+    recolorBySlot(model.geometry, before, after);
+    setModel({ ...model, filaments: after });
+    setColorVersion((v) => v + 1);
   };
 
   const updateSetting = <K extends keyof SlicerSettings>(key: K, value: SlicerSettings[K]) => {
@@ -280,7 +337,9 @@ const Upload = () => {
                     <StlPreview
                       geometry={previewGeometry}
                       color="hsl(var(--primary))"
-                      plate={{ x: 260, y: 260, z: 260 }}
+                      vertexColors={model?.extension === "3mf"}
+                      plate={{ x: plate.x, y: plate.y, z: plate.z }}
+                      overflow={plateFit.overflow}
                       className="h-full w-full"
                     />
                   ) : (
@@ -357,6 +416,91 @@ const Upload = () => {
 
             {/* Right: settings */}
             <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+              {/* Imported-from-3MF banner */}
+              {model?.extension === "3mf" && model.imported && activePreset === "imported" && (
+                <div className="rounded-2xl border border-primary/40 bg-primary/5 p-4 text-sm">
+                  <div className="flex items-center gap-2 font-semibold text-foreground">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Settings imported from your 3MF
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {model.imported.material} · {model.imported.layerHeightMm.toFixed(2)}mm layers ·
+                    {" "}{Math.round(model.imported.infillPct)}% infill · {model.imported.walls} walls
+                    {model.imported.supports ? " · supports on" : ""}.
+                    Your maker will use these unless you change them.
+                  </div>
+                </div>
+              )}
+
+              {/* Build plate */}
+              <section className="rounded-3xl border border-border bg-card p-6 shadow-card">
+                <SectionHeader
+                  icon={<Printer className="h-4 w-4" />}
+                  title="Build plate"
+                  hint="Which printer will run this? We'll check if it fits."
+                />
+                <Select value={plateId} onValueChange={setPlateId}>
+                  <SelectTrigger className="mt-3 min-h-12 bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BUILD_PLATES.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <div className="flex flex-col items-start py-1">
+                          <span className="font-semibold">{p.brand} {p.model}</span>
+                          <span className="text-xs text-muted-foreground">{p.x}×{p.y}×{p.z} mm</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {stats && (
+                  <div className={`mt-3 rounded-xl border px-3 py-2 text-xs font-medium ${
+                    plateFit.overflow
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  }`}>
+                    {plateFit.overflow
+                      ? `Doesn't fit — overflows ${plateFit.axes.join(", ")}.`
+                      : `Fits ${plate.short} (${Math.round(stats.dimensions.width)}×${Math.round(stats.dimensions.depth)}×${Math.round(stats.dimensions.height)} mm).`}
+                  </div>
+                )}
+              </section>
+
+              {/* Filament colors (3MF only) */}
+              {model?.extension === "3mf" && model.filaments && model.filaments.length > 0 && (
+                <section className="rounded-3xl border border-border bg-card p-6 shadow-card">
+                  <SectionHeader
+                    icon={<Palette className="h-4 w-4" />}
+                    title={`Colors (${model.filaments.length})`}
+                    hint="Tap a swatch to swap colors. Preview updates live."
+                  />
+                  <ul className="mt-4 space-y-2">
+                    {model.filaments.map((f, i) => (
+                      <li key={`${f.index}-${i}`} className="flex items-center gap-3 rounded-xl border border-border bg-background p-2">
+                        <label
+                          className="relative h-10 w-10 cursor-pointer overflow-hidden rounded-lg border border-border"
+                          style={{ backgroundColor: f.hex }}
+                          title={`Slot ${f.index} — ${f.hex}`}
+                        >
+                          <input
+                            type="color"
+                            value={f.hex}
+                            onChange={(e) => updateFilamentColor(i, e.target.value)}
+                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                          />
+                        </label>
+                        <div className="flex-1 text-sm">
+                          <div className="font-semibold text-foreground">Slot {f.index} · {f.type}</div>
+                          <div className="font-mono text-xs uppercase text-muted-foreground">{f.hex}</div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+
               {/* Material */}
               <section className="rounded-3xl border border-border bg-card p-6 shadow-card">
                 <SectionHeader
@@ -771,16 +915,6 @@ async function loadObj(file: File): Promise<THREE.BufferGeometry> {
   return geometry;
 }
 
-async function load3mf(file: File): Promise<THREE.BufferGeometry> {
-  const buffer = await file.arrayBuffer();
-  const result = await parse3mf(buffer);
-  const geometry = result.geometry;
-  if (!geometry.getAttribute("position") || geometry.getAttribute("position").count === 0) {
-    throw new Error("3MF contains no mesh geometry.");
-  }
-  geometry.computeVertexNormals();
-  return geometry;
-}
 
 function downloadText(fileName: string, text: string, mime: string) {
   const blob = new Blob([text], { type: mime });
@@ -812,6 +946,13 @@ function sanitizeSettings(value: Partial<SlicerSettings>): SlicerSettings {
     nozzleTemp: clamp(Math.round(Number(value.nozzleTemp ?? MATERIAL_DEFAULTS[material])), 190, 250),
     speed: clamp(Math.round(Number(value.speed ?? DEFAULT_SLICER_SETTINGS.speed)), 10, 100),
   };
+}
+
+function mapMaterial(raw: string): SlicerSettings["material"] {
+  const value = (raw || "").toUpperCase();
+  if (value.includes("PETG")) return "PETG";
+  if (value.includes("ABS")) return "ABS";
+  return "PLA";
 }
 
 function clamp(value: number, min: number, max: number) {

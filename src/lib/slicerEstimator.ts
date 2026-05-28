@@ -221,6 +221,14 @@ function toTriangleGeometry(geometry: THREE.BufferGeometry): THREE.BufferGeometr
   copy.set(Array.from(arr as ArrayLike<number>));
   const out = new THREE.BufferGeometry();
   out.setAttribute("position", new THREE.BufferAttribute(copy, 3));
+  // Preserve vertex colors (used for multi-color 3MF previews).
+  const color = source.getAttribute("color");
+  if (color) {
+    const ca = color.array as ArrayLike<number>;
+    const colCopy = new Float32Array(ca.length);
+    colCopy.set(Array.from(ca));
+    out.setAttribute("color", new THREE.BufferAttribute(colCopy, color.itemSize));
+  }
   return out;
 }
 
