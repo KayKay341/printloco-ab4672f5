@@ -15,14 +15,18 @@ import { getSamplePrinters } from "@/lib/sampleData";
 import BulkQuoteDialog from "@/components/BulkQuoteDialog";
 import TierBadge from "@/components/TierBadge";
 import { tierFromScore, type Tier } from "@/lib/tier";
+import { SERVICES, type ServiceDef } from "@/lib/services";
 
 type FilamentColor = { material: string; color_name: string; hex_code: string; in_stock: boolean };
+
+type ServiceDbKey = ServiceDef["dbKey"];
 
 type PrinterListing = {
   id: string;
   owner_id: string;
   brand: string;
   model: string;
+  service: ServiceDbKey;
   materials: string[];
   price_per_gram: number;
   neighborhood: string | null;
@@ -45,6 +49,7 @@ type PrinterListing = {
 };
 
 type SortMode = "smart" | "quality" | "price" | "newest";
+type ServiceFilter = "all" | ServiceDbKey;
 
 const Printers = () => {
   const { isDemo } = useDemoMode();
