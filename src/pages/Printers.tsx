@@ -366,6 +366,17 @@ const Printers = () => {
                       <TierBadge tier={tier} score={p.quality_score} />
                     </div>
 
+                    {(() => {
+                      const svc = SERVICES.find((s) => s.dbKey === (p.service ?? "3d_print"));
+                      if (!svc) return null;
+                      const Icon = svc.icon;
+                      return (
+                        <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                          <Icon className="h-3 w-3" /> {svc.shortName}
+                        </div>
+                      );
+                    })()}
+
                     <h3 className="mt-2 font-display text-xl font-semibold">{p.brand} {p.model}</h3>
                     <div className="mt-1 text-sm text-muted-foreground">by {p.profiles?.full_name || "Anonymous Maker"}</div>
 
