@@ -572,6 +572,24 @@ const RotateChip = ({ label, onClick }: { label: string; onClick: () => void }) 
   </Button>
 );
 
+/** Auto-detect the right service from a file extension. */
+const detectServiceFromFile = (file: File): "3d_print" | "laser_cut" | "embroidery" | "vinyl" | null => {
+  const name = file.name.toLowerCase();
+  const ext = name.slice(name.lastIndexOf("."));
+  if ([".stl", ".obj", ".3mf"].includes(ext)) return "3d_print";
+  if ([".dst", ".pes", ".exp"].includes(ext)) return "embroidery";
+  if ([".svg", ".dxf", ".ai", ".eps", ".lbrn", ".lbrn2", ".xcs", ".dwg"].includes(ext)) return "laser_cut";
+  if ([".pdf"].includes(ext)) return "laser_cut"; // most common use
+  return null;
+};
+
+const serviceRoute = (svc: "3d_print" | "laser_cut" | "embroidery" | "vinyl") => {
+  if (svc === "3d_print") return "/order/3d-print";
+  if (svc === "laser_cut") return "/order/laser-cut";
+  if (svc === "embroidery") return "/order/embroidery";
+  return "/order/vinyl";
+};
+
 const UploadDropzone = ({
   processing,
   dragging,
@@ -584,61 +602,85 @@ const UploadDropzone = ({
   onDragState: (value: boolean) => void;
   onFile: (file: File) => void;
   inputRef: React.RefObject<HTMLInputElement>;
-}) => (
-  <div
-    className={`absolute inset-0 m-4 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed text-center transition ${
-      dragging
-        ? "border-accent bg-accent-soft/60"
-        : "border-primary/40 bg-card/50 hover:border-primary hover:bg-card"
-    }`}
-    onDragOver={(event) => {
-      event.preventDefault();
-      onDragState(true);
-    }}
-    onDragLeave={() => onDragState(false)}
-    onDrop={(event) => {
-      event.preventDefault();
-      onDragState(false);
-      const file = event.dataTransfer.files?.[0];
-      if (file) onFile(file);
-    }}
-  >
-    <input
-      ref={inputRef}
-      type="file"
-      accept=".stl,.obj,.3mf,model/stl,text/plain,model/3mf"
-      className="sr-only"
-      onChange={(event) => {
-        const file = event.target.files?.[0];
-        if (file) onFile(file);
+}) => {
+  const navigate = useNavigate();
+
+  const handleFile = (file: File) => {
+    const svc = detectServiceFromFile(file);
+    // 3D files stay on this page (full slicer flow lives here).
+    // Anything else: route to the matching order page so beginners don't have to know.
+    if (svc && svc !== "3d_print") {
+      toast.success(`Looks like a ${svc.replace("_", " ")} file — taking you there.`);
+      navigate(serviceRoute(svc));
+      return;
+    }
+    if (!svc) {
+      toast.error("We couldn't recognize that file. Try STL, SVG, DXF, PDF, DST, or PES.");
+      return;
+    }
+    onFile(file);
+  };
+
+  return (
+    <div
+      className={`absolute inset-0 m-4 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed text-center transition ${
+        dragging
+          ? "border-accent bg-accent-soft/60"
+          : "border-primary/40 bg-card/50 hover:border-primary hover:bg-card"
+      }`}
+      onDragOver={(event) => {
+        event.preventDefault();
+        onDragState(true);
       }}
-    />
-    <button
-      type="button"
-      onClick={() => inputRef.current?.click()}
-      disabled={processing}
-      className="flex flex-col items-center px-6 py-8 disabled:opacity-60"
+      onDragLeave={() => onDragState(false)}
+      onDrop={(event) => {
+        event.preventDefault();
+        onDragState(false);
+        const file = event.dataTransfer.files?.[0];
+        if (file) handleFile(file);
+      }}
     >
-      <div className="grid h-16 w-16 place-items-center rounded-2xl bg-primary/10 text-primary">
-        <UploadIcon className="h-8 w-8" />
-      </div>
-      <div className="mt-4 font-display text-2xl font-bold text-foreground">
-        {processing ? "Loading…" : "Drop your file here"}
-      </div>
-      <div className="mt-1 text-sm text-muted-foreground">
-        or <span className="font-semibold text-primary underline-offset-2 hover:underline">browse your computer</span>
-      </div>
-      <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
-        {["STL", "OBJ", "3MF"].map((tag) => (
-          <span key={tag} className="rounded-full border border-border bg-card px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-            .{tag.toLowerCase()}
-          </span>
-        ))}
-        <span className="text-xs text-muted-foreground">· up to 50MB</span>
-      </div>
-    </button>
-  </div>
-);
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".stl,.obj,.3mf,.svg,.dxf,.pdf,.ai,.eps,.dst,.pes,.exp,.png,.jpg,.jpeg"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) handleFile(file);
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={processing}
+        className="flex flex-col items-center px-6 py-8 disabled:opacity-60"
+      >
+        <div className="grid h-16 w-16 place-items-center rounded-2xl bg-primary/10 text-primary">
+          <UploadIcon className="h-8 w-8" />
+        </div>
+        <div className="mt-4 font-display text-2xl font-bold text-foreground">
+          {processing ? "Loading…" : "Drop any file — we'll figure it out"}
+        </div>
+        <div className="mt-1 text-sm text-muted-foreground">
+          or <span className="font-semibold text-primary underline-offset-2 hover:underline">browse your computer</span>
+        </div>
+        <div className="mt-2 max-w-md text-xs text-muted-foreground">
+          New to this? Just drag the file your designer sent you. We'll detect 3D
+          prints, laser cuts, embroidery, or stickers automatically.
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
+          {["stl", "3mf", "svg", "dxf", "pdf", "dst", "pes"].map((tag) => (
+            <span key={tag} className="rounded-full border border-border bg-card px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+              .{tag}
+            </span>
+          ))}
+          <span className="text-xs text-muted-foreground">· up to 50MB</span>
+        </div>
+      </button>
+    </div>
+  );
+};
 
 const FriendlySlider = ({
   label,
