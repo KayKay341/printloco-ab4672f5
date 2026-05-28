@@ -142,12 +142,13 @@ const Printers = () => {
         `${p.brand} ${p.model} ${p.neighborhood ?? ""} ${p.city ?? ""} ${p.profiles?.full_name ?? ""}`
           .toLowerCase()
           .includes(q.toLowerCase());
+      const matchesService = serviceFilter === "all" || (p.service ?? "3d_print") === serviceFilter;
       const matchesMat = !material || p.materials.includes(material);
       const matchesColor = !color || p.filament_colors.some((c) => c.color_name === color && c.in_stock && (!material || c.material === material));
       const matchesAms = !amsOnly || p.has_ams;
       const matchesBulk = !bulkOnly || p.accepts_bulk;
       const matchesTier = !tierFilter || (p.tier ?? tierFromScore(p.quality_score ?? 50)) === tierFilter;
-      return matchesQ && matchesMat && matchesColor && matchesAms && matchesBulk && matchesTier;
+      return matchesQ && matchesService && matchesMat && matchesColor && matchesAms && matchesBulk && matchesTier;
     });
 
     const sorted = [...list];
