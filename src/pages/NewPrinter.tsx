@@ -18,6 +18,7 @@ import { useDemoMode } from "@/hooks/useDemoMode";
 import { MATERIAL_BASE_PRICE } from "@/lib/stlSlicer";
 import VerificationUploader from "@/components/VerificationUploader";
 import EarningsEstimate from "@/components/EarningsEstimate";
+import { SERVICES } from "@/lib/services";
 import TierBadge from "@/components/TierBadge";
 import { tierFromScore } from "@/lib/tier";
 
@@ -48,6 +49,7 @@ const NewPrinter = () => {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetId, setPresetId] = useState<string | null>(null);
 
+  const [service, setService] = useState<"3d_print" | "laser_cut" | "embroidery" | "vinyl">("3d_print");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [buildVolume, setBuildVolume] = useState("");
@@ -253,6 +255,7 @@ const NewPrinter = () => {
           owner_id: user.id,
           brand,
           model,
+          service,
           build_volume: buildVolume || null,
           materials,
           // Cheapest material as the "headline" price_per_gram for legacy code.
@@ -343,6 +346,33 @@ const NewPrinter = () => {
         )}
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-8 rounded-3xl border border-border bg-card p-8 shadow-soft">
+          <div>
+            <Label>What service do you offer?</Label>
+            <p className="text-xs text-muted-foreground mt-1">Pick the one this machine does. You can list more machines later.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {SERVICES.map((s) => {
+                const Icon = s.icon;
+                const active = service === s.dbKey;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setService(s.dbKey)}
+                    className={`flex items-start gap-3 rounded-2xl border p-3 text-left transition-colors ${active ? "border-primary bg-primary/5 ring-2 ring-primary/30" : "border-border bg-background hover:border-primary/40"}`}
+                  >
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${s.gradient}`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold">{s.name}</div>
+                      <div className="text-[11px] text-muted-foreground line-clamp-2">{s.tagline}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label htmlFor="brand">Brand</Label>

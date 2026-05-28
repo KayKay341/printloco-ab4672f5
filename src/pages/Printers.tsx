@@ -15,14 +15,18 @@ import { getSamplePrinters } from "@/lib/sampleData";
 import BulkQuoteDialog from "@/components/BulkQuoteDialog";
 import TierBadge from "@/components/TierBadge";
 import { tierFromScore, type Tier } from "@/lib/tier";
+import { SERVICES, type ServiceDef } from "@/lib/services";
 
 type FilamentColor = { material: string; color_name: string; hex_code: string; in_stock: boolean };
+
+type ServiceDbKey = ServiceDef["dbKey"];
 
 type PrinterListing = {
   id: string;
   owner_id: string;
   brand: string;
   model: string;
+  service: ServiceDbKey;
   materials: string[];
   price_per_gram: number;
   neighborhood: string | null;
@@ -45,6 +49,7 @@ type PrinterListing = {
 };
 
 type SortMode = "smart" | "quality" | "price" | "newest";
+type ServiceFilter = "all" | ServiceDbKey;
 
 const Printers = () => {
   const { isDemo } = useDemoMode();
@@ -58,6 +63,9 @@ const Printers = () => {
   const [amsOnly, setAmsOnly] = useState(false);
   const [bulkOnly, setBulkOnly] = useState(false);
   const [tierFilter, setTierFilter] = useState<Tier | "">("");
+  const [serviceFilter, setServiceFilter] = useState<ServiceFilter>(
+    (searchParams.get("service") as ServiceFilter) || "all",
+  );
   const [sort, setSort] = useState<SortMode>("smart");
   const [view, setView] = useState<"grid" | "map">("grid");
   const [loading, setLoading] = useState(true);
@@ -68,7 +76,7 @@ const Printers = () => {
     // Only show listings the maker has explicitly published live.
     supabase
       .from("printers")
-      .select("id, owner_id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, is_address_verified, has_ams, ams_slot_count, accepts_bulk, min_bulk_quantity, verification_status, quality_score, tier, avg_rating, rating_count, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock)")
+      .select("id, owner_id, brand, model, service, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, is_address_verified, has_ams, ams_slot_count, accepts_bulk, min_bulk_quantity, verification_status, quality_score, tier, avg_rating, rating_count, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock)")
       .eq("is_active", true)
       .eq("published", true)
       .order("created_at", { ascending: false })
@@ -134,12 +142,13 @@ const Printers = () => {
         `${p.brand} ${p.model} ${p.neighborhood ?? ""} ${p.city ?? ""} ${p.profiles?.full_name ?? ""}`
           .toLowerCase()
           .includes(q.toLowerCase());
+      const matchesService = serviceFilter === "all" || (p.service ?? "3d_print") === serviceFilter;
       const matchesMat = !material || p.materials.includes(material);
       const matchesColor = !color || p.filament_colors.some((c) => c.color_name === color && c.in_stock && (!material || c.material === material));
       const matchesAms = !amsOnly || p.has_ams;
       const matchesBulk = !bulkOnly || p.accepts_bulk;
       const matchesTier = !tierFilter || (p.tier ?? tierFromScore(p.quality_score ?? 50)) === tierFilter;
-      return matchesQ && matchesMat && matchesColor && matchesAms && matchesBulk && matchesTier;
+      return matchesQ && matchesService && matchesMat && matchesColor && matchesAms && matchesBulk && matchesTier;
     });
 
     const sorted = [...list];
@@ -153,7 +162,7 @@ const Printers = () => {
       sorted.sort((a, b) => Number(a.price_per_gram) - Number(b.price_per_gram));
     }
     return sorted;
-  }, [all, q, material, color, amsOnly, bulkOnly, tierFilter, sort]);
+  }, [all, q, serviceFilter, material, color, amsOnly, bulkOnly, tierFilter, sort]);
 
   const allMaterials = useMemo(() => Array.from(new Set(all.flatMap((p) => p.materials))), [all]);
 
@@ -197,12 +206,38 @@ const Printers = () => {
           <div className="container py-16">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Discover</div>
             <h1 className="mt-2 font-display text-5xl font-semibold tracking-tight">
-              Printers near <span className="italic text-primary">you</span>
+              Makers near <span className="italic text-primary">you</span>
             </h1>
             <p className="mt-3 max-w-xl text-muted-foreground">
-              Every active maker in your neighborhood. We never hide makers — just
-              tell you why each one is ranked where it is.
+              3D printing, laser cutting, embroidery, vinyl — every maker in your neighborhood.
+              We never hide makers, we just tell you why each one is ranked where it is.
             </p>
+
+            {/* Service category chips */}
+            <div className="mt-6 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setServiceFilter("all")}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${serviceFilter === "all" ? "border-primary bg-primary text-primary-foreground shadow-soft" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}
+              >
+                All services
+              </button>
+              {SERVICES.map((s) => {
+                const Icon = s.icon;
+                const active = serviceFilter === s.dbKey;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setServiceFilter(s.dbKey)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${active ? "border-primary bg-primary text-primary-foreground shadow-soft" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}
+                  >
+                    <Icon className="h-3.5 w-3.5" /> {s.shortName}
+                  </button>
+                );
+              })}
+            </div>
+
 
             <div className="mt-8 flex flex-col gap-3 rounded-3xl border border-border bg-card p-3 shadow-card sm:flex-row sm:flex-wrap">
               <label className="flex flex-1 items-center gap-3 rounded-2xl px-4 py-2">
@@ -330,6 +365,17 @@ const Printers = () => {
                       </div>
                       <TierBadge tier={tier} score={p.quality_score} />
                     </div>
+
+                    {(() => {
+                      const svc = SERVICES.find((s) => s.dbKey === (p.service ?? "3d_print"));
+                      if (!svc) return null;
+                      const Icon = svc.icon;
+                      return (
+                        <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+                          <Icon className="h-3 w-3" /> {svc.shortName}
+                        </div>
+                      );
+                    })()}
 
                     <h3 className="mt-2 font-display text-xl font-semibold">{p.brand} {p.model}</h3>
                     <div className="mt-1 text-sm text-muted-foreground">by {p.profiles?.full_name || "Anonymous Maker"}</div>

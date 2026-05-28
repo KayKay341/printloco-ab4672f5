@@ -748,6 +748,7 @@ export type Database = {
           rating_count: number
           sample_print_urls: string[]
           serial_visible: boolean
+          service: string
           successful_orders: number
           tier: string
           total_orders: number
@@ -791,6 +792,7 @@ export type Database = {
           rating_count?: number
           sample_print_urls?: string[]
           serial_visible?: boolean
+          service?: string
           successful_orders?: number
           tier?: string
           total_orders?: number
@@ -834,6 +836,7 @@ export type Database = {
           rating_count?: number
           sample_print_urls?: string[]
           serial_visible?: boolean
+          service?: string
           successful_orders?: number
           tier?: string
           total_orders?: number
