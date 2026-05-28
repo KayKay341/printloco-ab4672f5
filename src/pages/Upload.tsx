@@ -337,7 +337,9 @@ const Upload = () => {
                     <StlPreview
                       geometry={previewGeometry}
                       color="hsl(var(--primary))"
-                      plate={{ x: 260, y: 260, z: 260 }}
+                      vertexColors={model?.extension === "3mf"}
+                      plate={{ x: plate.x, y: plate.y, z: plate.z }}
+                      overflow={plateFit.overflow}
                       className="h-full w-full"
                     />
                   ) : (
