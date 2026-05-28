@@ -48,6 +48,9 @@ type SortMode = "smart" | "quality" | "price" | "newest";
 
 const Printers = () => {
   const { isDemo } = useDemoMode();
+  const [searchParams] = useSearchParams();
+  const focusId = searchParams.get("focus");
+  const cardRefs = useRef<Record<string, HTMLElement | null>>({});
   const [all, setAll] = useState<PrinterListing[]>([]);
   const [q, setQ] = useState("");
   const [material, setMaterial] = useState<string>("");
@@ -62,13 +65,14 @@ const Printers = () => {
   const [bulkPrinter, setBulkPrinter] = useState<PrinterListing | null>(null);
 
   useEffect(() => {
-    // Always show ALL active printers — no shadow bans (3D Hubs cause #5).
-    // Hobbyist printers stay visible alongside pros so the community feels alive.
+    // Only show listings the maker has explicitly published live.
     supabase
       .from("printers")
       .select("id, owner_id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, is_address_verified, has_ams, ams_slot_count, accepts_bulk, min_bulk_quantity, verification_status, quality_score, tier, avg_rating, rating_count, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock)")
       .eq("is_active", true)
+      .eq("published", true)
       .order("created_at", { ascending: false })
+
       .then(({ data, error }) => {
         if (error) toast.error(error.message);
         const real = (data as unknown as PrinterListing[]) ?? [];
