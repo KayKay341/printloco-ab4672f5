@@ -116,10 +116,9 @@ const Upload = () => {
   const [processing, setProcessing] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
-
-  useEffect(() => {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-  }, [settings]);
+  const [plateId, setPlateId] = useState<string>(DEFAULT_PLATE_ID);
+  /** Bumped whenever a filament color is remapped so the preview re-renders. */
+  const [colorVersion, setColorVersion] = useState(0);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
