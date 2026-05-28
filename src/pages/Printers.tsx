@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
@@ -48,6 +48,9 @@ type SortMode = "smart" | "quality" | "price" | "newest";
 
 const Printers = () => {
   const { isDemo } = useDemoMode();
+  const [searchParams] = useSearchParams();
+  const focusId = searchParams.get("focus");
+  const cardRefs = useRef<Record<string, HTMLElement | null>>({});
   const [all, setAll] = useState<PrinterListing[]>([]);
   const [q, setQ] = useState("");
   const [material, setMaterial] = useState<string>("");
@@ -62,13 +65,14 @@ const Printers = () => {
   const [bulkPrinter, setBulkPrinter] = useState<PrinterListing | null>(null);
 
   useEffect(() => {
-    // Always show ALL active printers — no shadow bans (3D Hubs cause #5).
-    // Hobbyist printers stay visible alongside pros so the community feels alive.
+    // Only show listings the maker has explicitly published live.
     supabase
       .from("printers")
       .select("id, owner_id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, is_address_verified, has_ams, ams_slot_count, accepts_bulk, min_bulk_quantity, verification_status, quality_score, tier, avg_rating, rating_count, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock)")
       .eq("is_active", true)
+      .eq("published", true)
       .order("created_at", { ascending: false })
+
       .then(({ data, error }) => {
         if (error) toast.error(error.message);
         const real = (data as unknown as PrinterListing[]) ?? [];
@@ -112,6 +116,17 @@ const Printers = () => {
         setLoading(false);
       });
   }, [isDemo]);
+
+  // Scroll the focused listing into view once data is ready.
+  useEffect(() => {
+    if (!focusId || loading) return;
+    const el = cardRefs.current[focusId];
+    if (el) {
+      setView("grid");
+      requestAnimationFrame(() => el.scrollIntoView({ behavior: "smooth", block: "center" }));
+    }
+  }, [focusId, loading, all]);
+
 
   const filtered = useMemo(() => {
     const list = all.filter((p) => {
@@ -301,8 +316,13 @@ const Printers = () => {
                   .filter((c) => c.in_stock && (!material || c.material === material))
                   .slice(0, 8);
                 const tier: Tier = (p.tier as Tier) ?? tierFromScore(p.quality_score ?? 50);
+                const isFocused = focusId === p.id;
                 return (
-                  <article key={p.id} className="group rounded-2xl border border-border bg-card p-6 shadow-soft transition-all hover:shadow-card hover:-translate-y-0.5">
+                  <article
+                    key={p.id}
+                    ref={(el) => { cardRefs.current[p.id] = el; }}
+                    className={`group rounded-2xl border bg-card p-6 shadow-soft transition-all hover:shadow-card hover:-translate-y-0.5 ${isFocused ? "border-primary ring-2 ring-primary/40" : "border-border"}`}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         <MapPin className="h-3.5 w-3.5 text-primary" />
