@@ -13,6 +13,8 @@ import {
   HelpCircle,
   Layers,
   Link as LinkIcon,
+  Palette,
+  Printer,
   Ruler,
   Settings2,
   Sparkles,
@@ -38,7 +40,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { parse3mf } from "@/lib/threeMfParser";
+import { parse3mf, recolorBySlot, type FilamentSlot, type Mfg3mfResult } from "@/lib/threeMfParser";
+import { BUILD_PLATES, DEFAULT_PLATE_ID, getPlate } from "@/lib/buildPlates";
 import {
   DEFAULT_SLICER_SETTINGS,
   MATERIAL_DEFAULTS,
@@ -58,6 +61,10 @@ type ModelFile = {
   name: string;
   extension: "stl" | "obj" | "3mf";
   geometry: THREE.BufferGeometry;
+  /** Populated only for 3MF — drives multi-color preview + slot editor. */
+  filaments?: FilamentSlot[];
+  /** Imported slice settings from the 3MF (for the "imported" banner). */
+  imported?: Mfg3mfResult["sliceSettings"];
 };
 
 const SETTINGS_KEY = "printloco-slicer-settings";
