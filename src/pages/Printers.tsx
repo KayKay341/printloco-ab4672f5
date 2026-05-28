@@ -206,12 +206,38 @@ const Printers = () => {
           <div className="container py-16">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">Discover</div>
             <h1 className="mt-2 font-display text-5xl font-semibold tracking-tight">
-              Printers near <span className="italic text-primary">you</span>
+              Makers near <span className="italic text-primary">you</span>
             </h1>
             <p className="mt-3 max-w-xl text-muted-foreground">
-              Every active maker in your neighborhood. We never hide makers — just
-              tell you why each one is ranked where it is.
+              3D printing, laser cutting, embroidery, vinyl — every maker in your neighborhood.
+              We never hide makers, we just tell you why each one is ranked where it is.
             </p>
+
+            {/* Service category chips */}
+            <div className="mt-6 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setServiceFilter("all")}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${serviceFilter === "all" ? "border-primary bg-primary text-primary-foreground shadow-soft" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}
+              >
+                All services
+              </button>
+              {SERVICES.map((s) => {
+                const Icon = s.icon;
+                const active = serviceFilter === s.dbKey;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setServiceFilter(s.dbKey)}
+                    className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${active ? "border-primary bg-primary text-primary-foreground shadow-soft" : "border-border bg-card text-muted-foreground hover:text-foreground"}`}
+                  >
+                    <Icon className="h-3.5 w-3.5" /> {s.shortName}
+                  </button>
+                );
+              })}
+            </div>
+
 
             <div className="mt-8 flex flex-col gap-3 rounded-3xl border border-border bg-card p-3 shadow-card sm:flex-row sm:flex-wrap">
               <label className="flex flex-1 items-center gap-3 rounded-2xl px-4 py-2">
