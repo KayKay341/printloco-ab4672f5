@@ -416,6 +416,91 @@ const Upload = () => {
 
             {/* Right: settings */}
             <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
+              {/* Imported-from-3MF banner */}
+              {model?.extension === "3mf" && model.imported && activePreset === "imported" && (
+                <div className="rounded-2xl border border-primary/40 bg-primary/5 p-4 text-sm">
+                  <div className="flex items-center gap-2 font-semibold text-foreground">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Settings imported from your 3MF
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {model.imported.material} · {model.imported.layerHeightMm.toFixed(2)}mm layers ·
+                    {" "}{Math.round(model.imported.infillPct)}% infill · {model.imported.walls} walls
+                    {model.imported.supports ? " · supports on" : ""}.
+                    Your maker will use these unless you change them.
+                  </div>
+                </div>
+              )}
+
+              {/* Build plate */}
+              <section className="rounded-3xl border border-border bg-card p-6 shadow-card">
+                <SectionHeader
+                  icon={<Printer className="h-4 w-4" />}
+                  title="Build plate"
+                  hint="Which printer will run this? We'll check if it fits."
+                />
+                <Select value={plateId} onValueChange={setPlateId}>
+                  <SelectTrigger className="mt-3 min-h-12 bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BUILD_PLATES.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        <div className="flex flex-col items-start py-1">
+                          <span className="font-semibold">{p.brand} {p.model}</span>
+                          <span className="text-xs text-muted-foreground">{p.x}×{p.y}×{p.z} mm</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {stats && (
+                  <div className={`mt-3 rounded-xl border px-3 py-2 text-xs font-medium ${
+                    plateFit.overflow
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  }`}>
+                    {plateFit.overflow
+                      ? `Doesn't fit — overflows ${plateFit.axes.join(", ")}.`
+                      : `Fits ${plate.short} (${Math.round(stats.dimensions.width)}×${Math.round(stats.dimensions.depth)}×${Math.round(stats.dimensions.height)} mm).`}
+                  </div>
+                )}
+              </section>
+
+              {/* Filament colors (3MF only) */}
+              {model?.extension === "3mf" && model.filaments && model.filaments.length > 0 && (
+                <section className="rounded-3xl border border-border bg-card p-6 shadow-card">
+                  <SectionHeader
+                    icon={<Palette className="h-4 w-4" />}
+                    title={`Colors (${model.filaments.length})`}
+                    hint="Tap a swatch to swap colors. Preview updates live."
+                  />
+                  <ul className="mt-4 space-y-2">
+                    {model.filaments.map((f, i) => (
+                      <li key={`${f.index}-${i}`} className="flex items-center gap-3 rounded-xl border border-border bg-background p-2">
+                        <label
+                          className="relative h-10 w-10 cursor-pointer overflow-hidden rounded-lg border border-border"
+                          style={{ backgroundColor: f.hex }}
+                          title={`Slot ${f.index} — ${f.hex}`}
+                        >
+                          <input
+                            type="color"
+                            value={f.hex}
+                            onChange={(e) => updateFilamentColor(i, e.target.value)}
+                            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                          />
+                        </label>
+                        <div className="flex-1 text-sm">
+                          <div className="font-semibold text-foreground">Slot {f.index} · {f.type}</div>
+                          <div className="font-mono text-xs uppercase text-muted-foreground">{f.hex}</div>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+
+
               {/* Material */}
               <section className="rounded-3xl border border-border bg-card p-6 shadow-card">
                 <SectionHeader
