@@ -119,6 +119,11 @@ const Upload = () => {
   const [plateId, setPlateId] = useState<string>(DEFAULT_PLATE_ID);
   /** Bumped whenever a filament color is remapped so the preview re-renders. */
   const [colorVersion, setColorVersion] = useState(0);
+  const plate = useMemo(() => getPlate(plateId), [plateId]);
+
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+  }, [settings]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -136,7 +141,8 @@ const Upload = () => {
   const previewGeometry = useMemo(() => {
     if (!model) return null;
     return transformGeometryForSlicer(model.geometry, rotation);
-  }, [model, rotation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model, rotation, colorVersion]);
 
   const modelInfo: ModelInfo | null = useMemo(() => {
     if (!previewGeometry) return null;
@@ -148,18 +154,28 @@ const Upload = () => {
     [modelInfo, settings],
   );
 
+  /** Does the model fit on the chosen plate? */
+  const plateFit = useMemo(() => {
+    if (!stats) return { overflow: false, axes: [] as string[] };
+    const axes: string[] = [];
+    if (stats.dimensions.width > plate.x) axes.push(`X by ${Math.ceil(stats.dimensions.width - plate.x)}mm`);
+    if (stats.dimensions.depth > plate.y) axes.push(`Y by ${Math.ceil(stats.dimensions.depth - plate.y)}mm`);
+    if (stats.dimensions.height > plate.z) axes.push(`Z by ${Math.ceil(stats.dimensions.height - plate.z)}mm`);
+    return { overflow: axes.length > 0, axes };
+  }, [stats, plate]);
+
   const tips = useMemo(() => {
     const list: string[] = [];
     if (!stats) return list;
     if (stats.printMinutes > 480) list.push("Heads up — this print is over 8 hours. Consider Quick Draft to test first.");
-    if (stats.dimensions.width > 250 || stats.dimensions.depth > 250 || stats.dimensions.height > 250) {
-      list.push("This model is quite large. Make sure your maker's printer can fit it.");
+    if (plateFit.overflow) {
+      list.push(`Won't fit ${plate.brand} ${plate.model} — overflows ${plateFit.axes.join(", ")}. Try a bigger plate or rotate.`);
     }
     if (settings.infill < 10 && settings.material !== "PLA") {
       list.push("Low infill on PETG or ABS can make parts feel hollow.");
     }
     return list;
-  }, [settings, stats]);
+  }, [settings, stats, plate, plateFit]);
 
   const handleFile = async (file: File) => {
     const ext = file.name.toLowerCase().split(".").pop();
@@ -174,17 +190,52 @@ const Upload = () => {
 
     setProcessing(true);
     try {
-      const geometry =
-        ext === "stl" ? await loadStl(file) : ext === "obj" ? await loadObj(file) : await load3mf(file);
-      setModel({ name: file.name, extension: ext as "stl" | "obj" | "3mf", geometry });
+      if (ext === "3mf") {
+        const buffer = await file.arrayBuffer();
+        const result = await parse3mf(buffer);
+        result.geometry.computeVertexNormals();
+        setModel({
+          name: file.name,
+          extension: "3mf",
+          geometry: result.geometry,
+          filaments: result.filaments,
+          imported: result.sliceSettings,
+        });
+        // Apply imported slicer settings if they look sane — beginners just want
+        // their designer's presets to "just work".
+        const importedMat = mapMaterial(result.sliceSettings.material);
+        setSettings((current) => ({
+          ...current,
+          material: importedMat,
+          layerHeight: clamp(result.sliceSettings.layerHeightMm, 0.1, 0.4),
+          infill: clamp(Math.round(result.sliceSettings.infillPct), 0, 100),
+          nozzleTemp: MATERIAL_DEFAULTS[importedMat],
+        }));
+        setActivePreset("imported");
+        const slotMsg = result.filaments.length > 1 ? ` · ${result.filaments.length} colors detected` : "";
+        toast.success(`${file.name} loaded — settings imported${slotMsg}`);
+      } else {
+        const geometry = ext === "stl" ? await loadStl(file) : await loadObj(file);
+        setModel({ name: file.name, extension: ext as "stl" | "obj", geometry });
+        toast.success(`${file.name} loaded`);
+      }
       setRotation({ x: 0, y: 0, z: 0 });
-      toast.success(`${file.name} loaded`);
     } catch (error: any) {
       toast.error(error?.message ?? "Could not load that model.");
     } finally {
       setProcessing(false);
       if (inputRef.current) inputRef.current.value = "";
     }
+  };
+
+  /** Remap a filament slot to a new color, mutate vertex colors in place. */
+  const updateFilamentColor = (slotIndex: number, hex: string) => {
+    if (!model?.filaments) return;
+    const before = model.filaments.map((f) => ({ ...f }));
+    const after = before.map((f, i) => (i === slotIndex ? { ...f, hex } : f));
+    recolorBySlot(model.geometry, before, after);
+    setModel({ ...model, filaments: after });
+    setColorVersion((v) => v + 1);
   };
 
   const updateSetting = <K extends keyof SlicerSettings>(key: K, value: SlicerSettings[K]) => {
