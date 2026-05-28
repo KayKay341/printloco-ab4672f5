@@ -254,6 +254,7 @@ const NewPrinter = () => {
           owner_id: user.id,
           brand,
           model,
+          service,
           build_volume: buildVolume || null,
           materials,
           // Cheapest material as the "headline" price_per_gram for legacy code.
