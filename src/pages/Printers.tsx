@@ -63,6 +63,9 @@ const Printers = () => {
   const [amsOnly, setAmsOnly] = useState(false);
   const [bulkOnly, setBulkOnly] = useState(false);
   const [tierFilter, setTierFilter] = useState<Tier | "">("");
+  const [serviceFilter, setServiceFilter] = useState<ServiceFilter>(
+    (searchParams.get("service") as ServiceFilter) || "all",
+  );
   const [sort, setSort] = useState<SortMode>("smart");
   const [view, setView] = useState<"grid" | "map">("grid");
   const [loading, setLoading] = useState(true);
@@ -73,7 +76,7 @@ const Printers = () => {
     // Only show listings the maker has explicitly published live.
     supabase
       .from("printers")
-      .select("id, owner_id, brand, model, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, is_address_verified, has_ams, ams_slot_count, accepts_bulk, min_bulk_quantity, verification_status, quality_score, tier, avg_rating, rating_count, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock)")
+      .select("id, owner_id, brand, model, service, materials, price_per_gram, neighborhood, city, bio, latitude, longitude, is_address_verified, has_ams, ams_slot_count, accepts_bulk, min_bulk_quantity, verification_status, quality_score, tier, avg_rating, rating_count, profiles!printers_owner_profile_fkey(full_name), filament_colors(material, color_name, hex_code, in_stock)")
       .eq("is_active", true)
       .eq("published", true)
       .order("created_at", { ascending: false })
