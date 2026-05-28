@@ -958,6 +958,13 @@ function sanitizeSettings(value: Partial<SlicerSettings>): SlicerSettings {
   };
 }
 
+function mapMaterial(raw: string): SlicerSettings["material"] {
+  const value = (raw || "").toUpperCase();
+  if (value.includes("PETG")) return "PETG";
+  if (value.includes("ABS")) return "ABS";
+  return "PLA";
+}
+
 function clamp(value: number, min: number, max: number) {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
