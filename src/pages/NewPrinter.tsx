@@ -18,6 +18,7 @@ import { useDemoMode } from "@/hooks/useDemoMode";
 import { MATERIAL_BASE_PRICE } from "@/lib/stlSlicer";
 import VerificationUploader from "@/components/VerificationUploader";
 import EarningsEstimate from "@/components/EarningsEstimate";
+import { SERVICES } from "@/lib/services";
 import TierBadge from "@/components/TierBadge";
 import { tierFromScore } from "@/lib/tier";
 
