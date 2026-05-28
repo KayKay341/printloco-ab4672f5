@@ -305,8 +305,13 @@ const Printers = () => {
                   .filter((c) => c.in_stock && (!material || c.material === material))
                   .slice(0, 8);
                 const tier: Tier = (p.tier as Tier) ?? tierFromScore(p.quality_score ?? 50);
+                const isFocused = focusId === p.id;
                 return (
-                  <article key={p.id} className="group rounded-2xl border border-border bg-card p-6 shadow-soft transition-all hover:shadow-card hover:-translate-y-0.5">
+                  <article
+                    key={p.id}
+                    ref={(el) => { cardRefs.current[p.id] = el; }}
+                    className={`group rounded-2xl border bg-card p-6 shadow-soft transition-all hover:shadow-card hover:-translate-y-0.5 ${isFocused ? "border-primary ring-2 ring-primary/40" : "border-border"}`}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         <MapPin className="h-3.5 w-3.5 text-primary" />
