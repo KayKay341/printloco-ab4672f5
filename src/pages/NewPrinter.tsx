@@ -48,6 +48,7 @@ const NewPrinter = () => {
   const [presets, setPresets] = useState<Preset[]>([]);
   const [presetId, setPresetId] = useState<string | null>(null);
 
+  const [service, setService] = useState<"3d_print" | "laser_cut" | "embroidery" | "vinyl">("3d_print");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
   const [buildVolume, setBuildVolume] = useState("");
